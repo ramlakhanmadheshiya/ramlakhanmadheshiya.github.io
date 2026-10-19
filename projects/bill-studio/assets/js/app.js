@@ -1,5 +1,5 @@
 import { icon } from './lib/icons.js';
-import { esc, menu, toast } from './ui.js';
+import { esc, menu, toast, safeImg } from './ui.js';
 import { state, loadState, onChange, switchBusiness } from './store.js';
 import { getCountry } from './tax/countries.js';
 
@@ -65,7 +65,7 @@ function shellHtml() {
       <nav class="nav">${NAV.map((n) => n.section ? `<div class="nav-label">${n.section}</div>` : `<a href="${n.href}" data-match="${[].concat(n.match).join(',')}">${icon(n.icon, 18)}<span>${n.label}</span></a>`).join('')}</nav>
       <div class="side-foot">
         <button class="biz-switch" data-biz>
-          <span class="biz-avatar">${b.logo ? `<img src="${b.logo}" alt="">` : esc((b.name || '?').slice(0, 1).toUpperCase())}</span>
+          <span class="biz-avatar">${b.logo ? `<img src="${safeImg(b.logo)}" alt="">` : esc((b.name || '?').slice(0, 1).toUpperCase())}</span>
           <span style="min-width:0;flex:1"><div class="biz-name">${esc(b.name || 'My business')}</div><div class="biz-sub">${c.flag} ${esc(c.name)} · ${esc(b.currency)}</div></span>
           ${icon('chevron-down', 14)}
         </button>
@@ -109,11 +109,22 @@ function bindShell(root) {
       '-',
       { label: 'Business profile', icon: 'building-2', onClick: () => (location.hash = '#/business') },
       { label: 'Settings', icon: 'settings', onClick: () => (location.hash = '#/settings') },
+      ...(state.businesses.length > 1 ? ['-', ...state.businesses.filter((x) => x.id !== state.business.id).map((x) => ({ label: `Switch to ${x.name || 'Untitled'}`, icon: 'building-2', onClick: () => switchBusiness(x.id) }))] : []),
+      { label: 'Add another business', icon: 'plus', onClick: () => (location.hash = '#/welcome') },
     ]);
   });
-  const tb = root.querySelector('#topbar');
-  window.addEventListener('scroll', () => tb.classList.toggle('scrolled', window.scrollY > 24), { passive: true });
 }
+
+// One global scroll listener (the shell can be rebuilt many times).
+window.addEventListener('scroll', () => document.getElementById('topbar')?.classList.toggle('scrolled', window.scrollY > 24), { passive: true });
+
+// Keyboard access: clickable rows are focusable and open with Enter / Space.
+const KEY_ROWS = 'tr.click, .row.click, [data-href], [data-r]';
+new MutationObserver(() => document.querySelectorAll(KEY_ROWS).forEach((el) => { if (!el.hasAttribute('tabindex') && el.tagName !== 'A') el.tabIndex = 0; }))
+  .observe(document.body, { childList: true, subtree: true });
+document.addEventListener('keydown', (e) => {
+  if ((e.key === 'Enter' || e.key === ' ') && e.target.matches?.(KEY_ROWS) && e.target.tagName !== 'A') { e.preventDefault(); e.target.click(); }
+});
 
 function match(path) {
   for (const r of ROUTES) {
@@ -131,13 +142,14 @@ async function route() {
 
   if (typeof cleanup === 'function') { try { cleanup(); } catch { /* ignore */ } }
   cleanup = null;
-  document.querySelectorAll('.menu').forEach((m) => m.remove());
+  document.querySelectorAll('.menu, .overlay').forEach((m) => m.remove()); // dialogs never outlive their page
 
   if (!state.business || path === '/welcome') {
     const { render } = await import('./views/onboarding.js');
     if (token !== renderToken) return;
     app.dataset.mode = 'welcome';
-    cleanup = await render(app, { adding: !!state.business });
+    const done = await render(app, { adding: !!state.business });
+    if (token === renderToken) cleanup = done;
     return;
   }
 
@@ -156,7 +168,9 @@ async function route() {
     if (token !== renderToken) return;
     view.innerHTML = '';
     window.scrollTo(0, 0);
-    cleanup = await mod.render(view, { ...r.params, query });
+    const done = await mod.render(view, { ...r.params, query });
+    if (token !== renderToken) { if (typeof done === 'function') done(); return; }
+    cleanup = done;
   } catch (err) {
     console.error(err);
     view.innerHTML = `<div class="page"><div class="empty"><div class="ic-wrap">${icon('triangle-alert', 28)}</div><h3>Something went wrong</h3><p>${esc(err.message)}</p><a class="btn" href="#/">Go home</a></div></div>`;
@@ -190,12 +204,22 @@ async function boot() {
   if (navigator.storage?.persist) navigator.storage.persist().catch(() => {});
   if ('serviceWorker' in navigator && location.protocol !== 'file:') {
     navigator.serviceWorker.register('sw.js').then((reg) => {
+      const offer = (w) => {
+        if (!w || document.querySelector('.update-bar')) return;
+        const bar = document.createElement('div');
+        bar.className = 'toast update-bar';
+        bar.style.cssText = 'position:fixed;left:50%;bottom:28px;transform:translateX(-50%);z-index:300;pointer-events:auto';
+        bar.innerHTML = `<span>A new version of Bill Studio is ready.</span><button class="btn sm primary" style="margin-left:8px">Update</button>`;
+        bar.querySelector('button').addEventListener('click', () => w.postMessage('skipWaiting'));
+        document.body.append(bar);
+      };
+      if (reg.waiting && navigator.serviceWorker.controller) offer(reg.waiting);
       reg.addEventListener('updatefound', () => {
         const w = reg.installing;
-        w?.addEventListener('statechange', () => {
-          if (w.state === 'installed' && navigator.serviceWorker.controller) toast('A new version is ready — reload to update.', 'info');
-        });
+        w?.addEventListener('statechange', () => { if (w.state === 'installed' && navigator.serviceWorker.controller) offer(w); });
       });
+      let reloaded = false;
+      navigator.serviceWorker.addEventListener('controllerchange', () => { if (!reloaded) { reloaded = true; location.reload(); } });
     }).catch(() => {});
   }
 }

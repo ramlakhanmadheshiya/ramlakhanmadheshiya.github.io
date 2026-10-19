@@ -1,7 +1,7 @@
 import { icon } from '../lib/icons.js';
 import { esc, toast, confirmDialog, menu } from '../ui.js';
 import { db } from '../db.js';
-import { state, list, customerLedger, DOC_TYPES, payStatus, docTotals } from '../store.js';
+import { state, list, customerLedger, DOC_TYPES, payStatus, docTotals, ownRecord } from '../store.js';
 import { getCountry } from '../tax/countries.js';
 import { fmtMoney } from '../lib/money.js';
 import { fmtDate, todayISO, daysBetween } from '../lib/dates.js';
@@ -14,7 +14,7 @@ import { downloadStatementPdf } from '../reports-pdf.js';
 export async function render(root, { id }) {
   const b = state.business;
   const c = await db.get('customers', id);
-  if (!c) { root.innerHTML = `<div class="page"><div class="empty"><h3>Customer not found</h3><a class="btn" href="#/customers">Back</a></div></div>`; return; }
+  if (!ownRecord(c)) { root.innerHTML = `<div class="page"><div class="empty"><h3>Customer not found</h3><a class="btn" href="#/customers">Back</a></div></div>`; return; }
   const [docs, payments, customers] = await Promise.all([list('documents'), list('payments'), list('customers')]);
   const country = getCountry(b.country);
   const ledger = customerLedger(c, docs, payments, b);
@@ -52,7 +52,7 @@ export async function render(root, { id }) {
     <div class="section-title">Account statement</div>
     <div class="card" style="padding:6px 8px"><div class="table-wrap"><table class="table">
       <thead><tr><th>Date</th><th>Particulars</th><th class="num">Debit</th><th class="num">Credit</th><th class="num">Balance</th></tr></thead>
-      <tbody>${ledger.rows.length ? ledger.rows.map((r) => `<tr ${r.docId ? `class="click" data-href="#/bills/${r.docId}"` : ''}><td class="small muted">${fmtDate(r.date, b.locale)}</td><td>${esc(r.kind)} <span class="mono small muted">${esc(r.ref)}</span></td><td class="num">${r.debit ? m(r.debit) : ''}</td><td class="num pos">${r.credit ? m(r.credit) : ''}</td><td class="num" style="font-weight:600">${m(r.balance)}</td></tr>`).join('') : `<tr><td colspan="5" class="muted c" style="text-align:center;padding:24px">No transactions yet</td></tr>`}</tbody>
+      <tbody>${ledger.rows.length ? ledger.rows.map((r) => `<tr ${r.docId ? `class="click" data-href="#/bills/${r.docId}"` : r.paymentId ? `class="click" data-pay-id="${r.paymentId}" title="Edit payment"` : ''}><td class="small muted">${fmtDate(r.date, b.locale)}</td><td>${esc(r.kind)} <span class="mono small muted">${esc(r.ref)}</span></td><td class="num">${r.debit ? m(r.debit) : ''}</td><td class="num pos">${r.credit ? m(r.credit) : ''}</td><td class="num" style="font-weight:600">${m(r.balance)}</td></tr>`).join('') : `<tr><td colspan="5" class="muted c" style="text-align:center;padding:24px">No transactions yet</td></tr>`}</tbody>
     </table></div></div>
 
     <div class="section-title">All documents</div>
@@ -61,9 +61,15 @@ export async function render(root, { id }) {
   </div>`;
 
   root.querySelectorAll('[data-href]').forEach((x) => x.addEventListener('click', () => (location.hash = x.dataset.href)));
-  root.querySelector('[data-edit]').addEventListener('click', async () => { if (await customerDialog(c)) render(root, { id }); });
+  const again = () => { if (root.isConnected && location.hash === `#/customers/${id}`) render(root, { id }); };
+  root.querySelectorAll('[data-pay-id]').forEach((x) => x.addEventListener('click', async () => {
+    const p = payments.find((y) => y.id === x.dataset.payId);
+    const linked = p.documentId ? docs.find((d) => d.id === p.documentId) : null;
+    if (await paymentDialog({ customers, payment: p, doc: linked, openDocs: open.map((o) => ({ doc: o.doc, due: o.due })) })) again();
+  }));
+  root.querySelector('[data-edit]').addEventListener('click', async () => { if (await customerDialog(c)) again(); });
   root.querySelector('[data-pay]').addEventListener('click', async () => {
-    if (await paymentDialog({ customers, customerId: c.id, due: Math.max(0, ledger.balance), openDocs: open.map((o) => ({ doc: o.doc, due: o.due })) })) render(root, { id });
+    if (await paymentDialog({ customers, customerId: c.id, due: Math.max(0, ledger.balance), openDocs: open.map((o) => ({ doc: o.doc, due: o.due })) })) again();
   });
   root.querySelector('[data-copy]')?.addEventListener('click', async () => { try { await navigator.clipboard.writeText(text); toast('Reminder copied'); } catch { toast('Could not copy', 'err'); } });
   root.querySelector('[data-statement]')?.addEventListener('click', () => downloadStatementPdf(c, ledger, b));
@@ -71,6 +77,7 @@ export async function render(root, { id }) {
     { label: 'Download statement PDF', icon: 'file-down', onClick: () => downloadStatementPdf(c, ledger, b) },
     { label: 'Delete customer', icon: 'trash-2', danger: true, onClick: async () => {
       if (mine.length) { toast('This customer has bills — delete those first', 'err'); return; }
+      if (payments.some((p) => p.customerId === c.id)) { toast('This customer has payments recorded — delete those first in Payments', 'err'); return; }
       if (!(await confirmDialog(`Delete ${c.name}?`, 'The customer will be removed from this device.', { ok: 'Delete', danger: true }))) return;
       await db.del('customers', c.id); toast('Customer deleted'); location.hash = '#/customers';
     } },

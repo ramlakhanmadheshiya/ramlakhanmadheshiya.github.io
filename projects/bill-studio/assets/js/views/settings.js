@@ -1,7 +1,7 @@
 import { icon } from '../lib/icons.js';
-import { esc, toast, modal, confirmDialog, segmented, downloadBlob, pickFile } from '../ui.js';
+import { esc, toast, modal, confirmDialog, segmented, downloadBlob, pickFile, safeImg } from '../ui.js';
 import { db, uid, STORES } from '../db.js';
-import { state, saveBusiness, DOC_TYPE_LIST, formatNumber, nextNumber } from '../store.js';
+import { state, saveBusiness, DOC_TYPE_LIST, formatNumber, nextNumber, defaultPreset, switchBusiness } from '../store.js';
 import { getCountry } from '../tax/countries.js';
 import { presetRate } from '../tax/engine.js';
 import { todayISO } from '../lib/dates.js';
@@ -71,8 +71,8 @@ export async function render(root) {
     </div>
 
     <div class="section-title">Businesses on this device</div>
-    <div class="group">${state.businesses.map((x) => `<div class="row"><span class="biz-avatar">${x.logo ? `<img src="${x.logo}" alt="">` : esc((x.name || '?')[0])}</span><div class="grow"><div class="title">${esc(x.name || 'Untitled')}</div><div class="sub">${esc(getCountry(x.country).name)} · ${esc(x.currency)}</div></div>
-      ${x.id === b.id ? '<span class="badge partial">Active</span>' : `<button class="btn sm danger" data-del-biz="${x.id}">Delete</button>`}</div>`).join('')}
+    <div class="group">${state.businesses.map((x) => `<div class="row"><span class="biz-avatar">${x.logo ? `<img src="${safeImg(x.logo)}" alt="">` : esc((x.name || '?')[0])}</span><div class="grow"><div class="title">${esc(x.name || 'Untitled')}</div><div class="sub">${esc(getCountry(x.country).name)} · ${esc(x.currency)}</div></div>
+      ${x.id === b.id ? '<span class="badge partial">Active</span>' : `<button class="btn sm" data-switch-biz="${x.id}">Switch</button><button class="btn sm danger" data-del-biz="${x.id}">Delete</button>`}</div>`).join('')}
       <a class="row" href="#/welcome">${icon('plus', 18)}<span class="grow">Add another business</span>${icon('chevron-right', 16, 'chev')}</a></div>
 
     <div class="section-title">Danger zone</div>
@@ -121,7 +121,7 @@ export async function render(root) {
   root.querySelector('[data-add-tax]').addEventListener('click', () => editTax(null));
   root.querySelector('[data-reset-tax]').addEventListener('click', async () => {
     if (!(await confirmDialog('Restore default taxes?', `Your tax list will be replaced with ${c.name}'s defaults. Items using a removed rate fall back to the default.`, { ok: 'Restore' }))) return;
-    await saveBusiness({ ...b, taxes: JSON.parse(JSON.stringify(c.presets)), defaultTaxId: c.presets[0].id });
+    await saveBusiness({ ...b, taxes: JSON.parse(JSON.stringify(c.presets)), defaultTaxId: defaultPreset(c.presets).id });
   });
 
   // Numbering
@@ -139,7 +139,16 @@ export async function render(root) {
     const seq = Number(String(nexts[k]).match(/(\d+)$/)?.[1] || 1);
     root.querySelector(`[data-next="${k}"]`).textContent = formatNumber({ ...b, series }, k, seq, todayISO());
   }));
-  root.querySelector('[data-save-series]').addEventListener('click', async () => { await saveBusiness({ ...b, series: readSeries() }); toast('Numbering saved'); });
+  root.querySelector('[data-save-series]').addEventListener('click', async () => {
+    const series = readSeries();
+    for (const [k, v] of Object.entries(series)) {
+      if (!v.prefix) { toast('Every document needs a prefix', 'err'); return; }
+      if (c.gst && !/^[A-Za-z0-9/-]+$/.test(v.prefix)) { toast(`GST bill numbers may only use letters, digits, “/” and “-” (check ${k}).`, 'err'); return; }
+      const sample = formatNumber({ ...b, series }, k, 10 ** (Number(v.digits) || 1) - 1, todayISO());
+      if (c.maxNumberLength && sample.length > c.maxNumberLength) { toast(`${sample} is longer than ${c.maxNumberLength} characters — shorten the prefix or digits.`, 'err'); return; }
+    }
+    await saveBusiness({ ...b, series }); toast('Numbering saved');
+  });
 
   // Backup / restore
   root.querySelector('[data-backup]').addEventListener('click', () => {
@@ -182,6 +191,7 @@ export async function render(root) {
     } catch (e) { toast(e.message, 'err'); }
   });
 
+  root.querySelectorAll('[data-switch-biz]').forEach((x) => x.addEventListener('click', () => switchBusiness(x.dataset.switchBiz)));
   root.querySelectorAll('[data-del-biz]').forEach((x) => x.addEventListener('click', async () => {
     const biz = state.businesses.find((y) => y.id === x.dataset.delBiz);
     if (!(await confirmDialog(`Delete ${biz.name}?`, 'All its bills, customers, items, payments and designs will be removed from this device.', { ok: 'Delete business', danger: true }))) return;

@@ -1,7 +1,7 @@
 import { icon } from '../lib/icons.js';
 import { esc, toast, menu, confirmDialog, debounce } from '../ui.js';
 import { db } from '../db.js';
-import { state, list, DOC_TYPES, payStatus, docTotals, deleteDocument, docTitle, adjustStock } from '../store.js';
+import { state, list, DOC_TYPES, payStatus, docTotals, deleteDocument, docTitle, adjustStock, bizFor, ownRecord } from '../store.js';
 import { fmtMoney } from '../lib/money.js';
 import { fmtDate } from '../lib/dates.js';
 import { buildContext, mountPage } from '../render.js';
@@ -14,18 +14,18 @@ import { setTitle } from '../app.js';
 export async function render(root, { id }) {
   const b = state.business;
   const doc = await db.get('documents', id);
-  if (!doc) { root.innerHTML = `<div class="page"><div class="empty"><h3>Bill not found</h3><a class="btn" href="#/bills">Back to bills</a></div></div>`; return; }
-  const all = await list('payments');
+  if (!ownRecord(doc)) { root.innerHTML = `<div class="page"><div class="empty"><h3>Bill not found</h3><a class="btn" href="#/bills">Back to bills</a></div></div>`; return; }
+  const [all] = await Promise.all([list('payments'), list('documents'), list('customers')]);
   const pays = all.filter((p) => p.documentId === doc.id).sort((a, c) => a.date.localeCompare(c.date));
   const totals = docTotals(doc, b);
   const st = payStatus(doc, all, totals);
-  const paid = pays.reduce((s, p) => s + Number(p.amount || 0), 0);
+  const paid = st.paid ?? pays.reduce((s, p) => s + Number(p.amount || 0), 0);
   let tpl = await templateFor(doc);
   const templates = await allTemplates();
   const ty = DOC_TYPES[doc.type];
-  const title = docTitle(doc.type, b);
+  const title = docTitle(doc.type, bizFor(doc, b), doc);
   const m = (v) => fmtMoney(v, b.currency, b.locale);
-  const ctx = () => buildContext(doc, b, { paid });
+  const ctx = () => buildContext(doc, b, { paid, credited: st.credited || 0 });
   setTitle(`${ty.label} ${doc.number}`);
 
   root.innerHTML = `<div class="page wide" style="max-width:1300px">
@@ -41,7 +41,7 @@ export async function render(root, { id }) {
       <div class="paper-stage"><div data-paper class="paper-shadow" style="background:#fff;margin:0 auto"></div></div>
       <div>
         <div class="card">
-          <div class="flex between"><span class="badge ${st.key}" style="height:26px;font-size:13px">${esc(st.label)}</span>${doc.status === 'draft' ? `<button class="btn sm primary" data-act="finalize">Finalize</button>` : `<a class="btn sm" href="#/bills/${doc.id}/edit">${icon('pencil', 14)} Edit</a>`}</div>
+          <div class="flex between"><span class="badge ${st.key}" style="height:26px;font-size:13px">${esc(st.label)}</span>${doc.status === 'draft' ? `<a class="btn sm primary" href="#/bills/${doc.id}/edit">${icon('check', 14)} Review & issue</a>` : doc.status === 'cancelled' ? '' : `<a class="btn sm" href="#/bills/${doc.id}/edit">${icon('pencil', 14)} Edit</a>`}</div>
           <div class="value tnum" style="font-size:34px;font-weight:700;letter-spacing:-.03em;margin:14px 0 4px">${m(totals.total)}</div>
           <div class="small muted">${ty.payable ? (st.due ? `${m(st.due)} due${doc.dueDate ? ' by ' + fmtDate(doc.dueDate, b.locale) : ''}` : 'Fully paid') : esc(ty.label)}</div>
           ${ty.payable && totals.total > 0 ? `<div class="meter mt"><div style="width:${Math.min(100, (paid / totals.total) * 100)}%;background:var(--green)"></div></div>` : ''}
@@ -49,7 +49,8 @@ export async function render(root, { id }) {
             <dt>Taxable value</dt><dd>${m(totals.taxable)}</dd>
             ${totals.taxSummary.map((x) => `<dt>${esc(x.name)} ${x.rate}%</dt><dd>${m(x.amount)}</dd>`).join('')}
             ${totals.roundOff ? `<dt>Round off</dt><dd>${m(totals.roundOff)}</dd>` : ''}
-            ${ty.payable ? `<dt>Paid</dt><dd class="pos">${m(paid)}</dd>` : ''}
+            ${st.credited ? `<dt>Credit notes</dt><dd>− ${m(st.credited)}</dd>` : ''}
+            ${ty.payable ? `<dt>Paid${st.applied ? ' (incl. on-account)' : ''}</dt><dd class="pos">${m(paid)}</dd>` : ''}
           </dl>
           ${ty.payable && doc.status === 'final' && st.due > 0 ? `<button class="btn primary mt" style="width:100%" data-act="pay">${icon('wallet', 16)} Record payment</button>` : ''}
           ${doc.type === 'quotation' || doc.type === 'proforma' ? `<button class="btn primary mt" style="width:100%" data-act="convert">${icon('file-text', 16)} ${doc.convertedTo ? 'Converted — open invoice' : 'Convert to invoice'}</button>` : ''}
@@ -72,6 +73,8 @@ export async function render(root, { id }) {
   draw();
   const onResize = debounce(draw, 150);
   window.addEventListener('resize', onResize);
+  // Re-render in place only if the user is still on this bill (a dialog may outlive navigation).
+  const again = () => { window.removeEventListener('resize', onResize); if (root.isConnected && location.hash === `#/bills/${id}`) render(root, { id }); };
 
   const busy = async (btn, fn) => {
     const prev = btn?.innerHTML; if (btn) { btn.disabled = true; }
@@ -81,15 +84,14 @@ export async function render(root, { id }) {
     print: () => printDoc(ctx(), tpl),
     pdf: (btn) => busy(btn, () => downloadPdf(ctx(), tpl)),
     share: (btn) => busy(btn, () => sharePdf(ctx(), tpl, billShareText({ business: b, doc, total: totals.total, title }))),
-    pay: async () => { if (await paymentDialog({ doc, due: st.due })) render(root, { id }); },
-    finalize: async () => { doc.status = 'final'; await db.put('documents', doc); await adjustStock(doc, 1); toast('Bill finalized'); render(root, { id }); },
+    pay: async () => { if (await paymentDialog({ doc, due: st.due })) again(); },
     convert: () => { location.hash = doc.convertedTo ? `#/bills/${doc.convertedTo}` : `#/bills/new/invoice?from=${doc.id}`; },
   };
   root.querySelectorAll('[data-act]').forEach((x) => x.addEventListener('click', (e) => { e.preventDefault(); actions[x.dataset.act](x); }));
   root.querySelector('[data-tpl]').addEventListener('change', async (e) => { doc.templateId = e.target.value; tpl = await templateFor(doc); await db.put('documents', doc); draw(); });
   root.querySelectorAll('[data-delpay]').forEach((x) => x.addEventListener('click', async () => {
     if (!(await confirmDialog('Delete payment?', 'This payment will be removed and the bill balance updated.', { ok: 'Delete', danger: true }))) return;
-    await db.del('payments', x.dataset.delpay); toast('Payment deleted'); render(root, { id });
+    await db.del('payments', x.dataset.delpay); toast('Payment deleted'); again();
   }));
   root.querySelector('[data-more]').addEventListener('click', (e) => menu(e.currentTarget, [
     { label: 'Edit', icon: 'pencil', onClick: () => (location.hash = `#/bills/${doc.id}/edit`) },
@@ -99,11 +101,11 @@ export async function render(root, { id }) {
     ...(doc.type === 'quotation' ? [{ label: 'Convert to proforma', icon: 'file-text', onClick: () => (location.hash = `#/bills/new/proforma?from=${doc.id}`) }] : []),
     '-',
     ...(doc.status !== 'cancelled' && doc.status !== 'draft' ? [{ label: 'Cancel bill', icon: 'x', onClick: async () => {
-      if (!(await confirmDialog('Cancel this bill?', 'It stays in your records marked as cancelled and no longer counts towards sales or dues. Stock is returned.', { ok: 'Cancel bill', danger: true }))) return;
-      await adjustStock(doc, -1); doc.status = 'cancelled'; await db.put('documents', doc); toast('Bill cancelled'); render(root, { id });
+      if (!(await confirmDialog('Cancel this bill?', `It stays in your records marked as cancelled and no longer counts towards sales or dues. Stock is returned.${pays.length ? ' Payments already recorded on it stay in the customer’s account as an advance.' : ''}`, { ok: 'Cancel bill', danger: true }))) return;
+      await adjustStock(doc, -1); doc.status = 'cancelled'; await db.put('documents', doc); toast('Bill cancelled'); again();
     } }] : []),
     { label: 'Delete', icon: 'trash-2', danger: true, onClick: async () => {
-      if (!(await confirmDialog(`Delete ${doc.number}?`, 'This permanently removes the bill and its payments from this device. This cannot be undone.', { ok: 'Delete', danger: true }))) return;
+      if (!(await confirmDialog(`Delete ${doc.number}?`, doc.status === 'final' && DOC_TYPES[doc.type].ledger ? 'Tax law expects issued bills to be kept — use “Cancel bill” instead so your numbering has no gaps. Deleting permanently removes the bill and its payments from this device.' : 'This permanently removes the bill and its payments from this device. This cannot be undone.', { ok: 'Delete', danger: true }))) return;
       await deleteDocument(doc); toast('Bill deleted'); location.hash = '#/bills';
     } },
   ]));

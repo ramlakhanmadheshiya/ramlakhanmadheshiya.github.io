@@ -5,6 +5,8 @@ import { fmtMoney, fmtCompact } from '../lib/money.js';
 import { fmtDate, todayISO, toISO, parseISO, periodRange } from '../lib/dates.js';
 import { barChart } from '../lib/chart.js';
 import { whatsappLink, reminderText } from '../lib/share.js';
+import { businessTaxError } from '../tax/rules.js';
+import { getCountry } from '../tax/countries.js';
 
 export async function render(root) {
   const b = state.business;
@@ -36,6 +38,11 @@ export async function render(root) {
   const low = products.filter((p) => p.trackStock && Number(p.stock) <= Number(p.lowStock || 0));
   const recent = docs.slice().sort((a, c) => (c.date + c.createdAt).localeCompare(a.date + a.createdAt)).slice(0, 6);
 
+  const country = getCountry(b.country);
+  const taxErr = businessTaxError(b);
+  const einv = country.eInvoice;
+  let einvSeen = false;
+  try { einvSeen = localStorage.getItem('bs-einv-' + b.id) === '1'; } catch { /* private mode */ }
   const hour = new Date().getHours();
   const greet = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
 
@@ -43,6 +50,8 @@ export async function render(root) {
     <div class="large-title"><div><p style="margin:0 0 2px">${esc(fmtDate(todayISO(), b.locale, 'full'))}</p><h1>${greet}.</h1></div>
       <div class="actions"><a class="btn" href="#/bills/new/receipt">${icon('receipt', 16)} Quick sale</a><a class="btn" href="#/bills/new/quotation">${icon('file-text', 16)} Quotation</a><a class="btn primary" href="#/bills/new/invoice">${icon('plus', 16)} New invoice</a></div></div>
 
+    ${taxErr ? `<div class="notice warn mb">${icon('triangle-alert', 18)}<div><b>Finish your tax setup before issuing bills.</b> ${esc(taxErr)} <a href="#/business">Open Business profile →</a></div></div>` : ''}
+    ${einv && !einvSeen ? `<div class="notice mb" data-einv>${icon('sparkles', 18)}<div style="flex:1"><b>E-invoicing in ${esc(country.name)}:</b> ${esc(einv)}</div><button class="btn sm ghost" data-einv-ok>Got it</button></div>` : ''}
     <div class="grid c4">
       <div class="stat"><div class="label"><span class="dot" style="background:var(--accent)"></span>Sales this month</div><div class="value">${m(salesMonth)}</div><div class="hint">${sales.filter((d) => inMonth(d.date)).length} bills</div></div>
       <div class="stat"><div class="label"><span class="dot" style="background:var(--green)"></span>Received this month</div><div class="value">${m(recMonth)}</div><div class="hint">${payments.filter((p) => inMonth(p.date)).length} payments</div></div>
@@ -77,4 +86,5 @@ export async function render(root) {
     </div>
   </div>`;
   root.querySelectorAll('[data-href]').forEach((tr) => tr.addEventListener('click', () => (location.hash = tr.dataset.href)));
+  root.querySelector('[data-einv-ok]')?.addEventListener('click', () => { try { localStorage.setItem('bs-einv-' + b.id, '1'); } catch { /* ignore */ } root.querySelector('[data-einv]')?.remove(); });
 }

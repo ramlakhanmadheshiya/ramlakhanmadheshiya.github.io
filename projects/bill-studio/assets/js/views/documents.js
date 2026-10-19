@@ -8,7 +8,7 @@ const ui = { type: 'all', status: 'all', q: '', period: 'all' };
 
 export async function render(root) {
   const b = state.business;
-  const [docs, payments] = await Promise.all([list('documents'), list('payments')]);
+  const [docs, payments] = await Promise.all([list('documents'), list('payments'), list('customers')]);
   const rows = docs.map((d) => { const t = docTotals(d, b); return { d, t, st: payStatus(d, payments, t) }; })
     .sort((a, c) => (c.d.date + (c.d.createdAt || '')).localeCompare(a.d.date + (a.d.createdAt || '')));
   const m = (v) => fmtMoney(v, b.currency, b.locale);
@@ -56,7 +56,8 @@ export async function render(root) {
     const host = root.querySelector('[data-list]');
     if (!rows.length) { host.innerHTML = emptyState('file-text', 'No bills yet', 'Your invoices, receipts and quotations will appear here.', `<a class="btn primary" href="#/bills/new/invoice">${icon('plus', 16)} Create your first bill</a>`); return; }
     if (!f.length) { host.innerHTML = emptyState('search', 'Nothing found', 'Try a different filter or search term.'); return; }
-    const total = f.reduce((s, x) => s + (DOC_TYPES[x.d.type].ledger || 0) * x.t.total, 0);
+    // Only issued bills count — drafts and cancelled bills are listed but not totalled.
+    const total = f.filter((x) => x.d.status === 'final').reduce((s, x) => s + (DOC_TYPES[x.d.type].ledger || 0) * x.t.total, 0);
     const due = f.reduce((s, x) => s + (x.st.due || 0), 0);
     host.innerHTML = `<div class="card" style="padding:6px 8px"><div class="table-wrap"><table class="table">
       <thead><tr><th>Number</th><th>Customer</th><th class="desktop-only">Date</th><th class="desktop-only">Due</th><th>Status</th><th class="num">Amount</th></tr></thead>

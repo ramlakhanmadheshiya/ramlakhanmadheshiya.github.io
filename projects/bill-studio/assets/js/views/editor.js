@@ -1,17 +1,21 @@
 import { icon } from '../lib/icons.js';
 import { esc, toast, debounce, confirmDialog } from '../ui.js';
 import { db, uid } from '../db.js';
-import { state, list, DOC_TYPES, DOC_TYPE_LIST, blankDoc, blankItem, saveDocument, docTitle, nextNumber, formatNumber } from '../store.js';
+import { state, list, DOC_TYPES, DOC_TYPE_LIST, blankDoc, blankItem, saveDocument, docTitle, nextNumber, ownRecord } from '../store.js';
 import { calculate, presetRate } from '../tax/engine.js';
 import { getCountry, UNITS } from '../tax/countries.js';
 import { fmtMoney, num, currencySymbol } from '../lib/money.js';
 import { addDays, fyLabel } from '../lib/dates.js';
-import { validateTaxId } from '../lib/validators.js';
+import { validateTaxId, validateGSTIN, validateEmail } from '../lib/validators.js';
+import { businessTaxError } from '../tax/rules.js';
 import { buildContext, mountPage } from '../render.js';
 import { allTemplates, templateFor } from '../tplstore.js';
 import { setTitle } from '../app.js';
 
 const COPY_LABELS = ['', 'Original for Recipient', 'Duplicate for Transporter', 'Triplicate for Supplier'];
+const CHALLAN_LABELS = ['', 'Original for Consignee', 'Duplicate for Transporter', 'Triplicate for Consignor'];
+const SUPPLY_TYPES = [['', 'Regular (domestic)'], ['export_igst', 'Export — with IGST'], ['export_lut', 'Export — under LUT / bond (no IGST)'],
+  ['sez_igst', 'Supply to SEZ — with IGST'], ['sez_lut', 'Supply to SEZ — under LUT (no IGST)'], ['deemed', 'Deemed export']];
 
 export async function render(root, params) {
   const b = state.business;
@@ -22,8 +26,10 @@ export async function render(root, params) {
 
   if (params.id) {
     doc = await db.get('documents', params.id);
-    if (!doc) { root.innerHTML = '<div class="page"><p>Bill not found.</p></div>'; return; }
+    if (!ownRecord(doc)) { root.innerHTML = '<div class="page"><div class="empty"><h3>Bill not found</h3><a class="btn" href="#/bills">Back to bills</a></div></div>'; return; }
+    if (doc.status === 'cancelled') { root.innerHTML = `<div class="page"><div class="empty"><h3>This bill is cancelled</h3><p>Cancelled bills can’t be edited. Duplicate it to issue a new bill.</p><a class="btn primary" href="#/bills/new/${doc.type}?dup=${doc.id}">Duplicate</a> <a class="btn" href="#/bills/${doc.id}">Back</a></div></div>`; return; }
     doc = JSON.parse(JSON.stringify(doc));
+    delete doc.snap; // re-issued with the current business details when saved
     isNew = false;
   } else {
     const type = DOC_TYPES[params.type] ? params.type : 'invoice';
@@ -40,7 +46,9 @@ export async function render(root, params) {
       if (cu) applyCustomer(cu);
     }
     if (!doc.items.length) doc.items.push(blankItem(b));
-    if (c.code === 'IN' && type === 'invoice') doc.copyLabel = 'Original for Recipient';
+    const gstReg = c.code === 'IN' && b.taxScheme !== 'unregistered';
+    if (gstReg && (type === 'invoice' || type === 'receipt')) doc.copyLabel = 'Original for Recipient';
+    if (gstReg && type === 'challan') doc.copyLabel = 'Original for Consignee';
     const n = await nextNumber(b, doc.type, doc.date);
     doc.number = n.number;
   }
@@ -161,15 +169,24 @@ export async function render(root, params) {
         ${ty.payable && !ty.paidNow ? `<div class="field"><label>Due date</label><input class="input" type="date" data-k="dueDate" value="${esc(doc.dueDate)}"><div class="chips mt-s">${[0, 7, 15, 30, 45].map((d) => `<button type="button" class="chip" style="height:24px;padding:0 9px;font-size:11px" data-due="${d}">${d ? d + 'd' : 'On receipt'}</button>`).join('')}</div></div>` : ''}
         ${ty.validity ? `<div class="field"><label>Valid until</label><input class="input" type="date" data-k="validUntil" value="${esc(doc.validUntil)}"></div>` : ''}
         <div class="field"><label>Reference / PO no.</label><input class="input" data-k="reference" value="${esc(doc.reference)}" placeholder="Optional"></div>
-        ${ty.refInvoice ? `<div class="field"><label>Against invoice</label><select class="input" data-refdoc><option value="">— None —</option>${docs.filter((d) => d.type === 'invoice' && d.status === 'final').sort((a, x) => x.date.localeCompare(a.date)).map((d) => `<option value="${d.id}" ${d.id === doc.refDocId ? 'selected' : ''}>${esc(d.number)} · ${esc(d.customer?.name || '')}</option>`).join('')}</select></div>` : ''}
-        ${c.code === 'IN' ? `<div class="field"><label>Copy label</label><select class="input" data-k="copyLabel">${COPY_LABELS.map((x) => `<option value="${x}" ${x === (doc.copyLabel || '') ? 'selected' : ''}>${x || 'None'}</option>`).join('')}</select></div>` : ''}
-      </div>`;
+        ${ty.refInvoice ? `<div class="field"><label>Against invoice</label><select class="input" data-refdoc><option value="">— None —</option>${docs.filter((d) => d.type === 'invoice' && d.status === 'final').sort((a, x) => x.date.localeCompare(a.date)).map((d) => `<option value="${d.id}" ${d.id === doc.refDocId ? 'selected' : ''}>${esc(d.number)} · ${esc(d.customer?.name || '')}</option>`).join('')}</select></div>
+          <div class="field" data-refnum-field ${doc.refDocId ? 'hidden' : ''}><label>…or original invoice no. *</label><input class="input mono" data-k="refNumber" value="${esc(doc.refDocId ? '' : doc.refNumber || '')}" placeholder="If not in Bill Studio"></div>
+          <div class="field" data-refdate-field ${doc.refDocId ? 'hidden' : ''}><label>Original invoice date *</label><input class="input" type="date" data-k="refDate" value="${esc(doc.refDocId ? '' : doc.refDate || '')}"></div>` : ''}
+        ${c.code === 'IN' && b.taxScheme !== 'unregistered' ? `<div class="field"><label>Copy label</label><select class="input" data-k="copyLabel">${(doc.type === 'challan' ? CHALLAN_LABELS : COPY_LABELS).map((x) => `<option value="${x}" ${x === (doc.copyLabel || '') ? 'selected' : ''}>${x || 'None'}</option>`).join('')}</select></div>` : ''}
+        ${ty.ledger || doc.type === 'proforma' ? `<div class="field"><label>Date of supply</label><input class="input" type="date" data-k="supplyDate" value="${esc(doc.supplyDate || '')}"><div class="help">Only if different from the bill date.</div></div>` : ''}
+        ${c.gst && b.taxScheme === 'regular' && ty.ledger ? `<div class="field"><label>Type of supply</label><select class="input" data-k="supplyType">${SUPPLY_TYPES.map(([v, l]) => `<option value="${v}" ${v === (doc.supplyType || '') ? 'selected' : ''}>${l}</option>`).join('')}</select></div>` : ''}
+      </div>
+      ${c.gst && b.taxScheme === 'regular' && TAX_DOCS.includes(doc.type) ? `<details class="mt" ${doc.irn ? 'open' : ''}><summary class="small muted" style="cursor:pointer">E-invoice (IRN) — needed if your turnover is above ₹5 crore</summary>
+        <div class="form-grid c3 mt-s"><div class="field" style="grid-column:span 2"><label>IRN</label><input class="input mono" data-k="irn" value="${esc(doc.irn || '')}" placeholder="64-character IRN from the IRP"></div>
+        <div class="field"><label>Ack. no.</label><input class="input mono" data-k="ackNo" value="${esc(doc.ackNo || '')}"></div>
+        <div class="field"><label>Ack. date</label><input class="input" type="date" data-k="ackDate" value="${esc(doc.ackDate || '')}"></div></div></details>` : ''}`;
     root.querySelectorAll('[data-due]').forEach((x) => x.addEventListener('click', () => {
       doc.dueDate = addDays(doc.date, Number(x.dataset.due)); root.querySelector('[data-k=dueDate]').value = doc.dueDate; changed();
     }));
     $('[data-refdoc]')?.addEventListener('change', async (e) => {
       const src = docs.find((d) => d.id === e.target.value);
-      doc.refDocId = src?.id || ''; doc.refNumber = src?.number || '';
+      doc.refDocId = src?.id || ''; doc.refNumber = src?.number || ''; doc.refDate = src?.date || '';
+      for (const sel of ['[data-refnum-field]', '[data-refdate-field]']) { const rf = root.querySelector(sel); if (rf) { rf.hidden = !!src; rf.querySelector('input').value = ''; } }
       if (src && (await confirmDialog('Copy items?', `Copy the customer and items from ${src.number}? You can then adjust quantities for the return.`, { ok: 'Copy' }))) {
         for (const k of ['customerId', 'customer', 'placeOfSupply', 'items', 'inclusive']) doc[k] = JSON.parse(JSON.stringify(src[k]));
         doc.items.forEach((i) => (i.id = uid('li_')));
@@ -236,7 +253,7 @@ export async function render(root, params) {
     };
     const pick = (p) => {
       Object.assign(doc.items[i], { productId: p.id, name: p.name, description: p.description || '', hsn: p.hsn || '', unit: p.unit || 'pcs', rate: Number(p.price) || 0, taxId: p.taxId || b.defaultTaxId, cess: p.cess || 0 });
-      if (p.priceIncludesTax && !doc.inclusive && doc.items.length === 1) doc.inclusive = true;
+      doc.items[i].inclusive = !!p.priceIncludesTax; // MRP items are tax-inclusive per line
       sug.hidden = true; drawItems(); changed();
       root.querySelector(`[data-k="items.${i}.qty"]`)?.select();
     };
@@ -267,7 +284,8 @@ export async function render(root, params) {
       <div class="group mt" style="box-shadow:none;border:1px solid var(--sep)">
         <label class="row" style="cursor:pointer"><span class="grow">Round off total</span><span class="switch"><input type="checkbox" data-flag="roundOff" ${doc.roundOff ? 'checked' : ''}><span></span></span></label>
         ${registered ? `<label class="row" style="cursor:pointer"><span class="grow">Reverse charge<div class="sub">${c.gst ? 'Tax payable by the recipient' : 'Customer accounts for tax (B2B cross-border)'}</div></span><span class="switch"><input type="checkbox" data-flag="reverseCharge" ${doc.reverseCharge ? 'checked' : ''}><span></span></span></label>
-        <label class="row" style="cursor:pointer"><span class="grow">Tax exempt sale<div class="sub">e.g. resale certificate, exempt customer</div></span><span class="switch"><input type="checkbox" data-flag="taxExempt" ${doc.taxExempt ? 'checked' : ''}><span></span></span></label>` : ''}
+        <label class="row" style="cursor:pointer"><span class="grow">Tax exempt sale<div class="sub">e.g. resale certificate, exempt customer</div></span><span class="switch"><input type="checkbox" data-flag="taxExempt" ${doc.taxExempt ? 'checked' : ''}><span></span></span></label>
+        ${doc.taxExempt ? `<div class="row"><input class="input" data-k="exemptReason" value="${esc(doc.exemptReason || '')}" placeholder="Legal reason, e.g. “Exempt intra-Community supply, Art. 138 Directive 2006/112/EC” or certificate no."></div>` : ''}` : ''}
       </div>
       <div class="form-grid mt">
         <div class="field span2"><label>Notes (shown on the bill)</label><textarea class="input" rows="2" data-k="notes" placeholder="Thank you for your business!">${esc(doc.notes)}</textarea></div>
@@ -275,7 +293,7 @@ export async function render(root, params) {
       </div>`;
     $('[data-add-charge]').addEventListener('click', () => { doc.charges = doc.charges || []; doc.charges.push({ label: 'Shipping', amount: 0, taxId: b.defaultTaxId }); drawExtras(); changed(); });
     root.querySelectorAll('[data-del-charge]').forEach((x) => x.addEventListener('click', () => { doc.charges.splice(Number(x.dataset.delCharge), 1); drawExtras(); changed(); }));
-    root.querySelectorAll('[data-flag]').forEach((x) => x.addEventListener('change', () => { doc[x.dataset.flag] = x.checked; changed(); }));
+    root.querySelectorAll('[data-flag]').forEach((x) => x.addEventListener('change', () => { doc[x.dataset.flag] = x.checked; if (x.dataset.flag === 'taxExempt') drawExtras(); changed(); }));
   }
 
   function drawPayment() {
@@ -292,6 +310,7 @@ export async function render(root, params) {
   }
 
   // ---------- Binding ----------
+  const ac = new AbortController();
   root.addEventListener('input', (e) => {
     const k = e.target.dataset?.k;
     if (!k) return;
@@ -299,12 +318,15 @@ export async function render(root, params) {
     if (k === 'date' && isNew) renumber();
     if (k === 'placeOfSupply') posHelp();
     changed();
-  });
+  }, { signal: ac.signal });
   root.addEventListener('change', (e) => {
     const k = e.target.dataset?.k;
     if (!k || e.target.tagName !== 'SELECT') return;
-    setPath(doc, k, e.target); changed();
-  });
+    setPath(doc, k, e.target);
+    if (k === 'supplyType' && /^export/.test(doc.supplyType)) { doc.placeOfSupply = '96'; const ps = root.querySelector('[data-k=placeOfSupply]'); if (ps) ps.value = '96'; }
+    if (k === 'supplyType' || k === 'placeOfSupply') posHelp();
+    changed();
+  }, { signal: ac.signal });
 
   function setPath(obj, path, el) {
     const parts = path.split('.');
@@ -319,9 +341,11 @@ export async function render(root, params) {
   async function renumber() {
     if (!isNew) return;
     const n = await nextNumber(b, doc.type, doc.date);
-    if (doc.fy !== n.fy || !doc.numberEdited) { doc.number = n.number; const el = root.querySelector('[data-k=number]'); if (el) el.value = n.number; root.querySelector('[data-num-sub]').textContent = n.number; }
+    const fyChanged = n.fy !== lastFy; lastFy = n.fy;
+    if (fyChanged || !doc.numberEdited) { doc.number = n.number; const el = root.querySelector('[data-k=number]'); if (el) el.value = n.number; root.querySelector('[data-num-sub]').textContent = n.number; }
   }
   root.querySelector('[data-sec=details]').addEventListener('input', (e) => { if (e.target.dataset.k === 'number') doc.numberEdited = true; });
+  let lastFy = fyLabel(doc.date, b.fyStartMonth);
 
   function updateLineTotals() {
     const calc = calculate(doc, b);
@@ -366,7 +390,7 @@ export async function render(root, params) {
     const keep = { customer: doc.customer, customerId: doc.customerId, items: doc.items, charges: doc.charges, placeOfSupply: doc.placeOfSupply, notes: doc.notes, inclusive: doc.inclusive, discount: doc.discount, discountType: doc.discountType };
     doc = Object.assign(blankDoc(b, nt), keep);
     doc.number = (await nextNumber(b, nt, doc.date)).number;
-    if (c.code === 'IN' && nt === 'invoice') doc.copyLabel = 'Original for Recipient';
+    if (c.code === 'IN' && b.taxScheme !== 'unregistered') doc.copyLabel = nt === 'challan' ? 'Original for Consignee' : ['invoice', 'receipt'].includes(nt) ? 'Original for Recipient' : '';
     paidNow = { on: !!DOC_TYPES[nt].paidNow, amount: 0, mode: 'cash', auto: true };
     tpl = await templateFor(doc);
     $('[data-tpl]').value = tpl.id;
@@ -378,16 +402,95 @@ export async function render(root, params) {
   });
   $('[data-tpl]').addEventListener('change', async (e) => { tpl = await templateFor({ ...doc, templateId: e.target.value }); doc.templateId = e.target.value; drawPreview(); });
 
-  async function save(status) {
+  const TAX_DOCS = ['invoice', 'receipt', 'credit', 'debit'];
+  // Hard rules: the bill would be wrong or non-compliant. Returns an error message or ''.
+  function validateDoc(status) {
     const ty = t();
+    const final = status === 'final';
+    if (final && TAX_DOCS.includes(doc.type)) {
+      const err = businessTaxError(b);
+      if (err) return `Complete your tax registration in Business profile first: ${err}`;
+    }
+    if (!doc.date) return 'Please enter the bill date.';
+    if (doc.dueDate && doc.dueDate < doc.date) return 'The due date can’t be before the bill date.';
+    if (doc.validUntil && doc.validUntil < doc.date) return '“Valid until” can’t be before the quotation date.';
+    if (c.gst && !/^[A-Za-z0-9/-]+$/.test(doc.number)) return 'GST bill numbers may only use letters, digits, “/” and “-” (no spaces or other symbols).';
+    if (doc.number.length > 40) return 'Bill number is too long.';
+    for (const [i, it] of doc.items.entries()) {
+      const n = `Item ${i + 1}${it.name ? ` (${it.name})` : ''}`;
+      if (!String(it.name || '').trim()) return `${n}: please enter a name.`;
+      if (!(num(it.qty) > 0)) return `${n}: quantity must be more than 0.`;
+      if (num(it.rate) < 0) return `${n}: rate can’t be negative.`;
+      if (num(it.disc) < 0) return `${n}: discount can’t be negative.`;
+      if (it.discType !== 'amt' && num(it.disc) > 100) return `${n}: discount can’t be more than 100%.`;
+      if (it.discType === 'amt' && num(it.disc) > num(it.qty) * num(it.rate)) return `${n}: discount is larger than the line amount.`;
+      if (num(it.cess) < 0) return `${n}: cess can’t be negative.`;
+      if (c.gst && it.hsn && !/^\d{4}(\d{2})?(\d{2})?$/.test(String(it.hsn).trim())) return `${n}: HSN/SAC must be 4, 6 or 8 digits.`;
+    }
+    if (num(doc.discount) < 0) return 'Bill discount can’t be negative.';
+    if (doc.discountType !== 'amt' && num(doc.discount) > 100) return 'Bill discount can’t be more than 100%.';
+    for (const ch of doc.charges || []) if (num(ch.amount) < 0) return `${ch.label || 'Charge'} can’t be negative.`;
+    const cu = doc.customer || {};
+    if (!validateEmail(cu.email)) return 'The customer email address doesn’t look right.';
+    if (!final) return '';
+    const registered = b.taxScheme !== 'unregistered';
+    if (c.gst) {
+      if (cu.taxId && !validateGSTIN(cu.taxId).ok) return `Customer GSTIN: ${validateGSTIN(cu.taxId).msg}`;
+      if (b.taxScheme === 'composition' && TAX_DOCS.includes(doc.type) && doc.placeOfSupply !== b.region) return 'A composition dealer can’t make inter-state supplies (GST Act s.10). Change the place of supply or your GST status.';
+      if (registered && b.taxScheme === 'regular' && cu.taxId && TAX_DOCS.includes(doc.type)) {
+        const bad = doc.items.find((it) => !/^\d{4,8}$/.test(String(it.hsn || '').trim()));
+        if (bad) return `“${bad.name}”: HSN/SAC code is required on B2B tax invoices (at least 4 digits).`;
+      }
+    }
+    const total = calculate(doc, b).total;
+    if (c.gst && b.taxScheme === 'regular' && !cu.taxId && ['invoice', 'receipt'].includes(doc.type) && total >= 50000 && !String(cu.address || '').trim())
+      return 'For sales of ₹50,000 or more to an unregistered buyer, GST rules require the buyer’s name, address and state — please add the address.';
+    if (doc.taxExempt && !String(doc.exemptReason || '').trim() && b.taxScheme !== 'unregistered') return 'Give the legal reason for the tax exemption (it must be printed on the bill).';
+    if ((c.eu || c.code === 'GB') && b.taxScheme !== 'unregistered' && doc.type === 'invoice' && total > (c.code === 'GB' ? 250 : 100) && !String(cu.address || '').trim())
+      return 'A full VAT invoice must show the customer’s address. Please add it.';
+    if (ty.refInvoice && !doc.refDocId && String(doc.refNumber || '').trim() && !doc.refDate) return 'Please enter the date of the original invoice.';
+    if (doc.irn && !/^[0-9a-f]{64}$/i.test(doc.irn.trim())) return 'The IRN should be the 64-character code from the e-invoice portal.';
+    if (ty.refInvoice && !doc.refDocId && !String(doc.refNumber || '').trim()) return `A ${ty.label.toLowerCase()} must refer to the original invoice — choose it or type its number.`;
+    if (doc.reverseCharge && !cu.taxId) return `Reverse charge applies only to business customers — enter the customer’s ${c.taxIdLabel}.`;
+    return '';
+  }
+  // Soft checks: probably a mistake, but the user may continue.
+  function warnDoc() {
+    const cu = doc.customer || {};
+    const calc = calculate(doc, b);
+    if (c.gst && cu.taxId && validateGSTIN(cu.taxId).ok && cu.taxId.slice(0, 2) !== doc.placeOfSupply && doc.placeOfSupply !== '96')
+      return `The customer’s GSTIN is registered in state ${cu.taxId.slice(0, 2)}, but the place of supply is ${doc.placeOfSupply}. That is fine when goods are delivered to another state — otherwise correct the place of supply.`;
+    const ownPrefix = /^[A-Z]{2}/.test(String(cu.taxId || '').toUpperCase()) ? String(cu.taxId).toUpperCase().slice(0, 2) === (c.code === 'GR' ? 'EL' : c.code) : true;
+    if (!c.gst && cu.taxId && ownPrefix && (c.eu || c.code === 'GB') && !validateTaxId(c.code, cu.taxId).ok) return `The customer’s ${c.taxIdLabel} looks wrong: ${validateTaxId(c.code, cu.taxId).msg}`;
+    if (calc.total === 0 && TAX_DOCS.includes(doc.type)) return 'This bill’s total is 0. Save it anyway?';
+    if (c.code === 'AU' && b.taxScheme !== 'unregistered' && calc.total >= 1000 && !cu.taxId && !cu.address) return 'Australian tax invoices of A$1,000 or more must show the buyer’s identity or ABN. Add the customer’s ABN or address.';
+    return '';
+  }
+
+  let saving = false;
+  async function save(status) {
+    if (saving) return;
+    saving = true;
+    root.querySelectorAll('[data-save],[data-draft]').forEach((x) => (x.disabled = true));
+    try { await doSave(status); } finally { saving = false; if (root.isConnected) root.querySelectorAll('[data-save],[data-draft]').forEach((x) => (x.disabled = false)); }
+  }
+  async function doSave(status) {
+    const ty = t();
+    const before = doc.items.length;
     doc.items = doc.items.filter((i) => i.name || num(i.rate));
+    if (doc.items.length && doc.items.length !== before) drawItems(); // keep field indexes in sync
     if (!doc.items.length) { toast('Add at least one item', 'err'); doc.items.push(blankItem(b)); drawItems(); return; }
     if (!doc.customer?.name && doc.type !== 'receipt' && status === 'final') { toast(`Please enter the ${doc.type === 'purchase' ? 'vendor' : 'customer'} name`, 'err'); root.querySelector('[data-cust-input]').focus(); return; }
     if (!doc.customer.name && doc.type === 'receipt') doc.customer.name = 'Walk-in customer';
+    doc.number = String(doc.number || '').trim();
     if (!doc.number) { toast('Bill number is required', 'err'); return; }
     const clash = docs.find((d) => d.id !== doc.id && d.type === doc.type && d.number === doc.number);
     if (clash) { toast(`${doc.number} already exists — use a different number`, 'err'); return; }
     if (c.maxNumberLength && doc.number.length > c.maxNumberLength) { toast(`Bill number must be ${c.maxNumberLength} characters or fewer`, 'err'); return; }
+    const problem = validateDoc(status);
+    if (problem) { toast(problem, 'err'); return; }
+    const warning = status === 'final' && warnDoc();
+    if (warning && !(await confirmDialog('Please check', warning, { ok: 'Save anyway' }))) return;
     doc.status = status;
     doc.fy = fyLabel(doc.date, b.fyStartMonth);
     const m2 = String(doc.number).match(/(\d+)$/);
@@ -407,7 +510,7 @@ export async function render(root, params) {
       if (q2) { q2.convertedTo = saved.id; await db.put('documents', q2); }
     }
     dirty = false;
-    toast(status === 'draft' ? 'Draft saved' : `${ty.label} ${saved.number} saved`);
+    toast(status === 'draft' ? 'Draft saved' : `${docTitle(saved.type, b, saved)} ${saved.number} saved`);
     location.hash = `#/bills/${saved.id}`;
   }
   $('[data-save]').addEventListener('click', () => save('final'));
@@ -415,7 +518,7 @@ export async function render(root, params) {
   $('[data-cancel]').addEventListener('click', async () => {
     if (dirty && !(await confirmDialog('Discard changes?', 'Your unsaved changes to this bill will be lost.', { ok: 'Discard', danger: true }))) return;
     dirty = false;
-    history.length > 1 ? history.back() : (location.hash = '#/bills');
+    location.hash = doc.id ? `#/bills/${doc.id}` : '#/bills';
   });
 
   const onKey = (e) => { if ((e.metaKey || e.ctrlKey) && e.key === 's') { e.preventDefault(); save('final'); } };
@@ -429,6 +532,7 @@ export async function render(root, params) {
   drawAll();
 
   return () => {
+    ac.abort();
     document.removeEventListener('keydown', onKey);
     window.removeEventListener('resize', onResize);
     window.removeEventListener('beforeunload', beforeUnload);

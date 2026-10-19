@@ -4,6 +4,7 @@ import { db } from '../db.js';
 import { state, list } from '../store.js';
 import { getCountry, UNITS } from '../tax/countries.js';
 import { fmtMoney, num } from '../lib/money.js';
+import { presetRate } from '../tax/engine.js';
 
 function productDialog(p = null) {
   const b = state.business;
@@ -40,6 +41,8 @@ function productDialog(p = null) {
     rec.priceIncludesTax = g('priceIncludesTax').checked;
     rec.trackStock = g('trackStock').checked;
     if (!rec.name) { toast('Name is required', 'err'); return; }
+    if (rec.price < 0 || rec.cost < 0) { toast('Prices can’t be negative', 'err'); return; }
+    if (c.gst && rec.hsn && !/^\d{4}(\d{2})?(\d{2})?$/.test(rec.hsn)) { toast('HSN/SAC must be 4, 6 or 8 digits', 'err'); return; }
     await db.put('products', rec);
     toast('Item saved');
     m.close(rec);
@@ -88,7 +91,7 @@ export async function render(root) {
   draw();
   root.querySelector('[data-q]').addEventListener('input', (e) => { q = e.target.value.toLowerCase(); draw(); });
   root.querySelector('[data-new]').addEventListener('click', add);
-  root.querySelector('[data-export]').addEventListener('click', () => downloadText(toCSV([['name', 'sku', 'hsn', 'unit', 'price', 'cost', 'tax', 'stock', 'description'], ...products.map((p) => [p.name, p.sku, p.hsn, p.unit, p.price, p.cost, taxLabel(p.taxId), p.trackStock ? p.stock : '', p.description])]), 'items.csv', 'text/csv'));
+  root.querySelector('[data-export]').addEventListener('click', () => downloadText(toCSV([['name', 'sku', 'hsn', 'unit', 'price', 'cost', 'taxid', 'tax', 'stock', 'description'], ...products.map((p) => [p.name, p.sku, p.hsn, p.unit, p.price, p.cost, p.taxId, taxLabel(p.taxId), p.trackStock ? p.stock : '', p.description])]), 'items.csv', 'text/csv'));
   root.querySelector('[data-import]').addEventListener('click', async () => {
     const f = await pickFile('.csv,text/csv');
     if (!f) return;
@@ -99,8 +102,11 @@ export async function render(root) {
     for (const r of data) {
       const name = col(r, 'name', 'item', 'product');
       if (!name) continue;
-      const taxTxt = col(r, 'tax', 'gst', 'vat', 'tax rate').replace('%', '');
-      const tax = b.taxes.find((t) => t.label === taxTxt || String(t.rate ?? t.components?.[0]?.rate) === taxTxt.replace(/[^\d.]/g, ''));
+      // Match tax by id, then exact label, then total rate.
+      const taxTxt = col(r, 'taxid', 'tax', 'gst', 'vat', 'tax rate');
+      const rateNum = taxTxt.replace(/[^\d.]/g, '');
+      const tax = b.taxes.find((t) => t.id === taxTxt) || b.taxes.find((t) => t.label.toLowerCase() === taxTxt.toLowerCase())
+        || (rateNum !== '' ? b.taxes.find((t) => String(presetRate(t)) === String(Number(rateNum))) : null);
       const stock = col(r, 'stock', 'qty', 'quantity');
       await db.put('products', { businessId: b.id, name, sku: col(r, 'sku', 'barcode', 'code'), hsn: col(r, 'hsn', 'hsn/sac', 'sac'), unit: col(r, 'unit') || 'pcs', price: num(col(r, 'price', 'rate', 'mrp')), cost: num(col(r, 'cost', 'purchase price')), taxId: tax?.id || b.defaultTaxId, trackStock: stock !== '', stock: num(stock), lowStock: 5, description: col(r, 'description'), kind: 'goods' });
       n++;

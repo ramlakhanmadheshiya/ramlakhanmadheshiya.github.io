@@ -55,8 +55,14 @@ export async function render(root) {
   const openDesigner = async (id) => {
     const t = templates.find((x) => x.id === id);
     if (t.builtin) {
-      const copy = cloneTemplate(t, { name: `${t.name} (my version)`, businessId: b.id });
-      await db.put('templates', copy);
+      // Re-open the user's existing version of this design instead of piling up copies.
+      const copy = templates.find((x) => !x.builtin && x.basedOn === t.id) || cloneTemplate(t, { name: `${t.name} (my version)`, businessId: b.id });
+      if (!copy.createdAt) await db.put('templates', copy);
+      // If the built-in was the default, the customised version becomes the default everywhere it was used.
+      const dt = { ...(b.defaultTemplates || {}) };
+      let changedDefault = false;
+      for (const d of DOC_TYPE_LIST) if (defaultTemplateId(d.key, b) === t.id) { dt[d.key] = copy.id; changedDefault = true; }
+      if (changedDefault) { b.defaultTemplates = dt; await saveBusiness(b, { quiet: true }); }
       location.hash = `#/templates/${copy.id}/design`;
     } else location.hash = `#/templates/${id}/design`;
   };

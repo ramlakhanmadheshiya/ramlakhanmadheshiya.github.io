@@ -1,5 +1,5 @@
 // Renders tabular reports (statements, GST/VAT summaries, sales registers) to a clean A4 PDF.
-import { esc, downloadBlob, toast } from './ui.js';
+import { esc, downloadBlob, toast, safeImg } from './ui.js';
 import { fmtMoney } from './lib/money.js';
 import { fmtDate, todayISO } from './lib/dates.js';
 import { getCountry } from './tax/countries.js';
@@ -10,7 +10,7 @@ function reportHtml({ title, subtitle, summary = [], sections = [] }, b) {
   const c = getCountry(b.country);
   return `<div style="width:${W}px;padding:48px;background:#fff;color:#1d1d1f;font:12px/1.45 -apple-system,BlinkMacSystemFont,'InterVar','Segoe UI',Roboto,sans-serif;-webkit-font-smoothing:antialiased">
     <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:20px;border-bottom:1.5px solid #1d1d1f;padding-bottom:16px">
-      <div style="display:flex;gap:14px;align-items:center">${b.logo ? `<img src="${b.logo}" style="width:54px;height:54px;object-fit:contain">` : ''}
+      <div style="display:flex;gap:14px;align-items:center">${b.logo ? `<img src="${safeImg(b.logo)}" style="width:54px;height:54px;object-fit:contain">` : ''}
         <div><div style="font-size:18px;font-weight:700;letter-spacing:-.02em">${esc(b.name)}</div><div style="color:#6e6e73">${esc([b.address, b.city].filter(Boolean).join(', '))}</div>${b.taxId ? `<div style="font-weight:600">${esc(c.taxIdLabel)}: ${esc(b.taxId)}</div>` : ''}</div></div>
       <div style="text-align:right"><div style="font-size:22px;font-weight:600;letter-spacing:-.02em">${esc(title)}</div><div style="color:#6e6e73">${esc(subtitle || '')}</div><div style="color:#86868b;font-size:10px;margin-top:4px">Generated ${esc(fmtDate(todayISO(), b.locale))}</div></div>
     </div>

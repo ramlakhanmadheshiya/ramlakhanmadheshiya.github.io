@@ -3,7 +3,7 @@ import { db, uid } from './db.js';
 import { getCountry } from './tax/countries.js';
 import { calculate, isTaxRegistered } from './tax/engine.js';
 import { fyLabel, todayISO, addDays, daysBetween } from './lib/dates.js';
-import { round } from './lib/money.js';
+import { round, currencyDecimals } from './lib/money.js';
 
 export const state = { business: null, businesses: [], theme: 'light' };
 const listeners = new Set();
@@ -23,17 +23,40 @@ export const DOC_TYPES = {
 };
 export const DOC_TYPE_LIST = Object.values(DOC_TYPES);
 
-export function docTitle(type, business) {
+export function docTitle(type, business, doc = null) {
   const t = DOC_TYPES[type] || DOC_TYPES.invoice;
-  if (type === 'invoice') {
-    const c = getCountry(business?.country);
-    return isTaxRegistered(business) ? c.docTitle.registered : c.docTitle.unregistered;
+  const c = getCountry(business?.country);
+  const scheme = business?.taxScheme || 'regular';
+  const registered = scheme !== 'unregistered';
+  const b2c = doc ? !doc.customer?.taxId : false;
+  if (type === 'invoice' || type === 'receipt') {
+    if (scheme === 'composition') return c.docTitle.composition || 'Bill of Supply';
+    if (!registered) return type === 'receipt' && c.gst ? 'Cash Memo' : (type === 'receipt' ? 'Receipt' : c.docTitle.unregistered);
+    // Saudi Arabia: B2C sales use a Simplified Tax Invoice.
+    if (c.code === 'SA') return b2c || type === 'receipt' ? 'Simplified Tax Invoice' : 'Tax Invoice';
+    // Where the law calls the document a "Tax Invoice" (India Rule 46, AU, NZ, SG, ZA, AE…),
+    // a registered seller's cash sale is a Tax Invoice too.
+    if (type === 'receipt') return c.docTitle.registered === 'Tax Invoice' ? 'Tax Invoice' : 'Sales Receipt';
+    return c.docTitle.registered;
   }
+  if (type === 'credit' && registered && c.code === 'AE') return 'Tax Credit Note';
+  if (type === 'debit' && registered && c.code === 'AE') return 'Tax Debit Note';
   return t.label;
 }
 
+// Seller details + tax settings frozen into a bill when it is saved, so later changes to
+// the business profile or tax rates never alter a bill that was already issued.
+const SNAP_KEYS = ['name', 'legalName', 'country', 'region', 'currency', 'locale', 'taxScheme', 'taxId', 'secondaryId', 'address', 'city',
+  'postal', 'phone', 'email', 'website', 'bank', 'upi', 'payLink', 'taxes', 'fyStartMonth', 'showHsn'];
+export function snapshotOf(business) {
+  return JSON.parse(JSON.stringify(Object.fromEntries(SNAP_KEYS.map((k) => [k, business[k]]))));
+}
+export function bizFor(doc, business = state.business) {
+  return doc?.snap ? { ...business, ...doc.snap } : business;
+}
+
 // Default tax = the standard rate: 18% GST in India, otherwise the highest everyday rate (ignoring luxury slabs).
-function defaultPreset(presets) {
+export function defaultPreset(presets) {
   const rate = (p) => Number(p.rate ?? (p.components || []).reduce((s, c) => s + Number(c.rate || 0), 0));
   return presets.find((p) => p.gst && rate(p) === 18) || presets.filter((p) => rate(p) <= 28).sort((a, b) => rate(b) - rate(a))[0] || presets[0];
 }
@@ -61,23 +84,39 @@ export async function loadState() {
   state.business = state.businesses.find((b) => b.id === activeId) || state.businesses[0] || null;
 }
 
-export async function saveBusiness(b) {
+export async function saveBusiness(b, { quiet = false } = {}) {
   await db.put('businesses', b);
   state.businesses = await db.all('businesses');
   if (!state.business || state.business.id === b.id) state.business = b;
   await db.setting('activeBusiness', state.business.id);
-  emit();
+  if (!quiet) emit();
   return b;
 }
 
 export async function switchBusiness(id) {
   state.business = state.businesses.find((b) => b.id === id) || state.business;
   await db.setting('activeBusiness', state.business.id);
-  emit();
+  // Never keep another business's record on screen after switching.
+  if (location.hash !== '#/' && location.hash !== '') { location.hash = '#/'; setTimeout(emit, 0); } else emit();
 }
 
 export const bizId = () => state.business?.id;
-export const list = (store) => db.all(store, bizId());
+let docsCache = [];
+let customersCache = [];
+export const list = async (store) => {
+  const rows = await db.all(store, bizId());
+  if (store === 'documents') docsCache = rows;
+  if (store === 'customers') customersCache = rows;
+  return rows;
+};
+// A record belongs to the active business (guards deep links and business switches).
+export const ownRecord = (r) => !!r && r.businessId === bizId();
+
+// Total of final credit notes issued against an invoice (they reduce what is still due on it).
+export function creditsAgainst(docId, docs = docsCache) {
+  return docs.filter((d) => d.type === 'credit' && d.status === 'final' && d.refDocId === docId)
+    .reduce((s, d) => s + calculate(d, bizFor(d)).total, 0);
+}
 
 // ---------- Numbering ----------
 export function formatNumber(business, type, seq, date) {
@@ -117,9 +156,38 @@ export function blankItem(business) {
   return { id: uid('li_'), productId: '', name: '', description: '', hsn: '', qty: 1, unit: 'pcs', rate: 0, disc: 0, discType: 'pct', taxId: business.defaultTaxId || '', cess: 0 };
 }
 
-export function docTotals(doc, business = state.business) { return calculate(doc, business); }
+export function docTotals(doc, business = state.business) { return calculate(doc, bizFor(doc, business)); }
 
 export function paymentsFor(docId, payments) { return payments.filter((p) => p.documentId === docId); }
+
+// What is still due on a bill from its own total, credit notes and directly linked payments.
+function directDue(doc, payments) {
+  const totals = docTotals(doc);
+  const credited = round(creditsAgainst(doc.id), totals.dp);
+  const total = round(totals.total - credited, totals.dp);
+  const paid = round(paymentsFor(doc.id, payments).reduce((s, p) => s + Number(p.amount || 0), 0), totals.dp);
+  return { totals, credited, total, paid, rem: Math.max(0, round(total - paid, totals.dp)), excess: Math.max(0, round(paid - total, totals.dp)) };
+}
+
+// On-account payments and over-payments are applied to the customer's oldest open bills first.
+function onAccountApplied(doc, payments) {
+  if (!doc.customerId) return 0;
+  const mine = docsCache.filter((d) => d.customerId === doc.customerId && d.status === 'final' && DOC_TYPES[d.type]?.payable)
+    .sort((a, b) => (a.date + (a.number || '')).localeCompare(b.date + (b.number || '')));
+  if (!mine.some((d) => d.id === doc.id)) return 0;
+  const dues = mine.map((d) => ({ d, ...directDue(d, payments) }));
+  let pool = payments.filter((p) => p.customerId === doc.customerId && !p.documentId).reduce((s, p) => s + Number(p.amount || 0), 0)
+    + dues.reduce((s, x) => s + x.excess, 0);
+  const cust = customersCache.find((c) => c.id === doc.customerId);
+  pool -= Math.max(0, Number(cust?.openingBalance) || 0); // the opening balance is the oldest debt
+  for (const x of dues) {
+    if (pool <= 0.004) return 0;
+    const a = Math.min(pool, x.rem);
+    if (x.d.id === doc.id) return a;
+    pool -= a;
+  }
+  return 0;
+}
 
 export function payStatus(doc, payments, totals) {
   const t = DOC_TYPES[doc.type];
@@ -131,13 +199,18 @@ export function payStatus(doc, payments, totals) {
     if (doc.type === 'credit') return { key: 'info', label: 'Credit' };
     return { key: 'neutral', label: 'Sent' };
   }
-  const total = totals.total;
-  const paid = round(paymentsFor(doc.id, payments).reduce((s, p) => s + Number(p.amount || 0), 0), totals.dp);
-  if (total <= 0 || paid >= total - 0.004) return { key: 'paid', label: 'Paid', paid, due: 0 };
-  const due = round(total - paid, totals.dp);
-  if (doc.dueDate && doc.dueDate < todayISO()) return { key: 'overdue', label: `Overdue · ${daysBetween(doc.dueDate, todayISO())}d`, paid, due };
-  if (paid > 0) return { key: 'partial', label: 'Partly paid', paid, due };
-  return { key: 'unpaid', label: 'Unpaid', paid, due };
+  const dp = totals.dp;
+  const credited = round(creditsAgainst(doc.id), dp);
+  const total = round(totals.total - credited, dp);
+  const direct = round(paymentsFor(doc.id, payments).reduce((s, p) => s + Number(p.amount || 0), 0), dp);
+  const applied = direct < total ? round(onAccountApplied(doc, payments), dp) : 0;
+  const paid = round(direct + applied, dp);
+  if (credited && total <= 0.004) return { key: 'info', label: 'Credited', paid, due: 0, credited };
+  if (total <= 0 || paid >= total - 0.004) return { key: 'paid', label: direct > total + 0.004 ? 'Paid · advance' : 'Paid', paid, due: 0, credited, applied };
+  const due = round(total - paid, dp);
+  if (doc.dueDate && doc.dueDate < todayISO()) return { key: 'overdue', label: `Overdue · ${daysBetween(doc.dueDate, todayISO())}d`, paid, due, credited, applied };
+  if (paid > 0 || credited > 0) return { key: 'partial', label: paid > 0 ? 'Partly paid' : 'Partly credited', paid, due, credited, applied };
+  return { key: 'unpaid', label: 'Unpaid', paid, due, credited, applied };
 }
 
 // Full ledger for one customer: opening balance, ledger documents and payments, running balance.
@@ -148,7 +221,7 @@ export function customerLedger(customer, docs, payments, business = state.busine
     if (d.customerId !== customer.id || d.status !== 'final') continue;
     const t = DOC_TYPES[d.type];
     if (!t?.ledger) continue;
-    const tot = calculate(d, business).total;
+    const tot = calculate(d, bizFor(d, business)).total;
     rows.push({ date: d.date, kind: t.label, ref: d.number, docId: d.id, debit: t.ledger > 0 ? tot : 0, credit: t.ledger < 0 ? tot : 0 });
   }
   for (const p of payments) {
@@ -157,7 +230,8 @@ export function customerLedger(customer, docs, payments, business = state.busine
   }
   rows.sort((a, b) => (a.date || '').localeCompare(b.date || ''));
   let bal = 0;
-  for (const r of rows) { bal = round(bal + r.debit - r.credit, 2); r.balance = bal; }
+  const dp = currencyDecimals(business?.currency || 'USD');
+  for (const r of rows) { bal = round(bal + r.debit - r.credit, dp); r.balance = bal; }
   return { rows, balance: bal };
 }
 
@@ -182,8 +256,13 @@ export async function saveDocument(doc, { paidNow = null } = {}) {
   } else {
     const prev = await db.get('documents', doc.id);
     if (prev) await adjustStock(prev, -1); // undo the previous stock movement
+    // Payments follow the bill if its customer changed.
+    if (prev && prev.customerId !== doc.customerId) {
+      for (const p of await db.all('payments', business.id)) if (p.documentId === doc.id) { p.customerId = doc.customerId; await db.put('payments', p); }
+    }
   }
   doc.businessId = business.id;
+  doc.snap = snapshotOf(business);
   doc.totalCache = calculate(doc, business).total;
   await db.put('documents', doc);
   await adjustStock(doc, 1);

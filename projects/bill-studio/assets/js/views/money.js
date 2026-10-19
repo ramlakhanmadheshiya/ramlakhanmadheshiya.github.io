@@ -29,6 +29,8 @@ function expenseDialog(e = null) {
     const g = (n) => m.el.querySelector(`[name=${n}]`).value;
     const rec = { ...x, businessId: b.id, date: g('date'), category: g('category'), vendor: g('vendor').trim(), amount: num(g('amount')), tax: num(g('tax')), mode: g('mode'), reference: g('reference').trim(), note: g('note').trim() };
     if (!(rec.amount > 0)) { toast('Enter an amount', 'err'); return; }
+    if (!rec.date) { toast('Enter the expense date', 'err'); return; }
+    if (rec.tax < 0 || rec.tax > rec.amount) { toast('Tax included must be between 0 and the total amount', 'err'); return; }
     await db.put('expenses', rec); toast('Expense saved'); m.close(rec);
   });
   m.el.querySelector('[data-del]')?.addEventListener('click', async () => {
@@ -74,7 +76,8 @@ export async function render(root, { query = {} } = {}) {
         : emptyState('wallet', 'No payments in this period', 'Payments you record against bills or customer accounts show up here.');
       host.querySelectorAll('[data-pid]').forEach((x) => x.addEventListener('click', async () => {
         const p = payments.find((y) => y.id === x.dataset.pid);
-        if (await paymentDialog({ customers, payment: p, openDocs })) render(root, {});
+        const linked = p.documentId ? docs.find((d) => d.id === p.documentId) : null;
+        if (await paymentDialog({ customers, payment: p, openDocs, doc: linked })) render(root, {});
       }));
     } else {
       const byCat = {};
@@ -97,5 +100,5 @@ export async function render(root, { query = {} } = {}) {
       : [['Date', 'Category', 'Vendor', 'Mode', 'Reference', 'Tax', 'Amount'], ...expenses.map((e) => [e.date, e.category, e.vendor, e.mode, e.reference, e.tax, e.amount])];
     downloadText(toCSV(rows), ui.tab === 'in' ? 'payments.csv' : 'expenses.csv', 'text/csv');
   });
-  if (query.new) { history.replaceState(null, '', '#/money'); if (await paymentDialog({ customers, openDocs })) render(root, {}); }
+  if (query.new) { history.replaceState(null, '', '#/money'); paymentDialog({ customers, openDocs }).then((r) => { if (r && root.isConnected) render(root, {}); }); }
 }

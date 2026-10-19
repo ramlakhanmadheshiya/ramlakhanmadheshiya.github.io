@@ -1,13 +1,13 @@
 // Renders a document onto a template page, plus "flow" so growing blocks
 // (long item lists, addresses) push the blocks below them down.
-import { esc, nl2br } from './ui.js';
-import { fmtMoney, fmtPlain, fmtNumber } from './lib/money.js';
+import { esc, nl2br, safeImg } from './ui.js';
+import { fmtMoney, fmtPlain, fmtNumber, round } from './lib/money.js';
 import { fmtDate } from './lib/dates.js';
 import { amountInWords } from './lib/words.js';
 import { qrSvg, paymentQR } from './lib/qr.js';
 import { getCountry, IN_STATES } from './tax/countries.js';
 import { calculate } from './tax/engine.js';
-import { docTitle, DOC_TYPES, blankItem } from './store.js';
+import { docTitle, DOC_TYPES, blankItem, bizFor } from './store.js';
 import { BLOCK_TYPES, FONTS, PAGE } from './templates.js';
 
 const PAPER_CSS = `
@@ -73,13 +73,15 @@ const hexToRgba = (hex, a) => {
   if (!m) return `rgba(0,113,227,${a})`;
   return `rgba(${parseInt(m[1], 16)},${parseInt(m[2], 16)},${parseInt(m[3], 16)},${a})`;
 };
-const col = (c) => (c === 'accent' ? 'var(--acc)' : c);
+const cssSafe = (v) => (/^[#\w(),.%\s-]*$/.test(String(v ?? '')) ? v : '');
+const col = (c) => (c === 'accent' ? 'var(--acc)' : cssSafe(c));
 
 export function buildContext(doc, business, extra = {}) {
+  business = bizFor(doc, business);
   const country = getCountry(business.country);
   const totals = calculate(doc, business);
-  if (extra.paid != null) { totals.paid = extra.paid; totals.balance = Math.round((totals.total - extra.paid) * 100) / 100; }
-  return { doc, business, country, totals, title: docTitle(doc.type, business), sample: !!extra.sample, editing: !!extra.editing };
+  if (extra.paid != null) { totals.paid = extra.paid; totals.credited = extra.credited || 0; totals.balance = round(totals.total - totals.credited - extra.paid, totals.dp); }
+  return { doc, business, country, totals, title: docTitle(doc.type, business, doc), sample: !!extra.sample, editing: !!extra.editing };
 }
 
 export function sampleContext(business, type = 'invoice') {
@@ -120,7 +122,7 @@ function fillText(text, ctx) {
 // --- Block renderers ---
 const R = {
   logo(b, ctx) {
-    if (ctx.business.logo) return `<div class="logo" style="width:100%;height:100%"><img src="${ctx.business.logo}" alt=""></div>`;
+    if (ctx.business.logo) return `<div class="logo" style="width:100%;height:100%"><img src="${safeImg(ctx.business.logo)}" alt=""></div>`;
     return ctx.editing ? `<div class="ph">Your logo</div>` : '';
   },
   business(b, ctx) {
@@ -129,17 +131,19 @@ const R = {
     const lines = [x.address, [x.city, x.postal].filter(Boolean).join(' '), c.regions && x.region ? (c.regions.find((r) => r.code === x.region)?.name || '') : '']
       .filter(Boolean).join(', ');
     const contact = [x.phone, x.email, x.website].filter(Boolean).join(' · ');
-    const ids = [x.taxId ? `${c.taxIdLabel}: ${x.taxId}` : '', x.secondaryId ? `${c.secondaryIdLabel || 'Reg. No.'}: ${x.secondaryId}` : ''].filter(Boolean).join(' · ');
+    const showTaxId = x.taxScheme !== 'unregistered' || c.code === 'AU';
+    const ids = [x.taxId && showTaxId ? `${c.taxIdLabel}: ${x.taxId}` : '', x.secondaryId ? `${c.secondaryIdLabel || 'Reg. No.'}: ${x.secondaryId}` : ''].filter(Boolean).join(' · ');
     return `<div class="nm" style="font-size:${b.props.nameSize || 18}px;color:${b.style.color === '#ffffff' ? '#fff' : '#1d1d1f'};${b.style.color === '#ffffff' ? '' : ''};line-height:1.15;margin-bottom:4px;letter-spacing:-.02em">${esc(name)}</div>
       ${x.legalName && x.legalName !== x.name ? `<div>${esc(x.legalName)}</div>` : ''}
       ${lines ? `<div>${nl2br(lines)}</div>` : ctx.sample ? '<div>Your address, City 000000</div>' : ''}
       ${contact ? `<div>${esc(contact)}</div>` : ''}${ids ? `<div style="font-weight:600">${esc(ids)}</div>` : ''}`;
   },
   title(b, ctx) {
+    const local = !b.props.text && ctx.country.titleLocal?.[ctx.title];
     const t = b.props.text || ctx.title;
-    const copy = b.props.showCopy !== false && ctx.doc.copyLabel ? ctx.doc.copyLabel : '';
-    if (b.props.showCopy && copy) return `<div>${esc(t)}</div><span style="position:absolute;right:12px;top:50%;transform:translateY(-50%);font-size:9px;letter-spacing:.3px;font-weight:500;text-transform:none;opacity:.9">${esc(copy)}</span>`;
-    return `<div>${esc(t)}</div>${copy && !b.props.showCopy ? `<div style="font-size:10px;letter-spacing:.3px;font-weight:500;text-transform:none;opacity:.7;margin-top:2px">${esc(copy)}</div>` : ''}`;
+    const copy = b.props.showCopy !== false && ctx.doc.copyLabel && ctx.business.taxScheme !== 'unregistered' ? ctx.doc.copyLabel : '';
+    if (b.props.showCopy && copy) return `<div>${esc(t)}${local ? ` · <span dir="rtl" lang="ar">${esc(local)}</span>` : ''}</div><span style="position:absolute;right:12px;top:50%;transform:translateY(-50%);font-size:9px;letter-spacing:.3px;font-weight:500;text-transform:none;opacity:.9">${esc(copy)}</span>`;
+    return `<div>${esc(t)}</div>${local ? `<div dir="rtl" lang="ar" style="font-size:.6em;font-weight:600;margin-top:2px">${esc(local)}</div>` : ''}${copy && !b.props.showCopy ? `<div style="font-size:10px;letter-spacing:.3px;font-weight:500;text-transform:none;opacity:.7;margin-top:2px">${esc(copy)}</div>` : ''}`;
   },
   meta(b, ctx) {
     const { doc, business, country } = ctx;
@@ -152,8 +156,10 @@ const R = {
       const st = IN_STATES.find((s) => s.code === doc.placeOfSupply);
       rows.push(['Place of supply', st ? `${st.name} (${st.code})` : doc.placeOfSupply]);
     }
+    if (doc.supplyDate && doc.supplyDate !== doc.date) rows.push(['Date of supply', fmtDate(doc.supplyDate, loc)]);
     if (doc.reference) rows.push(['Reference', doc.reference]);
-    if (doc.refNumber) rows.push([doc.type === 'credit' || doc.type === 'debit' ? 'Against invoice' : 'Ref.', doc.refNumber]);
+    if (doc.refNumber) rows.push([doc.type === 'credit' || doc.type === 'debit' ? 'Against invoice' : 'Ref.', doc.refNumber + (doc.refDate ? ` dated ${fmtDate(doc.refDate, loc)}` : '')]);
+    if (country.gst && doc.irn) { rows.push(['IRN', doc.irn]); if (doc.ackNo) rows.push(['Ack. no. / date', `${doc.ackNo}${doc.ackDate ? ' · ' + fmtDate(doc.ackDate, loc) : ''}`]); }
     if (country.gst && doc.reverseCharge) rows.push(['Reverse charge', 'Yes']);
     const cls = b.props.layout === 'stack' ? 'meta-stack' : '';
     return `<div class="${cls}">${rows.map(([k, v]) => `<div class="meta-row"><span>${esc(k)}</span><span style="font-weight:600">${esc(v)}</span></div>`).join('')}</div>`;
@@ -195,12 +201,12 @@ const R = {
     const x = ctx.business;
     return `<div class="sig" style="display:flex;flex-direction:column;justify-content:flex-end;height:100%">
       <div style="font-size:.9em;margin-bottom:auto">For <b>${esc(x.name || 'Your Business')}</b></div>
-      ${x.signature ? `<img src="${x.signature}" alt="">` : '<div style="height:40px"></div>'}
+      ${x.signature ? `<img src="${safeImg(x.signature)}" alt="">` : '<div style="height:40px"></div>'}
       <div class="sl">${esc(b.props.label || 'Authorised signatory')}</div></div>`;
   },
   text(b, ctx) { return nl2br(fillText(b.props.text, ctx)); },
   image(b, ctx) {
-    if (b.props.src) return `<img src="${b.props.src}" alt="" style="width:100%;height:100%;object-fit:${b.props.fit || 'contain'}">`;
+    if (b.props.src) return `<img src="${safeImg(b.props.src)}" alt="" style="width:100%;height:100%;object-fit:${b.props.fit === 'cover' ? 'cover' : 'contain'}">`;
     return ctx.editing ? `<div class="ph">Image</div>` : '';
   },
   shape() { return ''; },
@@ -234,15 +240,24 @@ function itemsTable(b, ctx) {
     showCol('qty') && { k: 'qty', h: 'Qty', cls: 'r', v: (l) => `${fmtNumber(l.qty, loc, 3)}${l.unit ? ` <span style="opacity:.6;font-size:.88em">${esc(l.unit)}</span>` : ''}` },
     showCol('rate') && { k: 'rate', h: 'Rate', cls: 'r', v: (l) => fmtPlain(l.rate, cur, loc) },
     hasDisc && showCol('disc') && { k: 'disc', h: 'Disc.', cls: 'r', v: (l) => l.discountAmt ? (l.discType === 'amt' ? fmtPlain(l.discountAmt, cur, loc) : `${fmtNumber(l.disc, loc)}%`) : '—' },
-    hasTax && showCol('tax') && { k: 'tax', h: country.gst ? 'GST' : (country.taxName === 'VAT' ? 'VAT' : 'Tax'), cls: 'r', v: (l) => l.taxes.length ? `${fmtNumber(l.taxRate + (l.cessRate || 0), loc)}%${showCol('taxamt') ? `<div class="desc">${fmtPlain(l.tax, cur, loc)}</div>` : ''}` : '—' },
+    hasTax && showCol('tax') && { k: 'tax', h: country.gst ? 'GST' : (country.taxName === 'VAT' ? 'VAT' : 'Tax'), cls: 'r', v: (l) => l.taxes.length ? `${country.reducedMark === l.taxRate ? '※ ' : ''}${fmtNumber(l.taxRate + (l.cessRate || 0), loc)}%${showCol('taxamt') ? `<div class="desc">${fmtPlain(l.tax, cur, loc)}</div>` : ''}` : '—' },
     { k: 'amount', h: 'Amount', cls: 'r', v: (l) => `<span style="font-weight:500">${fmtPlain(b.props.amountInclTax ? l.total : l.taxable, cur, loc)}</span>` },
   ].filter(Boolean);
-  const head = cols.map((c) => `<th class="${c.cls || ''}" ${c.w ? `style="width:${c.w}"` : ''}>${c.h}</th>`).join('');
+  const head = cols.map((c) => `<th class="${c.cls || ''}" ${c.w ? `style="width:${c.w}"` : ''}>${esc(c.h)}</th>`).join('');
   const body = lines.length ? lines.map((l, i) => `<tr>${cols.map((c) => `<td class="${c.cls || ''}">${c.v(l, i)}</td>`).join('')}</tr>`).join('')
     : `<tr><td colspan="${cols.length}" class="c" style="padding:18px;opacity:.5">No items yet</td></tr>`;
   const cls = ['itbl', `h-${b.props.header || 'line'}`, b.props.grid ? 'gridlines' : '', b.props.striped ? 'striped' : '', b.props.rounded ? 'rounded' : ''].join(' ');
   return `<table class="${cls}"><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table>`;
 }
+
+// India Rule 46 endorsements for exports and SEZ supplies.
+export const SUPPLY_NOTES = {
+  export_igst: 'SUPPLY MEANT FOR EXPORT ON PAYMENT OF INTEGRATED TAX',
+  export_lut: 'SUPPLY MEANT FOR EXPORT UNDER BOND OR LETTER OF UNDERTAKING WITHOUT PAYMENT OF INTEGRATED TAX',
+  sez_igst: 'SUPPLY TO SEZ UNIT OR SEZ DEVELOPER FOR AUTHORISED OPERATIONS ON PAYMENT OF INTEGRATED TAX',
+  sez_lut: 'SUPPLY TO SEZ UNIT OR SEZ DEVELOPER FOR AUTHORISED OPERATIONS UNDER BOND OR LETTER OF UNDERTAKING WITHOUT PAYMENT OF INTEGRATED TAX',
+  deemed: 'DEEMED EXPORT',
+};
 
 function totalsBox(b, ctx) {
   const { totals: t, business, country, doc } = ctx;
@@ -256,8 +271,9 @@ function totalsBox(b, ctx) {
   for (const x of t.taxSummary) rows.push([`${esc(x.name)} @ ${fmtNumber(x.rate, loc, 3)}%`, m(x.amount)]);
   if (t.roundOff) rows.push(['Round off', (t.roundOff > 0 ? '+ ' : '− ') + m(Math.abs(t.roundOff))]);
   const paidRows = [];
-  if (b.props.showPaid !== false && t.paid > 0 && !ctx.sample) {
-    paidRows.push(['Paid', m(t.paid)]);
+  if (b.props.showPaid !== false && (t.paid > 0 || t.credited > 0) && !ctx.sample) {
+    if (t.credited > 0) paidRows.push(['Less: credit notes', '− ' + m(t.credited)]);
+    if (t.paid > 0) paidRows.push(['Paid', m(t.paid)]);
     paidRows.push(['Balance due', m(t.balance), 'bal']);
   }
   return `<div class="tot t-${b.props.totalStyle || 'line'}">
@@ -266,7 +282,11 @@ function totalsBox(b, ctx) {
     ${paidRows.map(([k, v, c]) => `<div class="ln ${c || ''}"><span>${k}</span><span>${v}</span></div>`).join('')}
     ${t.rcmIndia ? `<div class="rcm">Tax of ${m(t.tax)} is payable by the recipient under reverse charge.</div>` : ''}
     ${!country.gst && doc.reverseCharge ? `<div class="rcm">Reverse charge: the customer accounts for ${country.taxName}.</div>` : ''}
-    ${doc.taxExempt ? `<div class="rcm" style="color:#6e6e73">Tax exempt sale.</div>` : ''}
+    ${doc.taxExempt ? `<div class="rcm" style="color:#6e6e73">Tax exempt${doc.exemptReason ? ': ' + esc(doc.exemptReason) : ' sale.'}</div>` : ''}
+    ${business.taxScheme === 'unregistered' && country.exemptNote ? `<div class="rcm" style="color:#6e6e73">${esc(country.exemptNote)}</div>` : ''}
+    ${country.gst && SUPPLY_NOTES[doc.supplyType] ? `<div class="rcm" style="color:#1d1d1f;font-weight:600">${SUPPLY_NOTES[doc.supplyType]}</div>` : ''}
+    ${country.reducedMark && t.lines.some((l) => l.taxRate === country.reducedMark) ? `<div class="rcm" style="color:#6e6e73">※ Reduced tax rate (${country.reducedMark}%) item</div>` : ''}
+    ${country.gst && business.taxScheme === 'composition' ? `<div class="rcm" style="color:#6e6e73">Composition taxable person, not eligible to collect tax on supplies.</div>` : ''}
   </div>`;
 }
 
@@ -293,27 +313,27 @@ const sum = (rows, k) => rows.reduce((s, r) => s + (r[k] || 0), 0);
 function blockStyle(b, tpl) {
   const s = b.style || {};
   const css = [
-    `left:${b.x}px`, `top:${b.y}px`, `width:${b.w}px`,
-    BLOCK_TYPES[b.type]?.grow ? `min-height:${b.h}px` : `height:${b.h}px`,
-    `z-index:${b.z || 1}`,
+    `left:${+b.x || 0}px`, `top:${+b.y || 0}px`, `width:${+b.w || 0}px`,
+    BLOCK_TYPES[b.type]?.grow ? `min-height:${+b.h || 0}px` : `height:${+b.h || 0}px`,
+    `z-index:${+b.z || 1}`,
   ];
-  if (s.fontSize) css.push(`font-size:${s.fontSize}px`);
+  if (s.fontSize) css.push(`font-size:${+s.fontSize || 0}px`);
   if (s.color) css.push(`color:${col(s.color)}`);
-  if (s.weight) css.push(`font-weight:${s.weight}`);
-  if (s.align) css.push(`text-align:${s.align}`);
+  if (s.weight) css.push(`font-weight:${+s.weight || 400}`);
+  if (s.align) css.push(`text-align:${['left', 'center', 'right'].includes(s.align) ? s.align : 'left'}`);
   if (s.italic) css.push('font-style:italic');
   if (s.uppercase) css.push('text-transform:uppercase');
-  if (s.letterSpacing) css.push(`letter-spacing:${s.letterSpacing}px`);
-  if (s.lineHeight) css.push(`line-height:${s.lineHeight}`);
+  if (s.letterSpacing) css.push(`letter-spacing:${+s.letterSpacing || 0}px`);
+  if (s.lineHeight) css.push(`line-height:${+s.lineHeight || 0}`);
   if (s.font && FONTS[s.font]) css.push(`font-family:${FONTS[s.font].css}`);
   const bg = s.bg && s.bg !== 'transparent' ? col(s.bg) : '';
   if (b.type === 'shape' || b.type === 'line') {
     if (bg) css.push(`background:${bg}`);
   } else if (bg) css.push(`background:${bg}`);
-  if (s.borderWidth) css.push(`border:${s.borderWidth}px solid ${col(s.borderColor || '#1d1d1f')}`);
-  if (s.radius) css.push(`border-radius:${s.radius}px`);
-  if (s.padding) css.push(`padding:${s.padding}px`);
-  if (s.opacity != null && s.opacity !== '' && s.opacity < 1) css.push(`opacity:${s.opacity}`);
+  if (s.borderWidth) css.push(`border:${+s.borderWidth || 0}px solid ${col(s.borderColor || '#1d1d1f')}`);
+  if (s.radius) css.push(`border-radius:${+s.radius || 0}px`);
+  if (s.padding) css.push(`padding:${+s.padding || 0}px`);
+  if (s.opacity != null && s.opacity !== '' && s.opacity < 1) css.push(`opacity:${+s.opacity}`);
   if (['title'].includes(b.type) && s.align === 'center') css.push('display:flex;align-items:center;justify-content:center');
   if (b.type === 'title' && b.h <= 40 && s.align !== 'center') css.push('display:flex;flex-direction:column;justify-content:center');
   if (b.type === 'logo' && s.align) css.push(`display:flex;justify-content:${s.align === 'right' ? 'flex-end' : s.align === 'center' ? 'center' : 'flex-start'}`);
@@ -325,7 +345,7 @@ export function renderPage(ctx, tpl, { editing = false } = {}) {
   ensurePaperCss();
   ctx.editing = editing;
   const font = FONTS[tpl.font] || FONTS.system;
-  const accent = tpl.accent || ctx.business.accent || '#0071e3';
+  const accent = cssSafe(tpl.accent || ctx.business.accent) || '#0071e3';
   const page = tpl.page || PAGE;
   const blocks = tpl.blocks.filter((b) => !b.hidden || editing);
   const html = blocks.map((b) => {
@@ -333,16 +353,16 @@ export function renderPage(ctx, tpl, { editing = false } = {}) {
     if (!r) return '';
     const inner = r(b, ctx);
     const alignCls = b.style?.align === 'right' ? 'al-right' : '';
-    return `<div class="blk ${editing ? 'fixed' : ''} b-${b.type} ${alignCls}" data-id="${b.id}" style="${blockStyle(b, tpl)}${b.hidden ? ';opacity:.25' : ''}">${inner}</div>`;
+    return `<div class="blk ${editing ? 'fixed' : ''} b-${b.type} ${alignCls}" data-id="${esc(b.id)}" style="${blockStyle(b, tpl)}${b.hidden ? ';opacity:.25' : ''}">${inner}</div>`;
   }).join('');
-  return `<div class="bill-page" style="width:${page.w}px;height:${page.h}px;background:${page.bg || '#fff'};font-family:${font.css};--acc:${accent};--acc-soft:${hexToRgba(accent, 0.1)}">${html}</div>`;
+  return `<div class="bill-page" style="width:${page.w}px;height:${page.h}px;background:${cssSafe(page.bg) || '#fff'};font-family:${font.css};--acc:${accent};--acc-soft:${hexToRgba(accent, 0.1)}">${html}</div>`;
 }
 
 // After mounting a rendered page: push blocks down when growing blocks overflow.
 export function flowLayout(pageEl, tpl) {
   const page = tpl.page || PAGE;
   const blocks = tpl.blocks.filter((b) => !b.hidden).slice().sort((a, b) => a.y - b.y);
-  const el = (b) => pageEl.querySelector(`[data-id="${b.id}"]`);
+  const el = (b) => pageEl.querySelector(`[data-id="${esc(b.id)}"]`);
   const shift = new Map(blocks.map((b) => [b.id, 0]));
   for (const a of blocks) {
     if (a.props?.anchor === 'bottom' || a.props?.fullHeight) continue;

@@ -11,7 +11,7 @@ const COLS = [['idx', '#'], ['desc', 'Item description'], ['hsn', 'HSN / code'],
 export async function render(root, { id }) {
   const b = state.business;
   let tpl = await db.get('templates', id);
-  if (!tpl) { root.innerHTML = `<div class="page"><div class="empty"><h3>Design not found</h3><a class="btn" href="#/templates">Back to templates</a></div></div>`; return; }
+  if (!tpl || tpl.businessId !== state.business.id) { root.innerHTML = `<div class="page"><div class="empty"><h3>Design not found</h3><a class="btn" href="#/templates">Back to templates</a></div></div>`; return; }
   let sel = null, zoom = 1, showGrid = false, snapOn = true, preview = false, docType = 'invoice';
   const undo = [], redo = [];
   const snapshot = () => JSON.stringify({ blocks: tpl.blocks, accent: tpl.accent, font: tpl.font, page: tpl.page });
@@ -68,7 +68,7 @@ export async function render(root, { id }) {
     saveState = 'saving'; $('[data-save-state]').textContent = 'Saving…';
     persist();
   }
-  function restore(s) { const o = JSON.parse(s); Object.assign(tpl, o); last = s; if (sel && !tpl.blocks.find((x) => x.id === sel)) sel = null; persist(); draw(); }
+  function restore(s) { const o = JSON.parse(s); Object.assign(tpl, o); last = s; if (sel && !tpl.blocks.find((x) => x.id === sel)) sel = null; $('[data-save-state]').textContent = 'Saving…'; persist(); draw(); }
 
   const blk = (bid) => tpl.blocks.find((x) => x.id === bid);
 
@@ -382,6 +382,7 @@ export async function render(root, { id }) {
   }
   function removeSel() {
     if (!sel) return;
+    if (blk(sel)?.locked) { toast('This block is locked — unlock it first', 'err'); return; }
     tpl.blocks = tpl.blocks.filter((x) => x.id !== sel); sel = null; commit(); draw();
   }
   function duplicateSel() {
@@ -406,7 +407,7 @@ export async function render(root, { id }) {
 
   // ---------- Toolbar ----------
   $('[data-name]').addEventListener('change', (e) => { tpl.name = e.target.value.trim() || 'My design'; persist(); });
-  $('[data-undo]').addEventListener('click', () => { if (undo.length) { redo.push(snapshot()); restore(undo.pop()); } });
+  $('[data-undo]').addEventListener('click', () => { commitKey.flush?.(); commit(); if (undo.length) { redo.push(snapshot()); restore(undo.pop()); } });
   $('[data-redo]').addEventListener('click', () => { if (redo.length) { undo.push(snapshot()); restore(redo.pop()); } });
   $('[data-zoom-in]').addEventListener('click', () => { zoom = Math.min(2, zoom + 0.1); drawCanvas(); });
   $('[data-zoom-out]').addEventListener('click', () => { zoom = Math.max(0.3, zoom - 0.1); drawCanvas(); });

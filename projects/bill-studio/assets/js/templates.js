@@ -7,7 +7,7 @@ export const PAGE = { w: 794, h: 1123 };
 export const BLOCK_TYPES = {
   logo: { label: 'Logo', icon: 'image', w: 90, h: 70 },
   business: { label: 'Business details', icon: 'building-2', w: 320, h: 100, grow: true },
-  title: { label: 'Document title', icon: 'type', w: 280, h: 44 },
+  title: { label: 'Document title', icon: 'type', w: 280, h: 44, grow: true },
   meta: { label: 'Bill number & dates', icon: 'hash', w: 260, h: 90, grow: true },
   billto: { label: 'Bill to', icon: 'users', w: 320, h: 110, grow: true },
   shipto: { label: 'Ship to', icon: 'package', w: 320, h: 90, grow: true },

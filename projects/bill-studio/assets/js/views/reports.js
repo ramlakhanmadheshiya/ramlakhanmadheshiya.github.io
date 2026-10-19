@@ -73,23 +73,31 @@ export async function render(root) {
     gstr1() {
       const f = finals().filter((d) => ['invoice', 'receipt', 'debit', 'credit'].includes(d.type));
       const st = (code) => { const s = IN_STATES.find((x) => x.code === code); return s ? `${s.code}-${s.name}` : code; };
-      const b2b = [], b2cl = [], b2cs = new Map(), cdn = [];
+      const b2b = [], b2cl = [], b2cs = new Map(), cdn = [], cdnur = [], exp = [];
+      const INV_TYPE = { sez_igst: 'SEZ supplies with payment', sez_lut: 'SEZ supplies without payment', deemed: 'Deemed Exp' };
+      const addB2cs = (pos, r, sign) => {
+        const k = `${pos}|${r.rate}`;
+        const e = b2cs.get(k) || { pos, rate: r.rate, taxable: 0, cess: 0 };
+        e.taxable += sign * r.taxable; e.cess += sign * r.cess; b2cs.set(k, e);
+      };
       for (const d of f) {
         const t = docTotals(d, b);
         const reg = !!d.customer?.taxId;
+        const inter = d.placeOfSupply !== b.region;
         if (d.type === 'credit' || d.type === 'debit') {
-          for (const r of t.rateSummary) cdn.push([d.customer?.taxId || 'Unregistered', d.customer?.name || '', d.number, fmtDate(d.date, b.locale), d.type === 'credit' ? 'C' : 'D', st(d.placeOfSupply), p2(t.total), r.rate, p2(r.taxable), p2(r.cess)]);
+          const nt = d.type === 'credit' ? 'C' : 'D';
+          for (const r of t.rateSummary) {
+            if (reg) cdn.push([d.customer.taxId, d.customer?.name || '', d.number, fmtDate(d.date, b.locale), nt, st(d.placeOfSupply), p2(t.total), r.rate, p2(r.taxable), p2(r.cess)]);
+            else if (inter && t.total > 100000) cdnur.push(['B2CL', d.number, fmtDate(d.date, b.locale), nt, st(d.placeOfSupply), p2(t.total), r.rate, p2(r.taxable), p2(r.cess)]);
+            else addB2cs(d.placeOfSupply, r, d.type === 'credit' ? -1 : 1); // small B2C notes are netted into B2CS
+          }
           continue;
         }
-        const inter = d.placeOfSupply !== b.region;
         for (const r of t.rateSummary) {
-          if (reg) b2b.push([d.customer.taxId, d.customer.name, d.number, fmtDate(d.date, b.locale), p2(t.total), st(d.placeOfSupply), d.reverseCharge ? 'Y' : 'N', 'Regular B2B', r.rate, p2(r.taxable), p2(r.cess)]);
+          if (/^export/.test(d.supplyType || '')) exp.push([d.supplyType === 'export_igst' ? 'WPAY' : 'WOPAY', d.number, fmtDate(d.date, b.locale), p2(t.total), '', '', '', r.rate, p2(r.taxable), p2(r.cess)]);
+          else if (reg) b2b.push([d.customer.taxId, d.customer.name, d.number, fmtDate(d.date, b.locale), p2(t.total), st(d.placeOfSupply), d.reverseCharge ? 'Y' : 'N', INV_TYPE[d.supplyType] || 'Regular B2B', r.rate, p2(r.taxable), p2(r.cess)]);
           else if (inter && t.total > 100000) b2cl.push([d.number, fmtDate(d.date, b.locale), p2(t.total), st(d.placeOfSupply), r.rate, p2(r.taxable), p2(r.cess)]);
-          else {
-            const k = `${d.placeOfSupply}|${r.rate}`;
-            const e = b2cs.get(k) || { pos: d.placeOfSupply, rate: r.rate, taxable: 0, cess: 0 };
-            e.taxable += r.taxable; e.cess += r.cess; b2cs.set(k, e);
-          }
+          else addB2cs(d.placeOfSupply, r, 1);
         }
       }
       const hsn = new Map();
@@ -112,10 +120,12 @@ export async function render(root) {
           { heading: '4A — B2B invoices', csv: 'b2b', columns: ['GSTIN/UIN of Recipient', 'Receiver Name', 'Invoice Number', 'Invoice date', 'Invoice Value', 'Place Of Supply', 'Reverse Charge', 'Invoice Type', 'Rate', 'Taxable Value', 'Cess Amount'], align: ['left', 'left', 'left', 'left', 'right', 'left', 'left', 'left', 'right', 'right', 'right'], rows: b2b },
           { heading: '5 — B2C Large (inter-state, invoice value above ₹1,00,000)', csv: 'b2cl', columns: ['Invoice Number', 'Invoice date', 'Invoice Value', 'Place Of Supply', 'Rate', 'Taxable Value', 'Cess Amount'], align: ['left', 'left', 'right', 'left', 'right', 'right', 'right'], rows: b2cl },
           { heading: '7 — B2C Small (summary)', csv: 'b2cs', columns: ['Type', 'Place Of Supply', 'Rate', 'Taxable Value', 'Cess Amount'], align: ['left', 'left', 'right', 'right', 'right'], rows: [...b2cs.values()].map((e) => ['OE', st(e.pos), e.rate, p2(e.taxable), p2(e.cess)]) },
-          { heading: '9B — Credit / debit notes', csv: 'cdnr', columns: ['GSTIN/UIN', 'Name', 'Note Number', 'Note date', 'Note Type', 'Place Of Supply', 'Note Value', 'Rate', 'Taxable Value', 'Cess Amount'], align: ['left', 'left', 'left', 'left', 'left', 'left', 'right', 'right', 'right', 'right'], rows: cdn },
+          { heading: '6A — Exports', csv: 'exp', columns: ['Export Type', 'Invoice Number', 'Invoice date', 'Invoice Value', 'Port Code', 'Shipping Bill Number', 'Shipping Bill Date', 'Rate', 'Taxable Value', 'Cess Amount'], align: ['left', 'left', 'left', 'right', 'left', 'left', 'left', 'right', 'right', 'right'], rows: exp },
+          { heading: '9B — Credit / debit notes (unregistered, large)', csv: 'cdnur', columns: ['UR Type', 'Note Number', 'Note date', 'Note Type', 'Place Of Supply', 'Note Value', 'Rate', 'Taxable Value', 'Cess Amount'], align: ['left', 'left', 'left', 'left', 'left', 'right', 'right', 'right', 'right'], rows: cdnur },
+          { heading: '9B — Credit / debit notes (registered)', csv: 'cdnr', columns: ['GSTIN/UIN', 'Name', 'Note Number', 'Note date', 'Note Type', 'Place Of Supply', 'Note Value', 'Rate', 'Taxable Value', 'Cess Amount'], align: ['left', 'left', 'left', 'left', 'left', 'left', 'right', 'right', 'right', 'right'], rows: cdn },
           { heading: '12 — HSN-wise summary', csv: 'hsn', columns: ['HSN', 'UQC', 'Total Quantity', 'Rate', 'Taxable Value', 'Integrated Tax', 'Central Tax', 'State/UT Tax', 'Cess'], align: ['left', 'left', ...Array(7).fill('right')], rows: [...hsn.values()].map((e) => [e.hsn || '—', (e.unit || 'OTH').toUpperCase(), fmtNumber(e.qty, 'en-US', 3), e.rate, p2(e.taxable), p2(e.igst), p2(e.cgst), p2(e.sgst), p2(e.cess)]) },
           { heading: '13 — Documents issued', columns: ['Nature of document', 'From', 'To', 'Total', 'Cancelled'], align: ['left', 'left', 'left', ...R, ...R],
-            rows: ['invoice', 'credit', 'debit', 'challan'].map((ty) => { const ds = docs.filter((d) => d.type === ty && d.date >= range().from && d.date <= range().to).sort((a, x) => (a.seq || 0) - (x.seq || 0)); return ds.length ? [DOC_TYPES[ty].plural, ds[0].number, ds.at(-1).number, ds.length, ds.filter((d) => d.status === 'cancelled').length] : null; }).filter(Boolean) },
+            rows: ['invoice', 'credit', 'debit', 'challan'].map((ty) => { const ds = docs.filter((d) => d.type === ty && d.status !== 'draft' && d.date >= range().from && d.date <= range().to).sort((a, x) => (a.seq || 0) - (x.seq || 0)); return ds.length ? [DOC_TYPES[ty].plural, ds[0].number, ds.at(-1).number, ds.length, ds.filter((d) => d.status === 'cancelled').length] : null; }).filter(Boolean) },
         ],
         note: sorted.length ? '' : '',
       };

@@ -1,9 +1,10 @@
 import { icon } from '../lib/icons.js';
-import { esc, toast, imageToDataURL, pickFile, confirmDialog } from '../ui.js';
-import { state, saveBusiness } from '../store.js';
+import { esc, toast, imageToDataURL, pickFile, confirmDialog, safeImg } from '../ui.js';
+import { state, saveBusiness, defaultPreset } from '../store.js';
 import { getCountry, COUNTRY_LIST, CURRENCIES } from '../tax/countries.js';
 import { validateTaxId, validatePAN, validateEmail } from '../lib/validators.js';
 import { MONTHS } from '../lib/dates.js';
+import { taxIdRule, businessTaxError, CA_PROVINCES } from '../tax/rules.js';
 
 const LOCALES = [['en-IN', 'English (India)'], ['hi-IN', 'हिन्दी (India)'], ['en-US', 'English (US)'], ['en-GB', 'English (UK)'], ['en-AU', 'English (Australia)'], ['en-CA', 'English (Canada)'], ['en-AE', 'English (UAE)'], ['ar-SA', 'العربية'], ['de-DE', 'Deutsch'], ['fr-FR', 'Français'], ['es-ES', 'Español'], ['it-IT', 'Italiano'], ['pt-BR', 'Português (Brasil)'], ['nl-NL', 'Nederlands'], ['ja-JP', '日本語'], ['zh-CN', '中文'], ['id-ID', 'Bahasa Indonesia'], ['en-SG', 'English (Singapore)']];
 
@@ -22,10 +23,10 @@ export async function render(root) {
     <div class="card">
       <div class="grid c2">
         <div><div class="field"><label>Logo</label></div>
-          <div class="logo-drop mt-s" data-logo tabindex="0" role="button"><div class="prev">${b.logo ? `<img src="${b.logo}" alt="Logo">` : icon('image', 26)}</div>
+          <div class="logo-drop mt-s" data-logo tabindex="0" role="button"><div class="prev">${b.logo ? `<img src="${safeImg(b.logo)}" alt="Logo">` : icon('image', 26)}</div>
           <div><b>${b.logo ? 'Change logo' : 'Upload logo'}</b><div class="small muted">PNG with transparent background looks best</div>${b.logo ? `<button class="btn plain sm" data-rm="logo" style="padding:0;height:auto;margin-top:4px">Remove</button>` : ''}</div></div></div>
         <div><div class="field"><label>Signature / stamp</label></div>
-          <div class="logo-drop mt-s" data-sig tabindex="0" role="button"><div class="prev">${b.signature ? `<img src="${b.signature}" alt="Signature">` : icon('pen-tool', 26)}</div>
+          <div class="logo-drop mt-s" data-sig tabindex="0" role="button"><div class="prev">${b.signature ? `<img src="${safeImg(b.signature)}" alt="Signature">` : icon('pen-tool', 26)}</div>
           <div><b>${b.signature ? 'Change signature' : 'Upload signature'}</b><div class="small muted">Photo of your signature on white paper</div>${b.signature ? `<button class="btn plain sm" data-rm="signature" style="padding:0;height:auto;margin-top:4px">Remove</button>` : ''}</div></div></div>
       </div>
       <div class="form-grid mt">
@@ -43,9 +44,10 @@ export async function render(root) {
         <option value="regular" ${b.taxScheme === 'regular' ? 'selected' : ''}>${c.gst ? 'Regular GST — Tax Invoice' : `Registered — charge ${esc(c.taxName)}`}</option>
         ${c.gst ? `<option value="composition" ${b.taxScheme === 'composition' ? 'selected' : ''}>Composition scheme — Bill of Supply</option>` : ''}
         <option value="unregistered" ${b.taxScheme === 'unregistered' ? 'selected' : ''}>Not registered — no tax</option></select></div>
-      <div class="field"><label>${esc(c.taxIdLabel)}</label><input class="input ${tv.ok ? '' : 'invalid'}" name="taxId" value="${esc(b.taxId)}" autocapitalize="characters"><div class="help ${tv.ok ? '' : 'err'}" data-taxhelp>${tv.ok ? '' : esc(tv.msg)}</div></div>
+      <div class="field" data-taxid-field ${taxIdRule(c.code, b.taxScheme).show ? '' : 'hidden'}><label>${esc(c.taxIdLabel)}<span data-req>${taxIdRule(c.code, b.taxScheme).required ? ' *' : ''}</span></label><input class="input ${tv.ok ? '' : 'invalid'}" name="taxId" value="${esc(b.taxId)}" autocapitalize="characters"><div class="help ${tv.ok ? '' : 'err'}" data-taxhelp>${tv.ok ? esc(taxIdRule(c.code, b.taxScheme).help || '') : esc(tv.msg)}</div></div>
       ${c.secondaryIdLabel ? f('secondaryId', esc(c.secondaryIdLabel), b.secondaryId, 'autocapitalize="characters"') : f('secondaryId', 'Company / registration no.', b.secondaryId)}
-      ${c.regions ? `<div class="field"><label>${esc(c.regionLabel || 'Region')}</label><select class="input" name="region"><option value="">Select</option>${c.regions.filter((r) => r.code !== '96').map((r) => `<option value="${r.code}" ${r.code === b.region ? 'selected' : ''}>${esc(r.name)} (${r.code})</option>`).join('')}</select></div>` : ''}
+      ${c.code === 'CA' ? `<div class="field"><label>Province / territory</label><select class="input" name="region"><option value="">Select</option>${CA_PROVINCES.map(([code, n]) => `<option value="${code}" ${code === b.region ? 'selected' : ''}>${esc(n)}</option>`).join('')}</select></div>` : ''}
+      ${c.regions ? `<div class="field"><label>${esc(c.regionLabel || 'Region')} *</label><select class="input" name="region"><option value="">Select</option>${c.regions.filter((r) => r.code !== '96').map((r) => `<option value="${r.code}" ${r.code === b.region ? 'selected' : ''}>${esc(r.name)} (${r.code})</option>`).join('')}</select></div>` : ''}
       <div class="field"><label>Currency</label><select class="input" name="currency">${[...new Set([b.currency, ...CURRENCIES])].map((x) => `<option ${x === b.currency ? 'selected' : ''}>${x}</option>`).join('')}</select></div>
       <div class="field"><label>Number & date format</label><select class="input" name="locale">${[...new Map([[b.locale, b.locale], ...LOCALES.map(([k, v]) => [k, v])]).entries()].map(([k, v]) => `<option value="${k}" ${k === b.locale ? 'selected' : ''}>${esc(v)}</option>`).join('')}</select></div>
       <div class="field"><label>Financial year starts</label><select class="input" name="fyStartMonth">${MONTHS.map((mo, i) => `<option value="${i + 1}" ${i + 1 === Number(b.fyStartMonth) ? 'selected' : ''}>${mo}</option>`).join('')}</select></div>
@@ -83,7 +85,14 @@ export async function render(root) {
 
   const upload = async (key, max) => {
     const file = await pickFile('image/*'); if (!file) return;
-    try { b[key] = await imageToDataURL(file, max); state.business[key] = b[key]; await saveBusiness({ ...state.business, [key]: b[key] }); toast('Image updated'); } catch (e) { toast(e.message, 'err'); }
+    try {
+      b[key] = await imageToDataURL(file, max);
+      await saveBusiness({ ...state.business, [key]: b[key] }, { quiet: true }); // keep unsaved form edits
+      const box = root.querySelector(key === 'logo' ? '[data-logo] .prev' : '[data-sig] .prev');
+      if (box) box.innerHTML = `<img src="${safeImg(b[key])}" alt="">`;
+      const av = document.querySelector('.biz-avatar'); if (key === 'logo' && av) av.innerHTML = `<img src="${safeImg(b[key])}" alt="">`;
+      toast('Image updated');
+    } catch (e) { toast(e.message, 'err'); }
   };
   root.querySelector('[data-logo]').addEventListener('click', (e) => { if (!e.target.closest('[data-rm]')) upload('logo', 600); });
   root.querySelector('[data-sig]').addEventListener('click', (e) => { if (!e.target.closest('[data-rm]')) upload('signature', 500); });
@@ -96,6 +105,14 @@ export async function render(root) {
     if (v.ok && v.state) { const r = root.querySelector('[name=region]'); if (r) r.value = v.state; const p = root.querySelector('[name=secondaryId]'); if (p && !p.value) p.value = v.pan; }
   });
 
+  root.querySelector('[name=taxScheme]').addEventListener('change', (e) => {
+    const r = taxIdRule(c.code, e.target.value);
+    root.querySelector('[data-taxid-field]').hidden = !r.show;
+    root.querySelector('[data-req]').textContent = r.required ? ' *' : '';
+    root.querySelector('[data-taxhelp]').textContent = r.help || '';
+    if (c.gst && e.target.value !== state.business.taxScheme) toast(e.target.value === 'regular' ? 'New bills will be Tax Invoices with GST' : e.target.value === 'composition' ? 'New bills will be Bills of Supply without GST' : 'New bills will be plain invoices without GST', 'info');
+  });
+
   const save = async () => {
     const out = JSON.parse(JSON.stringify(state.business));
     root.querySelectorAll('[name]').forEach((el) => {
@@ -106,16 +123,20 @@ export async function render(root) {
     out.paymentTermsDays = Number(out.paymentTermsDays) || 0;
     out.taxId = (out.taxId || '').toUpperCase();
     if (!out.name) { toast('Business name is required', 'err'); return; }
+    if (!taxIdRule(out.country, out.taxScheme).show) out.taxId = '';
+    out.taxId = String(out.taxId || '').toUpperCase().replace(/\s/g, '');
+    if (out.country === state.business.country) { const err = businessTaxError(out); if (err) { toast(err, 'err'); return; } }
     if (!validateEmail(out.email)) { toast('Email looks wrong', 'err'); return; }
     if (c.code === 'IN' && out.secondaryId && !validatePAN(out.secondaryId).ok) toast('PAN format looks unusual — saved anyway', 'info');
     if (out.country !== state.business.country) {
       const nc = getCountry(out.country);
       if (!(await confirmDialog(`Switch to ${nc.name}?`, `Tax rates, currency and bill titles will change to ${nc.name}'s defaults. Existing bills keep their numbers but will recalculate with the new rates.`, { ok: 'Switch country' }))) return;
-      out.taxes = JSON.parse(JSON.stringify(nc.presets)); out.defaultTaxId = nc.presets[0]?.id || '';
+      out.taxes = JSON.parse(JSON.stringify(nc.presets)); out.defaultTaxId = defaultPreset(nc.presets)?.id || ''; out.taxId = ''; out.secondaryId = '';
       out.currency = nc.currency; out.locale = nc.locale; out.fyStartMonth = nc.fyStartMonth; out.region = '';
     }
     await saveBusiness(out);
-    toast('Business profile saved');
+    const pending = businessTaxError(out);
+    toast(pending ? `Saved. ${pending}` : 'Business profile saved', pending ? 'err' : 'ok');
   };
   root.querySelectorAll('[data-save]').forEach((x) => x.addEventListener('click', save));
 }

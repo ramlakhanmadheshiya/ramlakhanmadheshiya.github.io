@@ -43,6 +43,8 @@ export function customerDialog(cust = null) {
     rec.taxExempt = g('taxExempt').checked;
     if (!rec.name) { toast('Name is required', 'err'); return; }
     if (!validateEmail(rec.email)) { toast('Email looks wrong', 'err'); return; }
+    if (c.gst && rec.taxId) { const v = validateTaxId('IN', rec.taxId); if (!v.ok) { toast(`GSTIN: ${v.msg}`, 'err'); return; } if (v.state && rec.region !== v.state) rec.region = v.state; }
+    if (rec.openingBalance < 0) { toast('Opening balance can’t be negative — record an advance as a payment instead.', 'err'); return; }
     await db.put('customers', rec);
     toast('Customer saved');
     m.close(rec);
@@ -53,6 +55,7 @@ export function customerDialog(cust = null) {
 export async function render(root, { query = {} } = {}) {
   const b = state.business;
   const [customers, docs, payments] = await Promise.all([list('customers'), list('documents'), list('payments')]);
+  const country = getCountry(b.country);
   const m = (v) => fmtMoney(v, b.currency, b.locale);
   const rows = customers.map((c) => ({ c, bal: customerLedger(c, docs, payments, b).balance, bills: docs.filter((d) => d.customerId === c.id).length }))
     .sort((a, x) => x.bal - a.bal || a.c.name.localeCompare(x.c.name));
@@ -91,7 +94,16 @@ export async function render(root, { query = {} } = {}) {
     for (const r of data) {
       const name = col(r, 'name', 'customer', 'customer name');
       if (!name) continue;
-      await db.put('customers', { businessId: b.id, name, phone: col(r, 'phone', 'mobile'), email: col(r, 'email'), address: col(r, 'address'), taxId: col(r, 'taxid', 'gstin', 'vat', 'tax id').toUpperCase(), region: col(r, 'region', 'state'), openingBalance: num(col(r, 'openingbalance', 'opening balance', 'balance')) });
+      const taxId = col(r, 'taxid', 'gstin', 'vat', 'tax id').toUpperCase().replace(/\s/g, '');
+      // Region must be a state CODE (e.g. 27), not a name — otherwise intra-state sales would get IGST.
+      const rawRegion = col(r, 'region', 'state', 'state code');
+      let region = '';
+      if (country.regions) {
+        const byCode = country.regions.find((x) => x.code === rawRegion.padStart(2, '0'));
+        const byName = country.regions.find((x) => x.name.toLowerCase() === rawRegion.toLowerCase());
+        region = (byCode || byName)?.code || (country.gst && validateTaxId('IN', taxId).state) || b.region || '';
+      } else region = rawRegion;
+      await db.put('customers', { businessId: b.id, name, phone: col(r, 'phone', 'mobile'), email: col(r, 'email'), address: col(r, 'address'), taxId, region, openingBalance: num(col(r, 'openingbalance', 'opening balance', 'balance')) });
       n++;
     }
     toast(`Imported ${n} customers`);

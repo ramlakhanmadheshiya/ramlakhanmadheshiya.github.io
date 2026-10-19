@@ -1,4 +1,4 @@
-import { esc, modal, toast } from './ui.js';
+import { esc, modal, toast, confirmDialog } from './ui.js';
 import { db } from './db.js';
 import { state } from './store.js';
 import { todayISO } from './lib/dates.js';
@@ -23,7 +23,7 @@ export function paymentDialog({ customers = [], customerId = '', doc = null, due
       <div class="field"><label>Reference</label><input class="input" name="reference" value="${esc(p.reference)}" placeholder="UTR / cheque no."></div>
       <div class="field span2"><label>Note</label><input class="input" name="note" value="${esc(p.note)}"></div>
     </div>`,
-    foot: `<button class="btn" data-close>Cancel</button><button class="btn primary" data-ok>Save payment</button>`,
+    foot: `${payment ? '<button class="btn danger" data-del style="margin-right:auto">Delete</button>' : ''}<button class="btn" data-close>Cancel</button><button class="btn primary" data-ok>Save payment</button>`,
   });
   const el = m.el;
   const docSel = el.querySelector('[name=documentId]');
@@ -36,15 +36,26 @@ export function paymentDialog({ customers = [], customerId = '', doc = null, due
   fillDocs();
   custSel?.addEventListener('change', fillDocs);
   docSel?.addEventListener('change', () => { const o = docSel.selectedOptions[0]; if (o?.dataset.due) el.querySelector('[name=amount]').value = o.dataset.due; });
+  el.querySelector('[data-del]')?.addEventListener('click', async () => {
+    if (!(await confirmDialog('Delete payment?', 'The bill and customer balance will be updated.', { ok: 'Delete', danger: true }))) return;
+    await db.del('payments', payment.id); toast('Payment deleted'); m.close('deleted');
+  });
   el.querySelector('[data-ok]').addEventListener('click', async () => {
     const v = (n) => el.querySelector(`[name=${n}]`)?.value ?? '';
     const amount = num(v('amount'));
     if (!(amount > 0)) { toast('Enter an amount', 'err'); return; }
-    const cust = doc ? doc.customerId : v('customerId');
+    const cust = doc ? (doc.customerId || '') : v('customerId');
     if (!cust && !doc) { toast('Choose a customer', 'err'); return; }
+    const docDue = doc ? due : Number(el.querySelector('[name=documentId]')?.selectedOptions[0]?.dataset.due || 0);
+    const linked = doc || v('documentId');
+    if (linked && !payment && docDue > 0 && amount > docDue + 0.005) {
+      const extra = fmtMoney(amount - docDue, b.currency, b.locale);
+      if (!(await confirmDialog('More than the amount due', `This bill only has ${fmtMoney(docDue, b.currency, b.locale)} due. The extra ${extra} will be kept as an advance in the customer’s account.`, { ok: 'Record anyway' }))) return;
+    }
+    if (doc && !payment && docDue <= 0.005 && !(await confirmDialog('Bill already settled', 'Nothing is due on this bill. Record this payment as an advance?', { ok: 'Record advance' }))) return;
     const rec = { ...(payment || {}), businessId: b.id, customerId: cust, documentId: doc ? doc.id : v('documentId'), amount, date: v('date') || todayISO(), mode: v('mode'), reference: v('reference'), note: v('note') };
     await db.put('payments', rec);
-    toast('Payment recorded');
+    toast(payment ? 'Payment updated' : 'Payment recorded');
     m.close(rec);
   });
   return m.done;

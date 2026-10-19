@@ -43,7 +43,7 @@ export const COUNTRIES = {
     fyStartMonth: 4, taxName: 'GST', taxIdLabel: 'GSTIN', secondaryIdLabel: 'PAN',
     regionLabel: 'State', regions: IN_STATES,
     presets: [0, 0.25, 3, 5, 18, 40].map((r) => ({ id: `gst${r}`, label: `GST ${r}%`, rate: r, gst: true })),
-    docTitle: { registered: 'Tax Invoice', unregistered: 'Bill of Supply' },
+    docTitle: { registered: 'Tax Invoice', composition: 'Bill of Supply', unregistered: 'Invoice' },
     numberSystem: 'indian', qr: 'upi', showHsn: true, hsnLabel: 'HSN/SAC', gst: true,
     maxNumberLength: 16,
     notes: 'CGST + SGST/UTGST for intra-state supply, IGST for inter-state. Composition dealers issue a Bill of Supply.',
@@ -100,7 +100,7 @@ export const COUNTRIES = {
   IE: vat('IE', 'Ireland', '🇮🇪', 'EUR', 'en-IE', [23, 13.5, 9]),
   PT: vat('PT', 'Portugal', '🇵🇹', 'EUR', 'pt-PT', [23, 13, 6], { taxIdLabel: 'NIF' }),
   GR: vat('GR', 'Greece', '🇬🇷', 'EUR', 'el-GR', [24, 13, 6]),
-  FI: vat('FI', 'Finland', '🇫🇮', 'EUR', 'fi-FI', [25.5, 14, 10]),
+  FI: vat('FI', 'Finland', '🇫🇮', 'EUR', 'fi-FI', [25.5, 13.5, 10]),
   SE: vat('SE', 'Sweden', '🇸🇪', 'SEK', 'sv-SE', [25, 12, 6], { taxIdLabel: 'Momsreg.nr' }),
   DK: vat('DK', 'Denmark', '🇩🇰', 'DKK', 'da-DK', [25], { taxIdLabel: 'CVR / SE No.' }),
   PL: vat('PL', 'Poland', '🇵🇱', 'PLN', 'pl-PL', [23, 8, 5], { taxIdLabel: 'NIP' }),
@@ -111,9 +111,9 @@ export const COUNTRIES = {
   SI: vat('SI', 'Slovenia', '🇸🇮', 'EUR', 'sl-SI', [22, 9.5, 5]),
   HR: vat('HR', 'Croatia', '🇭🇷', 'EUR', 'hr-HR', [25, 13, 5], { taxIdLabel: 'OIB' }),
   LU: vat('LU', 'Luxembourg', '🇱🇺', 'EUR', 'fr-LU', [17, 14, 8, 3]),
-  EE: vat('EE', 'Estonia', '🇪🇪', 'EUR', 'et-EE', [24, 9]),
+  EE: vat('EE', 'Estonia', '🇪🇪', 'EUR', 'et-EE', [24, 13, 9]),
   LV: vat('LV', 'Latvia', '🇱🇻', 'EUR', 'lv-LV', [21, 12, 5]),
-  LT: vat('LT', 'Lithuania', '🇱🇹', 'EUR', 'lt-LT', [21, 9, 5]),
+  LT: vat('LT', 'Lithuania', '🇱🇹', 'EUR', 'lt-LT', [21, 12, 5]),
   BG: vat('BG', 'Bulgaria', '🇧🇬', 'EUR', 'bg-BG', [20, 9]),
   CY: vat('CY', 'Cyprus', '🇨🇾', 'EUR', 'el-CY', [19, 9, 5]),
   MT: vat('MT', 'Malta', '🇲🇹', 'EUR', 'en-MT', [18, 7, 5]),
@@ -128,7 +128,7 @@ export const COUNTRIES = {
   LK: vat('LK', 'Sri Lanka', '🇱🇰', 'LKR', 'en-LK', [18], { eu: false, taxIdLabel: 'VAT / TIN', fyStartMonth: 4 }),
   PH: vat('PH', 'Philippines', '🇵🇭', 'PHP', 'en-PH', [12], { eu: false, taxIdLabel: 'TIN' }),
   ID: { ...vat('ID', 'Indonesia', '🇮🇩', 'IDR', 'id-ID', [12, 11], { eu: false, taxIdLabel: 'NPWP' }), taxName: 'PPN',
-    presets: [single('PPN', 12), single('PPN', 11), zero('PPN')] },
+    presets: [single('PPN', 12), p('ppn11', 'PPN 12% on DPP 11/12 (non-luxury)', [{ name: 'PPN', rate: 11 }]), zero('PPN')] },
   TH: vat('TH', 'Thailand', '🇹🇭', 'THB', 'th-TH', [7], { eu: false, taxIdLabel: 'Tax ID' }),
   VN: vat('VN', 'Vietnam', '🇻🇳', 'VND', 'vi-VN', [10, 8, 5], { eu: false, taxIdLabel: 'MST' }),
   MX: { ...vat('MX', 'Mexico', '🇲🇽', 'MXN', 'es-MX', [16, 8], { eu: false, taxIdLabel: 'RFC' }), taxName: 'IVA',
@@ -156,3 +156,46 @@ export const CURRENCIES = ['INR', 'USD', 'EUR', 'GBP', 'AED', 'SAR', 'AUD', 'CAD
 
 export const UNITS = ['pcs', 'nos', 'kg', 'g', 'l', 'ml', 'm', 'cm', 'ft', 'sq ft', 'box', 'pack', 'dozen', 'set', 'pair',
   'hrs', 'days', 'months', 'service', 'job'];
+
+// ---- Legal extras (2026) -------------------------------------------------
+// exemptNote: wording a NOT-registered (small) business must print instead of charging tax.
+const EXEMPT_NOTES = {
+  FR: 'TVA non applicable, art. 293 B du CGI',
+  DE: 'Gemäß § 19 UStG wird keine Umsatzsteuer berechnet (Kleinunternehmerregelung).',
+  AT: 'Umsatzsteuerfrei – Kleinunternehmer gem. § 6 Abs. 1 Z 27 UStG',
+  IT: 'Operazione in franchigia da IVA ai sensi dell’art. 1, commi 54-89, L. 190/2014',
+  BE: 'Bijzondere vrijstellingsregeling kleine ondernemingen / Régime particulier de franchise des petites entreprises',
+  NL: 'Vrijgesteld van btw (kleineondernemersregeling, KOR)',
+  ES: 'Operación exenta de IVA (régimen de franquicia)',
+  PT: 'IVA – regime de isenção (art. 53.º do CIVA)',
+  IE: 'Not registered for VAT',
+  LU: 'Franchise de TVA (régime des petites entreprises)',
+};
+// eInvoice: countries where a PDF/paper invoice from this app is not (fully) a legal invoice.
+const E_INVOICE = {
+  IT: 'Italy requires e-invoices through the SdI for B2B and B2C sales. Use this bill as a proforma or customer copy; issue the legal e-invoice via SdI.',
+  PL: 'Poland requires e-invoices through KSeF (from 2026; micro-businesses from 2027).',
+  BE: 'Belgium requires structured Peppol e-invoices for B2B sales from 1 Jan 2026.',
+  HR: 'Croatia requires fiscalised e-invoices for B2B sales from 1 Jan 2026.',
+  HU: 'Hungary requires real-time invoice reporting (RTIR) to NAV.',
+  PT: 'Portugal requires invoices from certified software (ATCUD and QR code).',
+  FR: 'France is phasing in mandatory e-invoicing (large and mid-size firms from 1 Sep 2026; SMEs from 1 Sep 2027).',
+  SA: 'Saudi Arabia requires ZATCA (Fatoora) e-invoicing. This app is not a ZATCA Phase-2 solution — use it for quotations or as a copy.',
+  MX: 'Mexico requires CFDI e-invoices stamped by a PAC.',
+  BR: 'Brazil requires NF-e / NFS-e electronic invoices.',
+  VN: 'Vietnam requires e-invoices (Decree 123/2020).',
+  EG: 'Egypt requires e-invoices through the ETA system.',
+  KE: 'Kenya requires eTIMS invoices.',
+  ID: 'Indonesia requires e-Faktur (Coretax) tax invoices from PKP sellers.',
+  MY: 'Malaysia requires MyInvois e-invoices for businesses above RM1 million turnover.',
+  IN: 'Businesses with turnover above ₹5 crore must generate an e-invoice (IRN) on the government IRP for B2B sales. Enter the IRN on the bill after generating it.',
+};
+for (const [k, v] of Object.entries(EXEMPT_NOTES)) if (COUNTRIES[k]) COUNTRIES[k].exemptNote = v;
+for (const [k, v] of Object.entries(E_INVOICE)) if (COUNTRIES[k]) COUNTRIES[k].eInvoice = v;
+COUNTRIES.DE.secondaryIdLabel = 'Steuernummer';
+COUNTRIES.JP.taxRoundPerInvoice = true;
+COUNTRIES.JP.reducedMark = 8;
+// Bilingual titles (Arabic required on Saudi invoices; customary in the UAE)
+COUNTRIES.SA.titleLocal = { 'Tax Invoice': 'فاتورة ضريبية', 'Simplified Tax Invoice': 'فاتورة ضريبية مبسطة', 'Credit Note': 'إشعار دائن', 'Debit Note': 'إشعار مدين', Invoice: 'فاتورة' };
+COUNTRIES.AE.titleLocal = { 'Tax Invoice': 'فاتورة ضريبية', 'Tax Credit Note': 'إشعار دائن ضريبي', Invoice: 'فاتورة' };
+COUNTRIES.VN.notes = 'The 8% reduced VAT rate applies until 31 Dec 2026.';

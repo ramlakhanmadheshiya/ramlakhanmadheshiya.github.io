@@ -38,8 +38,8 @@ export function zatcaPayload({ seller, vatNo, timestamp, total, vat }) {
 export function paymentQR(business, country, doc, totals) {
   const amount = Math.max(0, totals?.balance ?? totals?.total ?? 0);
   const note = doc?.number ? `Bill ${doc.number}` : '';
-  if (country.qr === 'zatca' && business.taxId) {
-    return { payload: zatcaPayload({ seller: business.name, vatNo: business.taxId, timestamp: `${doc?.date || ''}T12:00:00Z`, total: totals?.total || 0, vat: totals?.tax || 0 }), caption: 'ZATCA e-invoice QR' };
+  if (country.qr === 'zatca' && business.taxId && business.taxScheme !== 'unregistered') {
+    return { payload: zatcaPayload({ seller: business.name, vatNo: business.taxId, timestamp: doc?.createdAt || new Date().toISOString(), total: totals?.total || 0, vat: totals?.tax || 0 }), caption: 'ZATCA e-invoice QR' };
   }
   if (business.upi && (country.qr === 'upi' || business.currency === 'INR')) {
     return { payload: upiPayload({ upi: business.upi, name: business.name, amount, note }), caption: `Scan to pay with any UPI app` };

@@ -7,6 +7,8 @@ export function esc(v) {
   return String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
 export const nl2br = (v) => esc(v).replace(/\n/g, '<br>');
+// Only embedded images we created ourselves (data URLs) may be used as <img src> — blocks injected markup from tampered backups.
+export const safeImg = (src) => (/^data:image\/(png|jpe?g|gif|webp|svg\+xml);base64,[A-Za-z0-9+/=]+$/.test(String(src || '')) ? src : '');
 
 export function debounce(fn, ms = 250) {
   let t; return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); };
@@ -37,7 +39,8 @@ export function modal({ title = '', body = '', foot = '', wide = false, onMount 
   const close = (val) => {
     ov.remove(); document.removeEventListener('keydown', onKey); prevFocus?.focus?.(); resolve(val);
   };
-  const onKey = (e) => { if (e.key === 'Escape') close(undefined); };
+  // Esc closes only the top-most dialog.
+  const onKey = (e) => { if (e.key === 'Escape' && [...document.querySelectorAll('.overlay')].at(-1) === ov) { e.stopImmediatePropagation(); close(undefined); } };
   document.addEventListener('keydown', onKey);
   ov.addEventListener('mousedown', (e) => { if (e.target === ov) close(undefined); });
   ov.querySelectorAll('[data-close]').forEach((b) => b.addEventListener('click', () => close(undefined)));
@@ -91,6 +94,14 @@ export function menu(anchor, items) {
   let top = r.bottom + 6; if (top + h > window.innerHeight - 8) top = Math.max(8, r.top - h - 6);
   el.style.left = left + 'px'; el.style.top = top + 'px';
   const off = (e) => { if (!el.contains(e.target)) { el.remove(); document.removeEventListener('mousedown', off, true); } };
+  el.addEventListener('keydown', (e) => {
+    const items = [...el.querySelectorAll('button')];
+    const i = items.indexOf(document.activeElement);
+    if (e.key === 'Escape') { el.remove(); anchor.focus?.(); }
+    if (e.key === 'ArrowDown') { e.preventDefault(); items[(i + 1) % items.length]?.focus(); }
+    if (e.key === 'ArrowUp') { e.preventDefault(); items[(i - 1 + items.length) % items.length]?.focus(); }
+  });
+  setTimeout(() => el.querySelector('button')?.focus(), 0);
   setTimeout(() => document.addEventListener('mousedown', off, true));
   return el;
 }
