@@ -65,10 +65,10 @@ export function newBusiness(countryCode) {
   const c = getCountry(countryCode);
   return {
     id: uid('biz_'), name: '', legalName: '', country: c.code, currency: c.currency, locale: c.locale,
-    region: '', taxScheme: 'regular', taxId: '', secondaryId: '', address: '', city: '', postal: '', phone: '', email: '', website: '',
+    region: '', taxScheme: c.noTax ? 'unregistered' : 'regular', taxId: '', secondaryId: '', address: '', city: '', postal: '', phone: '', email: '', website: '',
     logo: '', signature: '', accent: '#0071e3',
     bank: { name: '', holder: '', account: '', code: '', iban: '', swift: '', branch: '' }, upi: '',
-    terms: 'Payment is due within 15 days.\nGoods once sold will not be taken back.',
+    terms: 'Payment is due within 15 days.',
     footer: 'Thank you for your business!',
     paymentTermsDays: 15, fyStartMonth: c.fyStartMonth,
     taxes: JSON.parse(JSON.stringify(c.presets)),
@@ -78,8 +78,11 @@ export function newBusiness(countryCode) {
   };
 }
 
+const OLD_DEFAULT_TERMS = 'Payment is due within 15 days.\nGoods once sold will not be taken back.';
 export async function loadState() {
   state.businesses = await db.all('businesses');
+  // Older versions pre-filled a no-returns clause that consumer law in many countries forbids — drop it if untouched.
+  for (const b of state.businesses) if (b.terms === OLD_DEFAULT_TERMS) { b.terms = 'Payment is due within 15 days.'; await db.put('businesses', b); }
   const activeId = await db.setting('activeBusiness');
   state.business = state.businesses.find((b) => b.id === activeId) || state.businesses[0] || null;
 }

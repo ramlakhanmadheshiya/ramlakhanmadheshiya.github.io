@@ -1,7 +1,7 @@
 // Renders a document onto a template page, plus "flow" so growing blocks
 // (long item lists, addresses) push the blocks below them down.
 import { esc, nl2br, safeImg } from './ui.js';
-import { fmtMoney, fmtPlain, fmtNumber, round } from './lib/money.js';
+import { fmtMoney, fmtPlain, fmtNumber, fmtRate, round } from './lib/money.js';
 import { fmtDate } from './lib/dates.js';
 import { amountInWords } from './lib/words.js';
 import { qrSvg, paymentQR } from './lib/qr.js';
@@ -159,7 +159,7 @@ const R = {
       const st = IN_STATES.find((s) => s.code === doc.placeOfSupply);
       rows.push(['Place of supply', st ? `${st.name} (${st.code})` : doc.placeOfSupply]);
     }
-    if (doc.supplyDate && doc.supplyDate !== doc.date) rows.push(['Date of supply', fmtDate(doc.supplyDate, loc)]);
+    if (supplyDateOf(doc, country)) rows.push(['Date of supply', fmtDate(supplyDateOf(doc, country), loc)]);
     if (doc.reference) rows.push(['Reference', doc.reference]);
     if (doc.refNumber) rows.push([doc.type === 'credit' || doc.type === 'debit' ? 'Against invoice' : 'Ref.', doc.refNumber + (doc.refDate ? ` dated ${fmtDate(doc.refDate, loc)}` : '')]);
     if (country.gst && doc.irn) { rows.push(['IRN', doc.irn]); if (doc.ackNo) rows.push(['Ack. no. / date', `${doc.ackNo}${doc.ackDate ? ' · ' + fmtDate(doc.ackDate, loc) : ''}`]); }
@@ -190,7 +190,7 @@ const R = {
   qr(b, ctx) {
     const q = b.props.text ? { payload: fillText(b.props.text, ctx), caption: b.props.caption || '' } : paymentQR(ctx.business, ctx.country, ctx.doc, ctx.totals);
     if (!q) return ctx.editing ? `<div class="ph">${ctx.country.code === 'IN' ? 'QR appears when your UPI ID is set' : ctx.business.currency === 'EUR' ? 'QR appears when IBAN or pay link is set' : 'QR appears when a payment link is set'}</div>` : '';
-    return `<div class="qrbox">${qrSvg(q.payload)}</div><div style="margin-top:4px;line-height:1.2">${esc(b.props.caption || q.caption)}</div>`;
+    return `<div class="qrbox">${qrSvg(q.payload, { swissCross: !!q.swiss })}</div><div style="margin-top:4px;line-height:1.2">${esc(b.props.caption || q.caption)}</div>`;
   },
   notes(b, ctx) {
     if (!ctx.doc.notes) return ctx.editing ? `<div class="lbl">Notes</div><div style="opacity:.45">Notes for the customer</div>` : '';
@@ -241,7 +241,7 @@ function itemsTable(b, ctx) {
     { k: 'item', h: b.props.itemLabel || 'Item', v: (l) => `<div style="font-weight:500">${esc(l.name)}</div>${l.description && showCol('desc') ? `<div class="desc">${esc(l.description)}</div>` : ''}` },
     hasHsn && showCol('hsn') && { k: 'hsn', h: country.hsnLabel || 'Code', cls: 'c', v: (l) => esc(l.hsn) },
     showCol('qty') && { k: 'qty', h: 'Qty', cls: 'r', v: (l) => `${fmtNumber(l.qty, loc, 3)}${l.unit ? ` <span style="opacity:.6;font-size:.88em">${esc(l.unit)}</span>` : ''}` },
-    showCol('rate') && { k: 'rate', h: 'Rate', cls: 'r', v: (l) => fmtPlain(l.rate, cur, loc) },
+    showCol('rate') && { k: 'rate', h: 'Rate', cls: 'r', v: (l) => fmtRate(l.rate, cur, loc) },
     hasDisc && showCol('disc') && { k: 'disc', h: 'Disc.', cls: 'r', v: (l) => l.discountAmt ? (l.discType === 'amt' ? fmtPlain(l.discountAmt, cur, loc) : `${fmtNumber(l.disc, loc)}%`) : '—' },
     hasTax && showCol('tax') && { k: 'tax', h: country.gst ? 'GST' : (country.taxName === 'VAT' ? 'VAT' : 'Tax'), cls: 'r', v: (l) => l.taxes.length ? `${country.reducedMark === l.taxRate ? '※ ' : ''}${fmtNumber(l.taxRate + (l.cessRate || 0), loc)}%${showCol('taxamt') ? `<div class="desc">${fmtPlain(l.tax, cur, loc)}</div>` : ''}` : '—' },
     { k: 'amount', h: 'Amount', cls: 'r', v: (l) => `<span style="font-weight:500">${fmtPlain(b.props.amountInclTax ? l.total : l.taxable, cur, loc)}</span>` },
@@ -254,6 +254,13 @@ function itemsTable(b, ctx) {
 }
 
 // India Rule 46 endorsements for exports and SEZ supplies.
+// Germany/Austria: the date of supply must always be stated (§14(4) UStG, §11 UStG), even when it equals the invoice date.
+const SUPPLY_DATE_ALWAYS = new Set(['DE', 'AT']);
+function supplyDateOf(doc, country) {
+  if (doc.supplyDate && doc.supplyDate !== doc.date) return doc.supplyDate;
+  return SUPPLY_DATE_ALWAYS.has(country.code) && DOC_TYPES[doc.type]?.ledger ? (doc.supplyDate || doc.date) : '';
+}
+
 export const SUPPLY_NOTES = {
   export_igst: 'SUPPLY MEANT FOR EXPORT ON PAYMENT OF INTEGRATED TAX',
   export_lut: 'SUPPLY MEANT FOR EXPORT UNDER BOND OR LETTER OF UNDERTAKING WITHOUT PAYMENT OF INTEGRATED TAX',
@@ -437,7 +444,7 @@ export function renderReceipt(ctx, tpl, widthPx) {
   const items = t.lines.map((l, i) => `<div style="margin:3px 0">
       <div style="font-weight:600">${i + 1}. ${esc(l.name)}${c.reducedMark === l.taxRate ? ' ※' : ''}</div>
       ${l.hsn && c.showHsn && x.showHsn !== false ? `<div style="opacity:.75">${esc(c.hsnLabel || 'Code')}: ${esc(l.hsn)}</div>` : ''}
-      <div style="display:flex;justify-content:space-between;gap:6px"><span>${fmtNumber(l.qty, loc, 3)} ${esc(l.unit || '')} × ${p(l.rate)}${l.discountAmt ? ` − ${p(l.discountAmt)}` : ''}${l.taxes.length ? ` · ${fmtNumber(l.taxRate, loc)}%` : ''}</span><span style="font-weight:600">${p(l.taxable)}</span></div></div>`).join('');
+      <div style="display:flex;justify-content:space-between;gap:6px"><span>${fmtNumber(l.qty, loc, 3)} ${esc(l.unit || '')} × ${fmtRate(l.rate, cur, loc)}${l.discountAmt ? ` − ${p(l.discountAmt)}` : ''}${l.taxes.length ? ` · ${fmtNumber(l.taxRate, loc)}%` : ''}</span><span style="font-weight:600">${p(l.taxable)}</span></div></div>`).join('');
   const tl = (k, v, strong) => `<div style="display:flex;justify-content:space-between;gap:6px;${strong ? 'font-weight:800;font-size:1.25em;margin-top:3px' : ''}"><span>${k}</span><span>${v}</span></div>`;
   const totalsHtml = [
     tl('Subtotal', m(t.subtotal)),
@@ -458,7 +465,7 @@ export function renderReceipt(ctx, tpl, widthPx) {
     c.gst && SUPPLY_NOTES[doc.supplyType] ? SUPPLY_NOTES[doc.supplyType] : '',
   ].filter(Boolean).map((n) => `<div style="margin-top:3px">${n}</div>`).join('');
   const meta = [[`No.`, doc.number || 'Draft'], ['Date', fmtDate(doc.date, loc)],
-    doc.supplyDate && doc.supplyDate !== doc.date ? ['Supply date', fmtDate(doc.supplyDate, loc)] : null,
+    supplyDateOf(doc, c) ? ['Supply date', fmtDate(supplyDateOf(doc, c), loc)] : null,
     doc.dueDate && DOC_TYPES[doc.type]?.payable && !DOC_TYPES[doc.type]?.paidNow ? ['Due', fmtDate(doc.dueDate, loc)] : null,
     c.gst && doc.placeOfSupply ? ['Place of supply', (IN_STATES.find((s2) => s2.code === doc.placeOfSupply)?.name || doc.placeOfSupply) + ` (${doc.placeOfSupply})`] : null,
     doc.refNumber ? ['Against', doc.refNumber + (doc.refDate ? ' · ' + fmtDate(doc.refDate, loc) : '')] : null,
@@ -484,7 +491,7 @@ export function renderReceipt(ctx, tpl, widthPx) {
     ${notes ? `<div style="font-size:.88em">${notes}</div>` : ''}
     ${o.taxSummary && t.tax ? `${line}<div style="font-size:.88em">${t.rateSummary.map((r) => `<div style="display:flex;justify-content:space-between;gap:6px"><span>${c.gst ? 'GST' : esc(c.taxName)} ${fmtNumber(r.rate, loc)}% on ${p(r.taxable)}</span><span>${p(r.tax)}</span></div>`).join('')}</div>` : ''}
     ${o.words ? `<div style="margin-top:4px;font-size:.88em">${esc(amountInWords(t.total, cur, c.numberSystem))}</div>` : ''}
-    ${q ? `<div style="text-align:center;margin-top:6px"><div class="qrbox" style="width:${Math.min(Math.round(widthPx * 0.42), 140)}px;margin:0 auto">${qrSvg(q.payload)}</div><div style="font-size:.85em">${esc(q.caption)}</div></div>` : ''}
+    ${q ? `<div style="text-align:center;margin-top:6px"><div class="qrbox" style="width:${Math.min(Math.round(widthPx * 0.42), 140)}px;margin:0 auto">${qrSvg(q.payload, { swissCross: !!q.swiss })}</div><div style="font-size:.85em">${esc(q.caption)}</div></div>` : ''}
     ${o.terms && doc.terms ? `${line}<div style="font-size:.85em;white-space:pre-line">${esc(doc.terms)}</div>` : ''}
     ${o.signature ? `<div style="margin-top:22px;text-align:right;font-size:.88em">For ${esc(x.name)}<br><br>Authorised signatory</div>` : ''}
     ${x.footer ? `${line}<div style="text-align:center;font-weight:600">${esc(x.footer)}</div>` : ''}

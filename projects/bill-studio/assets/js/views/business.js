@@ -4,7 +4,7 @@ import { state, saveBusiness, defaultPreset } from '../store.js';
 import { getCountry, COUNTRY_LIST, CURRENCIES } from '../tax/countries.js';
 import { validateTaxId, validatePAN, validateEmail } from '../lib/validators.js';
 import { MONTHS } from '../lib/dates.js';
-import { taxIdRule, businessTaxError, CA_PROVINCES } from '../tax/rules.js';
+import { taxIdRule, businessTaxError, CA_PROVINCES, normTaxId } from '../tax/rules.js';
 
 const LOCALES = [['en-IN', 'English (India)'], ['hi-IN', 'हिन्दी (India)'], ['en-US', 'English (US)'], ['en-GB', 'English (UK)'], ['en-AU', 'English (Australia)'], ['en-CA', 'English (Canada)'], ['en-AE', 'English (UAE)'], ['ar-SA', 'العربية'], ['de-DE', 'Deutsch'], ['fr-FR', 'Français'], ['es-ES', 'Español'], ['it-IT', 'Italiano'], ['pt-BR', 'Português (Brasil)'], ['nl-NL', 'Nederlands'], ['ja-JP', '日本語'], ['zh-CN', '中文'], ['id-ID', 'Bahasa Indonesia'], ['en-SG', 'English (Singapore)']];
 
@@ -40,10 +40,10 @@ export async function render(root) {
     <div class="section-title">Tax registration</div>
     <div class="card"><div class="form-grid">
       <div class="field"><label>Country</label><select class="input" name="country">${COUNTRY_LIST.map((x) => `<option value="${x.code}" ${x.code === b.country ? 'selected' : ''}>${x.flag} ${esc(x.name)}</option>`).join('')}</select></div>
-      <div class="field"><label>Tax status</label><select class="input" name="taxScheme">
+      ${c.noTax ? `<div class="field"><label>Tax status</label><input type="hidden" name="taxScheme" value="unregistered"><div class="small muted" style="padding-top:8px">${esc(c.name)} has no VAT, GST or sales tax.</div></div>` : `<div class="field"><label>Tax status</label><select class="input" name="taxScheme">
         <option value="regular" ${b.taxScheme === 'regular' ? 'selected' : ''}>${c.gst ? 'Regular GST — Tax Invoice' : `Registered — charge ${esc(c.taxName)}`}</option>
         ${c.gst ? `<option value="composition" ${b.taxScheme === 'composition' ? 'selected' : ''}>Composition scheme — Bill of Supply</option>` : ''}
-        <option value="unregistered" ${b.taxScheme === 'unregistered' ? 'selected' : ''}>Not registered — no tax</option></select></div>
+        <option value="unregistered" ${b.taxScheme === 'unregistered' ? 'selected' : ''}>Not registered — no tax</option></select></div>`}
       <div class="field" data-taxid-field ${taxIdRule(c.code, b.taxScheme).show ? '' : 'hidden'}><label>${esc(c.taxIdLabel)}<span data-req>${taxIdRule(c.code, b.taxScheme).required ? ' *' : ''}</span></label><input class="input ${tv.ok ? '' : 'invalid'}" name="taxId" value="${esc(b.taxId)}" autocapitalize="characters"><div class="help ${tv.ok ? '' : 'err'}" data-taxhelp>${tv.ok ? esc(taxIdRule(c.code, b.taxScheme).help || '') : esc(tv.msg)}</div></div>
       ${c.secondaryIdLabel ? f('secondaryId', esc(c.secondaryIdLabel), b.secondaryId, 'autocapitalize="characters"') : f('secondaryId', 'Company / registration no.', b.secondaryId)}
       ${c.code === 'CA' ? `<div class="field"><label>Province / territory</label><select class="input" name="region"><option value="">Select</option>${CA_PROVINCES.map(([code, n]) => `<option value="${code}" ${code === b.region ? 'selected' : ''}>${esc(n)}</option>`).join('')}</select></div>` : ''}
@@ -67,7 +67,7 @@ export async function render(root) {
       ${c.code === 'IN' || b.currency === 'INR' ? f('upi', 'UPI ID', b.upi, 'placeholder="yourname@okbank"', 'A scan-to-pay UPI QR is printed on bills with the exact amount.', 'span2') : ''}
       ${f('bank.name', 'Bank name', b.bank?.name)}${f('bank.holder', 'Account holder', b.bank?.holder)}
       ${f('bank.account', 'Account number', b.bank?.account)}${f('bank.code', bankCodeLabel, b.bank?.code)}
-      ${f('bank.iban', 'IBAN', b.bank?.iban, '', b.currency === 'EUR' ? 'Adds a SEPA “GiroCode” QR to your bills.' : '')}${f('bank.swift', 'SWIFT / BIC', b.bank?.swift)}
+      ${f('bank.iban', 'IBAN', b.bank?.iban, '', c.code === 'CH' ? 'Adds a Swiss QR payment code (QR-bill) to your bills. Needs your address, postal code and city.' : b.currency === 'EUR' ? 'Adds a SEPA “GiroCode” QR to your bills.' : '')}${f('bank.swift', 'SWIFT / BIC', b.bank?.swift)}
       ${f('bank.branch', 'Branch', b.bank?.branch)}
       ${f('payLink', 'Online payment link', b.payLink, 'placeholder="https://paypal.me/you or Stripe link"', c.code === 'IN' ? 'Shown as a QR when no UPI ID is set.' : b.currency === 'EUR' ? 'Shown as a QR when no IBAN is set.' : 'Printed on bills as a scan-to-pay QR code.')}
     </div></div>
@@ -122,7 +122,7 @@ export async function render(root) {
     for (const k of ['name', 'legalName', 'address', 'city', 'postal', 'phone', 'email', 'website', 'footer']) { const el = root.querySelector(`[name=${k}]`); if (el) out[k] = el.value.trim(); }
     Object.assign(out, {
       country: nc.code, taxes: JSON.parse(JSON.stringify(nc.presets)), defaultTaxId: defaultPreset(nc.presets)?.id || '', taxId: '', secondaryId: '',
-      currency: nc.currency, locale: nc.locale, fyStartMonth: nc.fyStartMonth, region: '', taxScheme: 'regular', showHsn: !!nc.showHsn, roundOff: nc.code === 'IN', upi: nc.code === 'IN' ? out.upi : '',
+      currency: nc.currency, locale: nc.locale, fyStartMonth: nc.fyStartMonth, region: '', taxScheme: nc.noTax ? 'unregistered' : 'regular', showHsn: !!nc.showHsn, roundOff: nc.code === 'IN', upi: nc.code === 'IN' ? out.upi : '',
     });
     await saveBusiness(out);
     toast(`Switched to ${nc.name} — please complete your tax details`, 'info');
@@ -139,7 +139,7 @@ export async function render(root) {
     out.taxId = (out.taxId || '').toUpperCase();
     if (!out.name) { toast('Business name is required', 'err'); return; }
     if (!taxIdRule(out.country, out.taxScheme).show) out.taxId = '';
-    out.taxId = String(out.taxId || '').toUpperCase().replace(/\s/g, '');
+    out.taxId = normTaxId(out.country, out.taxId);
     { const err = businessTaxError(out); if (err) { toast(err, 'err'); return; } }
     if (!validateEmail(out.email)) { toast('Email looks wrong', 'err'); return; }
     if (c.code === 'IN' && out.secondaryId && !validatePAN(out.secondaryId).ok) toast('PAN format looks unusual — saved anyway', 'info');

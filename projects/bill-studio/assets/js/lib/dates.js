@@ -14,6 +14,8 @@ export function daysBetween(a, b) { return Math.round((parseISO(b) - parseISO(a)
 
 export function fmtDate(iso, locale = 'en-US', style = 'medium') {
   if (!iso) return '';
+  // The app is in English: spelled-out months stay English ("22 October 2026"), in the country's order.
+  if ((style === 'long' || style === 'full') && !/^en\b/i.test(locale)) locale = 'en-' + (String(locale).split('-')[1] || 'GB');
   try { return new Intl.DateTimeFormat(locale, { dateStyle: style }).format(parseISO(iso)); } catch { return iso; }
 }
 

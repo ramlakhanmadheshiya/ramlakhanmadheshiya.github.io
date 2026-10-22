@@ -139,7 +139,7 @@ export async function render(root) {
       const out = [...by.values()].reduce((s, e) => s + e.tax, 0), inp = exp.reduce((s, e) => s + num(e.tax), 0);
       return { summary: [[`Output ${country.taxName}`, m(out)], [`Input ${country.taxName}`, m(inp)], ['Net payable', m(out - inp)]],
         sections: [{ heading: `Output ${country.taxName} on sales`, columns: ['Tax', 'Rate', 'Net sales', 'Tax'], align: ['left', 'right', 'right', 'right'], rows: [...by.values()].map((e) => [e.name, `${e.rate}%`, m(e.taxable), m(e.tax)]), foot: ['Total', '', m([...by.values()].reduce((s, e) => s + e.taxable, 0)), m(out)] },
-          { heading: `Input ${country.taxName} on expenses`, columns: ['Date', 'Vendor', 'Category', 'Amount', 'Tax'], align: ['left', 'left', 'left', 'right', 'right'], rows: exp.filter((e) => num(e.tax)).map((e) => [fmtDate(e.date, b.locale), e.vendor, e.category, m(e.amount), m(e.tax)]), foot: ['Total', '', '', '', m(inp)] }] };
+          { heading: `Input ${country.taxName} on expenses`, columns: ['Date', 'Vendor', `Supplier ${country.taxIdLabel}`, 'Supplier invoice', 'Amount', 'Tax'], align: ['left', 'left', 'left', 'left', 'right', 'right'], rows: exp.filter((e) => num(e.tax)).map((e) => [fmtDate(e.date, b.locale), e.vendor, e.supplierTaxId || '—', e.reference || '—', m(e.amount), m(e.tax)]), foot: ['Total', '', '', '', '', m(inp)] }] };
     },
     pl() {
       const f = finals().filter((d) => DOC_TYPES[d.type].ledger);
@@ -203,7 +203,11 @@ export async function render(root) {
       const tot = ex.reduce((s, e) => s + num(e.amount), 0);
       return { summary: [['Total spent', m(tot)], ['Input tax', m(ex.reduce((s, e) => s + num(e.tax), 0))]],
         sections: [{ heading: 'By category', columns: ['Category', 'Amount', 'Share'], align: ['left', 'right', 'right'], rows: Object.entries(by).sort((a, x) => x[1] - a[1]).map(([k, v]) => [k, m(v), `${fmtNumber((v / tot) * 100, 'en-US', 1)}%`]), foot: ['Total', m(tot), ''] },
-          { heading: 'All expenses', columns: ['Date', 'Vendor', 'Category', 'Mode', 'Amount'], align: ['left', 'left', 'left', 'left', 'right'], rows: ex.map((e) => [fmtDate(e.date, b.locale), e.vendor, e.category, e.mode, m(e.amount)]) }] };
+          { heading: 'All expenses', columns: ['Date', 'Vendor', 'Category', 'Mode', 'Amount'], align: ['left', 'left', 'left', 'left', 'right'], rows: ex.map((e) => [fmtDate(e.date, b.locale), e.vendor, e.category, e.mode, m(e.amount)]) },
+          ...(country.noTax ? [] : [{ heading: `Input ${country.taxName} register (purchases with tax)`, csv: 'itc', columns: ['Date', 'Supplier', `Supplier ${country.taxIdLabel}`, 'Supplier invoice', 'Taxable', country.taxName, 'Total'],
+            align: ['left', 'left', 'left', 'left', 'right', 'right', 'right'],
+            rows: ex.filter((e) => num(e.tax)).map((e) => [fmtDate(e.date, b.locale), e.vendor, e.supplierTaxId || '—', e.reference || '—', m(num(e.amount) - num(e.tax)), m(e.tax), m(e.amount)]),
+            foot: ['Total', '', '', '', m(ex.reduce((s, e) => s + (num(e.tax) ? num(e.amount) - num(e.tax) : 0), 0)), m(ex.reduce((s, e) => s + num(e.tax), 0)), ''] }])] };
     },
     daybook() {
       const r = range();
@@ -264,5 +268,7 @@ export async function render(root) {
     }));
   };
 
-  if (ui.report && builders[ui.report] && REPORTS.some((r) => r.key === ui.report)) drawReport(); else drawGallery();
+  // Opening Reports always starts at the list (only the chosen period is remembered).
+  ui.report = '';
+  drawGallery();
 }

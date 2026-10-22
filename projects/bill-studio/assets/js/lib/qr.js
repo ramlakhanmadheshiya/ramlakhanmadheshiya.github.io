@@ -1,13 +1,31 @@
 // Payment / compliance QR payloads + SVG rendering (qrcode-generator, MIT, loaded globally).
 
-export function qrSvg(text, { margin = 0 } = {}) {
+export function qrSvg(text, { margin = 0, swissCross = false } = {}) {
   if (!text || typeof window.qrcode !== 'function') return '';
   try {
     const q = window.qrcode(0, 'M');
     q.addData(unescape(encodeURIComponent(text)));
     q.make();
-    return q.createSvgTag({ cellSize: 4, margin, scalable: true });
+    let svg = q.createSvgTag({ cellSize: 4, margin, scalable: true });
+    if (swissCross) {
+      // Swiss QR-bill: a 7 × 7 mm Swiss cross in the centre of the 46 × 46 mm code (ECC level M absorbs it).
+      const n = q.getModuleCount() * 4 + margin * 2, s = n * 7 / 46, x = (n - s) / 2, w = s * 0.19, l = s * 0.6;
+      svg = svg.replace('</svg>', `<rect x="${x}" y="${x}" width="${s}" height="${s}" fill="#fff"/><rect x="${x + s * 0.06}" y="${x + s * 0.06}" width="${s * 0.88}" height="${s * 0.88}" fill="#000"/>`
+        + `<rect x="${n / 2 - w / 2}" y="${n / 2 - l / 2}" width="${w}" height="${l}" fill="#fff"/><rect x="${n / 2 - l / 2}" y="${n / 2 - w / 2}" width="${l}" height="${w}" fill="#fff"/></svg>`);
+    }
+    return svg;
   } catch { return ''; }
+}
+
+// Swiss QR-bill payment code (Swiss Payment Standards, SPC 0200, structured addresses).
+export function swissPayload({ iban, name, street, postal, town, country = 'CH', amount, currency = 'CHF', message }) {
+  const L = (v, n) => String(v || '').replace(/[\r\n]+/g, ' ').trim().slice(0, n);
+  return ['SPC', '0200', '1', iban.replace(/\s/g, ''),
+    'S', L(name, 70), L(street, 70), '', L(postal, 16), L(town, 35), country,
+    '', '', '', '', '', '', '',
+    amount > 0 ? amount.toFixed(2) : '', currency,
+    '', '', '', '', '', '', '',
+    'NON', '', L(message, 140), 'EPD'].join('\n');
 }
 
 export function upiPayload({ upi, name, amount, note }) {
@@ -43,6 +61,11 @@ export function paymentQR(business, country, doc, totals) {
   }
   if (business.upi && (country.qr === 'upi' || business.currency === 'INR')) {
     return { payload: upiPayload({ upi: business.upi, name: business.name, amount, note }), caption: `Scan to pay with any UPI app` };
+  }
+  const iban = String(business.bank?.iban || '').replace(/\s/g, '').toUpperCase();
+  if (/^(CH|LI)\d{7}/.test(iban) && ['CHF', 'EUR'].includes(business.currency) && business.address && business.postal && business.city) {
+    return { payload: swissPayload({ iban, name: business.bank.holder || business.name, street: business.address, postal: business.postal, town: business.city,
+      country: iban.slice(0, 2), amount, currency: business.currency, message: note }), caption: 'Swiss QR code — scan to pay', swiss: true };
   }
   if (business.bank?.iban && (business.currency === 'EUR')) {
     return { payload: epcPayload({ name: business.bank.holder || business.name, iban: business.bank.iban, bic: business.bank.swift, amount, text: note }), caption: 'Scan with your banking app' };

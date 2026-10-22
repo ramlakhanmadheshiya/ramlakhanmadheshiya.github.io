@@ -4,7 +4,17 @@ import { state } from './store.js';
 import { todayISO } from './lib/dates.js';
 import { num, fmtMoney } from './lib/money.js';
 
-export const PAY_MODES = ['cash', 'upi', 'card', 'bank transfer', 'cheque', 'wallet', 'other'];
+const COMMON_MODES = ['cash', 'card', 'bank transfer', 'cheque', 'wallet', 'other'];
+// Popular local instant-payment methods, offered only in their own country.
+const LOCAL_MODES = { IN: ['upi'], BR: ['pix'], KE: ['m-pesa'], TZ: ['m-pesa'], SG: ['paynow'], MY: ['duitnow'], TH: ['promptpay'], PH: ['gcash'], BD: ['bkash'],
+  NL: ['ideal'], PK: ['raast'], US: ['ach', 'zelle'], AU: ['payid'], SE: ['swish'], NO: ['vipps'], DK: ['mobilepay'], PL: ['blik'], CH: ['twint'] };
+// Payment modes for the active business's country (plus `keep`, so an older record's mode stays selectable).
+export function payModes(keep = '') {
+  const c = state.business?.country;
+  const list = [COMMON_MODES[0], ...(LOCAL_MODES[c] || []), ...COMMON_MODES.slice(1)];
+  return keep && !list.includes(keep) ? [...list, keep] : list;
+}
+export const refPlaceholder = () => (state.business?.country === 'IN' ? 'UTR / cheque no.' : 'Transaction / cheque no.');
 
 // Record (or edit) a payment. opts: { customers, customerId, doc, due, openDocs, payment }
 export function paymentDialog({ customers = [], customerId = '', doc = null, due = 0, openDocs = [], payment = null } = {}) {
@@ -19,8 +29,8 @@ export function paymentDialog({ customers = [], customerId = '', doc = null, due
            <div class="field span2"><label>Apply to bill</label><select class="input" name="documentId"><option value="">On account (no specific bill)</option></select></div>`}
       <div class="field"><label>Amount (${esc(b.currency)})</label><input class="input" name="amount" type="number" step="any" min="0" value="${esc(p.amount)}" required></div>
       <div class="field"><label>Date</label><input class="input" name="date" type="date" value="${esc(p.date)}"></div>
-      <div class="field"><label>Mode</label><select class="input" name="mode">${PAY_MODES.map((x) => `<option ${x === p.mode ? 'selected' : ''}>${x}</option>`).join('')}</select></div>
-      <div class="field"><label>Reference</label><input class="input" name="reference" value="${esc(p.reference)}" placeholder="UTR / cheque no."></div>
+      <div class="field"><label>Mode</label><select class="input" name="mode">${payModes(p.mode).map((x) => `<option ${x === p.mode ? 'selected' : ''}>${x}</option>`).join('')}</select></div>
+      <div class="field"><label>Reference</label><input class="input" name="reference" value="${esc(p.reference)}" placeholder="${esc(refPlaceholder())}"></div>
       <div class="field span2"><label>Note</label><input class="input" name="note" value="${esc(p.note)}"></div>
     </div>`,
     foot: `${payment ? '<button class="btn danger" data-del style="margin-right:auto">Delete</button>' : ''}<button class="btn" data-close>Cancel</button><button class="btn primary" data-ok>Save payment</button>`,

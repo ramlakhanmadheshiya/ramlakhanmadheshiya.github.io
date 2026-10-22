@@ -48,7 +48,7 @@ export async function seedSample(business) {
     if (paid) {
       const { calculate } = await import('./tax/engine.js');
       const total = calculate(saved, business).total;
-      await db.put('payments', { id: uid(), businessId: business.id, documentId: saved.id, customerId: cust.id, amount: Math.round(total * paid * 100) / 100, mode: 'upi', date: addDays(saved.date, 2), reference: '', note: '' });
+      await db.put('payments', { id: uid(), businessId: business.id, documentId: saved.id, customerId: cust.id, amount: Math.round(total * paid * 100) / 100, mode: business.country === 'IN' ? 'upi' : 'bank transfer', date: addDays(saved.date, 2), reference: '', note: '' });
     }
     return saved;
   };

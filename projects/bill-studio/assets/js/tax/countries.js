@@ -37,6 +37,15 @@ function gstLike(code, name, flag, currency, locale, rates, extra = {}) {
   };
 }
 
+// Countries with no VAT / GST / sales tax: bills never charge tax and there is no registration question.
+function noTax(code, name, flag, currency, locale, idLabel, extra = {}) {
+  return {
+    code, name, flag, currency, locale, fyStartMonth: 1, taxName: 'Tax', taxIdLabel: idLabel, noTax: true,
+    presets: [zero('tax')], docTitle: { registered: 'Invoice', unregistered: 'Invoice' }, numberSystem: 'intl', qr: null, showHsn: false,
+    notes: `${name} has no VAT, GST or sales tax, so your bills show no tax.`, ...extra,
+  };
+}
+
 export const COUNTRIES = {
   IN: {
     code: 'IN', name: 'India', flag: '🇮🇳', currency: 'INR', locale: 'en-IN',
@@ -81,7 +90,7 @@ export const COUNTRIES = {
   AE: vat('AE', 'United Arab Emirates', '🇦🇪', 'AED', 'en-AE', [5], { eu: false, taxIdLabel: 'TRN', docTitle: { registered: 'Tax Invoice', unregistered: 'Invoice' } }),
   SA: vat('SA', 'Saudi Arabia', '🇸🇦', 'SAR', 'en-SA', [15], { eu: false, qr: 'zatca', taxIdLabel: 'VAT No.', docTitle: { registered: 'Tax Invoice', unregistered: 'Invoice' } }),
   BH: vat('BH', 'Bahrain', '🇧🇭', 'BHD', 'en-BH', [10], { eu: false }),
-  OM: vat('OM', 'Oman', '🇴🇲', 'OMR', 'en-OM', [5], { eu: false }),
+  OM: vat('OM', 'Oman', '🇴🇲', 'OMR', 'en-OM', [5], { eu: false, docTitle: { registered: 'Tax Invoice', unregistered: 'Invoice' } }),
   JP: {
     code: 'JP', name: 'Japan', flag: '🇯🇵', currency: 'JPY', locale: 'ja-JP', fyStartMonth: 4,
     taxName: 'Consumption tax', taxIdLabel: 'Registration No. (T + 13 digits)',
@@ -119,23 +128,46 @@ export const COUNTRIES = {
   MT: vat('MT', 'Malta', '🇲🇹', 'EUR', 'en-MT', [18, 7, 5]),
   ZA: vat('ZA', 'South Africa', '🇿🇦', 'ZAR', 'en-ZA', [15], { eu: false, fyStartMonth: 3, docTitle: { registered: 'Tax Invoice', unregistered: 'Invoice' } }),
   NG: vat('NG', 'Nigeria', '🇳🇬', 'NGN', 'en-NG', [7.5], { eu: false, taxIdLabel: 'TIN' }),
-  KE: vat('KE', 'Kenya', '🇰🇪', 'KES', 'en-KE', [16, 8], { eu: false, taxIdLabel: 'KRA PIN', fyStartMonth: 7 }),
-  EG: vat('EG', 'Egypt', '🇪🇬', 'EGP', 'en-EG', [14], { eu: false, taxIdLabel: 'Tax Reg. No.', fyStartMonth: 7 }),
-  BD: vat('BD', 'Bangladesh', '🇧🇩', 'BDT', 'en-BD', [15, 10, 7.5, 5], { eu: false, taxIdLabel: 'BIN', fyStartMonth: 7, numberSystem: 'indian' }),
-  PK: { ...vat('PK', 'Pakistan', '🇵🇰', 'PKR', 'en-PK', [18], { eu: false, taxIdLabel: 'NTN / STRN', fyStartMonth: 7, numberSystem: 'indian' }),
+  KE: vat('KE', 'Kenya', '🇰🇪', 'KES', 'en-KE', [16, 8], { eu: false, taxIdLabel: 'KRA PIN', fyStartMonth: 7, docTitle: { registered: 'Tax Invoice', unregistered: 'Invoice' } }),
+  EG: vat('EG', 'Egypt', '🇪🇬', 'EGP', 'en-EG', [14], { eu: false, taxIdLabel: 'Tax Reg. No.', fyStartMonth: 7, docTitle: { registered: 'Tax Invoice', unregistered: 'Invoice' } }),
+  BD: vat('BD', 'Bangladesh', '🇧🇩', 'BDT', 'en-BD', [15, 10, 7.5, 5], { eu: false, taxIdLabel: 'BIN', fyStartMonth: 7, numberSystem: 'indian', docTitle: { registered: 'Tax Invoice (Mushak-6.3)', unregistered: 'Invoice' } }),
+  PK: { ...vat('PK', 'Pakistan', '🇵🇰', 'PKR', 'en-PK', [18], { eu: false, taxIdLabel: 'NTN / STRN', fyStartMonth: 7, numberSystem: 'indian', docTitle: { registered: 'Sales Tax Invoice', unregistered: 'Invoice' } }),
     taxName: 'Sales tax', presets: [single('Sales tax', 18), zero('Sales tax')] },
-  NP: vat('NP', 'Nepal', '🇳🇵', 'NPR', 'en-NP', [13], { eu: false, taxIdLabel: 'PAN / VAT No.', fyStartMonth: 7, numberSystem: 'indian' }),
-  LK: vat('LK', 'Sri Lanka', '🇱🇰', 'LKR', 'en-LK', [18], { eu: false, taxIdLabel: 'VAT / TIN', fyStartMonth: 4 }),
+  NP: vat('NP', 'Nepal', '🇳🇵', 'NPR', 'en-NP', [13], { eu: false, taxIdLabel: 'PAN / VAT No.', fyStartMonth: 7, numberSystem: 'indian', docTitle: { registered: 'Tax Invoice', unregistered: 'Invoice' } }),
+  LK: vat('LK', 'Sri Lanka', '🇱🇰', 'LKR', 'en-LK', [18], { eu: false, taxIdLabel: 'VAT / TIN', fyStartMonth: 4, docTitle: { registered: 'Tax Invoice', unregistered: 'Invoice' } }),
   PH: vat('PH', 'Philippines', '🇵🇭', 'PHP', 'en-PH', [12], { eu: false, taxIdLabel: 'TIN' }),
   ID: { ...vat('ID', 'Indonesia', '🇮🇩', 'IDR', 'id-ID', [12, 11], { eu: false, taxIdLabel: 'NPWP' }), taxName: 'PPN',
     presets: [single('PPN', 12), p('ppn11', 'PPN 12% on DPP 11/12 (non-luxury)', [{ name: 'PPN', rate: 11 }]), zero('PPN')] },
-  TH: vat('TH', 'Thailand', '🇹🇭', 'THB', 'th-TH', [7], { eu: false, taxIdLabel: 'Tax ID' }),
+  TH: vat('TH', 'Thailand', '🇹🇭', 'THB', 'th-TH', [7], { eu: false, taxIdLabel: 'Tax ID', docTitle: { registered: 'Tax Invoice', unregistered: 'Invoice' } }),
   VN: vat('VN', 'Vietnam', '🇻🇳', 'VND', 'vi-VN', [10, 8, 5], { eu: false, taxIdLabel: 'MST' }),
-  MX: { ...vat('MX', 'Mexico', '🇲🇽', 'MXN', 'es-MX', [16, 8], { eu: false, taxIdLabel: 'RFC' }), taxName: 'IVA',
+  MX: { ...vat('MX', 'Mexico', '🇲🇽', 'MXN', 'es-MX', [16, 8], { eu: false, taxIdLabel: 'RFC', docTitle: { registered: 'Invoice', unregistered: 'Invoice' } }), taxName: 'IVA',
     presets: [single('IVA', 16), single('IVA', 8), zero('IVA')] },
-  BR: { ...vat('BR', 'Brazil', '🇧🇷', 'BRL', 'pt-BR', [], { eu: false, taxIdLabel: 'CNPJ / CPF' }), taxName: 'Tax',
+  BR: { ...vat('BR', 'Brazil', '🇧🇷', 'BRL', 'pt-BR', [], { eu: false, taxIdLabel: 'CNPJ / CPF', docTitle: { registered: 'Invoice', unregistered: 'Invoice' } }), taxName: 'Tax',
     presets: [single('ICMS', 18), single('ISS', 5), zero('tax')],
     notes: 'Brazilian taxes vary by state and municipality; set your own rates in Settings → Taxes.' },
+  // ---- More countries (2026) ----
+  KR: vat('KR', 'South Korea', '🇰🇷', 'KRW', 'ko-KR', [10], { eu: false, taxIdLabel: 'Business Reg. No.', docTitle: { registered: 'Tax Invoice', unregistered: 'Invoice' } }),
+  TW: { ...vat('TW', 'Taiwan', '🇹🇼', 'TWD', 'zh-TW', [5], { eu: false, taxIdLabel: 'Unified Business No.', docTitle: { registered: 'Invoice', unregistered: 'Invoice' } }),
+    taxName: 'Business tax', presets: [single('Business tax', 5), zero('Business tax')] },
+  CN: vat('CN', 'China', '🇨🇳', 'CNY', 'zh-CN', [13, 9, 6], { eu: false, taxIdLabel: 'Tax ID (USCC)', docTitle: { registered: 'Invoice', unregistered: 'Invoice' } }),
+  HK: noTax('HK', 'Hong Kong', '🇭🇰', 'HKD', 'en-HK', 'BR No.', { fyStartMonth: 4 }),
+  TR: { ...vat('TR', 'Türkiye', '🇹🇷', 'TRY', 'tr-TR', [20, 10, 1], { eu: false, taxIdLabel: 'Tax No. (VKN)', docTitle: { registered: 'Invoice', unregistered: 'Invoice' } }),
+    taxName: 'KDV', presets: [single('KDV', 20), single('KDV', 10), single('KDV', 1), zero('KDV')] },
+  IL: vat('IL', 'Israel', '🇮🇱', 'ILS', 'he-IL', [18], { eu: false, taxIdLabel: 'Osek / Company No.', docTitle: { registered: 'Tax Invoice', unregistered: 'Invoice' } }),
+  QA: noTax('QA', 'Qatar', '🇶🇦', 'QAR', 'en-QA', 'CR No.'),
+  KW: noTax('KW', 'Kuwait', '🇰🇼', 'KWD', 'en-KW', 'CR No.', { fyStartMonth: 4 }),
+  TZ: vat('TZ', 'Tanzania', '🇹🇿', 'TZS', 'en-TZ', [18], { eu: false, taxIdLabel: 'TIN / VRN', fyStartMonth: 7, docTitle: { registered: 'Tax Invoice', unregistered: 'Invoice' } }),
+  UG: vat('UG', 'Uganda', '🇺🇬', 'UGX', 'en-UG', [18], { eu: false, taxIdLabel: 'TIN', fyStartMonth: 7, docTitle: { registered: 'Tax Invoice', unregistered: 'Invoice' } }),
+  MA: vat('MA', 'Morocco', '🇲🇦', 'MAD', 'fr-MA', [20, 14, 10, 7], { eu: false, taxIdLabel: 'ICE / IF', docTitle: { registered: 'Invoice', unregistered: 'Invoice' } }),
+  AR: { ...vat('AR', 'Argentina', '🇦🇷', 'ARS', 'es-AR', [], { eu: false, taxIdLabel: 'CUIT', docTitle: { registered: 'Invoice', unregistered: 'Invoice' } }),
+    taxName: 'IVA', presets: [single('IVA', 21), single('IVA', 10.5), zero('IVA')] },
+  CL: { ...vat('CL', 'Chile', '🇨🇱', 'CLP', 'es-CL', [], { eu: false, taxIdLabel: 'RUT', docTitle: { registered: 'Invoice', unregistered: 'Invoice' } }),
+    taxName: 'IVA', presets: [single('IVA', 19), zero('IVA')] },
+  CO: { ...vat('CO', 'Colombia', '🇨🇴', 'COP', 'es-CO', [], { eu: false, taxIdLabel: 'NIT', docTitle: { registered: 'Invoice', unregistered: 'Invoice' } }),
+    taxName: 'IVA', presets: [single('IVA', 19), single('IVA', 5), zero('IVA')] },
+  PE: { ...vat('PE', 'Peru', '🇵🇪', 'PEN', 'es-PE', [], { eu: false, taxIdLabel: 'RUC', docTitle: { registered: 'Invoice', unregistered: 'Invoice' } }),
+    taxName: 'IGV', presets: [single('IGV', 18), zero('IGV')] },
+  IS: vat('IS', 'Iceland', '🇮🇸', 'ISK', 'is-IS', [24, 11], { eu: false, taxIdLabel: 'VSK No.' }),
   OTHER: {
     code: 'OTHER', name: 'Other country', flag: '🌍', currency: 'USD', locale: 'en-US', fyStartMonth: 1,
     taxName: 'Tax', taxIdLabel: 'Tax ID', presets: [single('Tax', 10), zero('tax')],
@@ -152,7 +184,7 @@ export function getCountry(code) { return COUNTRIES[code] || COUNTRIES.OTHER; }
 export const CURRENCIES = ['INR', 'USD', 'EUR', 'GBP', 'AED', 'SAR', 'AUD', 'CAD', 'NZD', 'SGD', 'JPY', 'CNY', 'CHF', 'SEK',
   'NOK', 'DKK', 'PLN', 'CZK', 'HUF', 'RON', 'ZAR', 'NGN', 'KES', 'EGP', 'BDT', 'PKR', 'NPR', 'LKR', 'MYR', 'PHP', 'IDR',
   'THB', 'VND', 'MXN', 'BRL', 'HKD', 'KRW', 'TRY', 'BHD', 'OMR', 'QAR', 'KWD', 'ILS', 'ARS', 'CLP', 'COP', 'PEN', 'GHS',
-  'MAD', 'TWD'];
+  'MAD', 'TWD', 'TZS', 'UGX', 'ISK'];
 
 export const UNITS = ['pcs', 'nos', 'kg', 'g', 'l', 'ml', 'm', 'cm', 'ft', 'sq ft', 'box', 'pack', 'dozen', 'set', 'pair',
   'hrs', 'days', 'months', 'service', 'job'];
@@ -188,6 +220,23 @@ const E_INVOICE = {
   KE: 'Kenya requires eTIMS invoices.',
   ID: 'Indonesia requires e-Faktur (Coretax) tax invoices from PKP sellers.',
   MY: 'Malaysia requires MyInvois e-invoices for businesses above RM1 million turnover.',
+  RO: 'Romania requires e-invoices through RO e-Factura (ANAF) for B2B sales, and B2C sales must also be reported there within 5 days. Use this bill as the customer copy.',
+  DE: 'Germany: from 1 Jan 2027 businesses with prior-year turnover above €800,000 must issue structured e-invoices (XRechnung / ZUGFeRD) for domestic B2B sales, and all businesses from 1 Jan 2028. Until then a PDF is allowed with the customer’s consent. B2C sales are not affected.',
+  ES: 'Spain is introducing VeriFactu (certified invoicing software that reports to the tax agency) from 2027. Check whether your business must use certified software.',
+  GR: 'Greece requires invoices to be reported to AADE myDATA, and B2B e-invoicing is being phased in. Check your obligations with your accountant.',
+  AE: 'The UAE is phasing in mandatory e-invoicing through accredited providers (from 2026–2027, larger businesses first).',
+  KR: 'Korean corporations (and individuals above the turnover threshold) must issue electronic tax invoices via the NTS (Hometax).',
+  TW: 'Taiwan requires Government Uniform Invoices (e-GUI) issued through the Ministry of Finance platform.',
+  CN: 'China requires official fapiao (e-fapiao) issued through the tax system. Use this bill as a quotation or customer copy.',
+  TR: 'Türkiye requires e-Fatura / e-Arşiv invoices for most businesses through the GİB system.',
+  IL: 'Israel requires an allocation number from the Tax Authority on B2B tax invoices above the threshold (Israel Invoice model).',
+  TZ: 'Tanzania requires fiscal receipts/invoices from a TRA EFD or VFD.',
+  UG: 'Uganda requires e-invoices / e-receipts through URA EFRIS for VAT-registered businesses.',
+  AR: 'Argentina requires electronic invoices authorised by ARCA (formerly AFIP).',
+  CL: 'Chile requires electronic tax documents (DTE) through the SII.',
+  CO: 'Colombia requires electronic invoices validated by the DIAN.',
+  PE: 'Peru requires electronic invoices (CPE) through SUNAT.',
+  MA: 'Morocco is phasing in mandatory e-invoicing through the DGI.',
   IN: 'Businesses with turnover above ₹5 crore must generate an e-invoice (IRN) on the government IRP for B2B sales. Enter the IRN on the bill after generating it.',
 };
 for (const [k, v] of Object.entries(EXEMPT_NOTES)) if (COUNTRIES[k]) COUNTRIES[k].exemptNote = v;

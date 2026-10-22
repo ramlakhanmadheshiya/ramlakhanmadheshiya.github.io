@@ -4,33 +4,39 @@ import { db } from '../db.js';
 import { state, list, DOC_TYPES, payStatus, docTotals } from '../store.js';
 import { fmtMoney, num } from '../lib/money.js';
 import { fmtDate, periodRange, todayISO } from '../lib/dates.js';
-import { paymentDialog, PAY_MODES } from '../payui.js';
+import { paymentDialog, payModes } from '../payui.js';
+import { getCountry } from '../tax/countries.js';
+import { validateTaxId } from '../lib/validators.js';
 
 const CATS = ['Rent', 'Salaries', 'Purchases / stock', 'Utilities', 'Transport', 'Marketing', 'Repairs', 'Office supplies', 'Bank charges', 'Taxes & fees', 'Other'];
 const ui = { tab: 'in', period: 'month' };
 
 function expenseDialog(e = null) {
   const b = state.business;
-  const x = e || { date: todayISO(), category: 'Purchases / stock', vendor: '', amount: '', tax: '', mode: 'cash', note: '', reference: '' };
+  const c = getCountry(b.country);
+  const x = e || { date: todayISO(), category: 'Purchases / stock', vendor: '', supplierTaxId: '', amount: '', tax: '', mode: 'cash', note: '', reference: '' };
   const m = modal({
     title: e ? 'Edit expense' : 'New expense',
     body: `<div class="form-grid">
       <div class="field"><label>Date</label><input class="input" type="date" name="date" value="${esc(x.date)}"></div>
       <div class="field"><label>Category</label><select class="input" name="category">${CATS.map((c) => `<option ${c === x.category ? 'selected' : ''}>${c}</option>`).join('')}</select></div>
-      <div class="field span2"><label>Paid to</label><input class="input" name="vendor" value="${esc(x.vendor)}" placeholder="Vendor / supplier"></div>
+      <div class="field"><label>Paid to</label><input class="input" name="vendor" value="${esc(x.vendor)}" placeholder="Vendor / supplier"></div>
+      ${c.noTax ? '<input type="hidden" name="supplierTaxId" value="">' : `<div class="field"><label>Supplier’s ${esc(c.taxIdLabel)}</label><input class="input" name="supplierTaxId" value="${esc(x.supplierTaxId || '')}" autocapitalize="characters" placeholder="Needed to claim input ${esc(c.taxName)}"></div>`}
       <div class="field"><label>Total amount (${esc(b.currency)})</label><input class="input" type="number" step="any" name="amount" value="${esc(x.amount)}"></div>
       <div class="field"><label>Tax included (input tax)</label><input class="input" type="number" step="any" name="tax" value="${esc(x.tax)}" placeholder="0"></div>
-      <div class="field"><label>Mode</label><select class="input" name="mode">${PAY_MODES.map((p) => `<option ${p === x.mode ? 'selected' : ''}>${p}</option>`).join('')}</select></div>
-      <div class="field"><label>Bill / reference no.</label><input class="input" name="reference" value="${esc(x.reference)}"></div>
+      <div class="field"><label>Mode</label><select class="input" name="mode">${payModes(x.mode).map((p) => `<option ${p === x.mode ? 'selected' : ''}>${p}</option>`).join('')}</select></div>
+      <div class="field"><label>Supplier invoice no.</label><input class="input" name="reference" value="${esc(x.reference)}"></div>
       <div class="field span2"><label>Note</label><input class="input" name="note" value="${esc(x.note)}"></div></div>`,
     foot: `${e ? `<button class="btn danger" data-del style="margin-right:auto">Delete</button>` : ''}<button class="btn" data-close>Cancel</button><button class="btn primary" data-ok>Save</button>`,
   });
   m.el.querySelector('[data-ok]').addEventListener('click', async () => {
     const g = (n) => m.el.querySelector(`[name=${n}]`).value;
-    const rec = { ...x, businessId: b.id, date: g('date'), category: g('category'), vendor: g('vendor').trim(), amount: num(g('amount')), tax: num(g('tax')), mode: g('mode'), reference: g('reference').trim(), note: g('note').trim() };
+    const rec = { ...x, businessId: b.id, date: g('date'), category: g('category'), vendor: g('vendor').trim(), supplierTaxId: g('supplierTaxId').trim().toUpperCase(), amount: num(g('amount')), tax: num(g('tax')), mode: g('mode'), reference: g('reference').trim(), note: g('note').trim() };
     if (!(rec.amount > 0)) { toast('Enter an amount', 'err'); return; }
     if (!rec.date) { toast('Enter the expense date', 'err'); return; }
     if (rec.tax < 0 || rec.tax > rec.amount) { toast('Tax included must be between 0 and the total amount', 'err'); return; }
+    if (rec.supplierTaxId && c.gst && !validateTaxId(c.code, rec.supplierTaxId).ok) { toast(`Supplier GSTIN: ${validateTaxId(c.code, rec.supplierTaxId).msg}`, 'err'); return; }
+    if (rec.tax > 0 && c.gst && (!rec.supplierTaxId || !rec.reference)) toast('Tip: add the supplier’s GSTIN and invoice number — you need them to claim input tax credit.', 'info');
     await db.put('expenses', rec); toast('Expense saved'); m.close(rec);
   });
   m.el.querySelector('[data-del]')?.addEventListener('click', async () => {

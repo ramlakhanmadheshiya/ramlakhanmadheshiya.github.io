@@ -2,7 +2,7 @@ import { icon } from '../lib/icons.js';
 import { esc, toast, imageToDataURL, safeImg } from '../ui.js';
 import { COUNTRY_LIST, getCountry, CURRENCIES } from '../tax/countries.js';
 import { validateTaxId } from '../lib/validators.js';
-import { taxIdRule, businessTaxError, CA_PROVINCES } from '../tax/rules.js';
+import { taxIdRule, businessTaxError, CA_PROVINCES, normTaxId } from '../tax/rules.js';
 import { newBusiness, state } from '../store.js';
 import { rerenderShell } from '../app.js';
 import { db } from '../db.js';
@@ -78,12 +78,15 @@ export async function render(root, { adding } = {}) {
             <option value="composition" ${biz.taxScheme === 'composition' ? 'selected' : ''}>Composition scheme (Bill of Supply)</option>
             <option value="unregistered" ${biz.taxScheme === 'unregistered' ? 'selected' : ''}>Not registered for GST</option></select></div>
           <div class="field"><label>State *</label><select class="input" name="region"><option value="">Select state</option>${c.regions.filter((r) => r.code !== '96').map((r) => `<option value="${r.code}" ${biz.region === r.code ? 'selected' : ''}>${esc(r.name)} (${r.code})</option>`).join('')}</select></div>`
+          : c.noTax ? `<input type="hidden" name="taxScheme" value="unregistered">
+          <div class="field"><label>Currency</label><select class="input" name="currency">${[...new Set([biz.currency, ...CURRENCIES])].map((x) => `<option ${x === biz.currency ? 'selected' : ''}>${x}</option>`).join('')}</select></div>`
           : `<div class="field"><label>${c.code === 'US' ? 'Do you collect sales tax?' : `Registered for ${esc(c.taxName)}?`} *</label><select class="input" name="taxScheme" data-redraw><option value="regular" ${biz.taxScheme === 'regular' ? 'selected' : ''}>Yes — charge ${esc(c.taxName)}</option><option value="unregistered" ${biz.taxScheme === 'unregistered' ? 'selected' : ''}>No — don’t charge tax</option></select></div>
           <div class="field"><label>Currency</label><select class="input" name="currency">${[...new Set([biz.currency, ...CURRENCIES])].map((x) => `<option ${x === biz.currency ? 'selected' : ''}>${x}</option>`).join('')}</select></div>`}
           ${c.code === 'CA' ? `<div class="field span2"><label>Province / territory *</label><select class="input" name="region"><option value="">Select province</option>${CA_PROVINCES.map(([code, n]) => `<option value="${code}" ${biz.region === code ? 'selected' : ''}>${esc(n)}</option>`).join('')}</select><div class="help">Sets your GST/HST/PST rates.</div></div>` : ''}
           ${c.code === 'US' && biz.taxScheme !== 'unregistered' ? `<div class="field span2"><label>Your sales tax rate (state + local) % *</label><input class="input" name="salesTaxRate" type="number" step="any" min="0" max="20" value="${esc(biz.salesTaxRate ?? '')}" placeholder="e.g. 8.875"><div class="help">Rates differ by state, county and city. You can add more rates later in Settings → Taxes.</div></div>` : ''}
           ${rule.show ? `<div class="field span2"><label>${esc(c.taxIdLabel)}${rule.required ? ' *' : ''}</label><input class="input ${v.ok ? '' : 'invalid'}" name="taxId" value="${esc(biz.taxId)}" placeholder="${c.code === 'IN' ? '22AAAAA0000A1Z5' : rule.required ? '' : 'Optional'}" autocapitalize="characters">
             <div class="help ${v.ok ? '' : 'err'}" data-taxhelp>${v.ok ? esc(rule.help) : esc(v.msg)}</div></div>`
+          : c.noTax ? `<div class="field span2"><div class="notice">${icon('sparkles', 18)}<div>${esc(c.name)} has no VAT, GST or sales tax, so your bills are titled <b>Invoice</b> and show no tax.</div></div></div>`
           : `<div class="field span2"><div class="notice">${icon('sparkles', 18)}<div>Your bills will be titled <b>${esc(c.docTitle.unregistered)}</b> and won’t charge ${esc(c.taxName)}.${c.exemptNote ? ` They will state: “${esc(c.exemptNote)}”.` : ''} You can register later in Business profile.</div></div></div>`}
           ${c.code === 'DE' && biz.taxScheme === 'unregistered' ? `<div class="field span2"><label>Steuernummer *</label><input class="input" name="secondaryId" value="${esc(biz.secondaryId || '')}" placeholder="e.g. 12/345/67890"></div>` : ''}
           <div class="field span2"><label>Address</label><textarea class="input" name="address" rows="2" placeholder="Street, area">${esc(biz.address)}</textarea></div>
@@ -150,7 +153,7 @@ export async function render(root, { adding } = {}) {
       readForm();
       if (!biz.name) { toast('Please enter your business name', 'err'); root.querySelector('[name=name]').focus(); return; }
       const c = getCountry(biz.country);
-      biz.taxId = taxIdRule(c.code, biz.taxScheme).show ? (biz.taxId || '').toUpperCase().replace(/\s/g, '') : '';
+      biz.taxId = taxIdRule(c.code, biz.taxScheme).show ? normTaxId(c.code, biz.taxId) : '';
       if (c.code === 'CA' && !biz.region) { toast('Please choose your province', 'err'); return; }
       const err = businessTaxError(biz);
       if (err) { toast(err, 'err'); root.querySelector(c.gst && !biz.region ? '[name=region]' : '[name=taxId]')?.focus(); return; }

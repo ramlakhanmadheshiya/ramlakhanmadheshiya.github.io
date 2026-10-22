@@ -45,6 +45,10 @@ const UNITS = {
   BDT: ['Taka', 'Poisha'], MYR: ['Ringgit', 'Sen'], PHP: ['Pesos', 'Centavos'], MXN: ['Pesos', 'Centavos'],
   BRL: ['Reais', 'Centavos'], IDR: ['Rupiah', ''], THB: ['Baht', 'Satang'], SEK: ['Kronor', 'Öre'],
   NOK: ['Kroner', 'Øre'], DKK: ['Kroner', 'Øre'], PLN: ['Zloty', 'Groszy'],
+  CZK: ['Koruna', 'Haléřů'], HUF: ['Forint', 'Fillér'], RON: ['Lei', 'Bani'], EGP: ['Egyptian Pounds', 'Piastres'], VND: ['Dong', ''],
+  KRW: ['Won', ''], TRY: ['Turkish Lira', 'Kuruş'], TWD: ['New Taiwan Dollars', 'Cents'], ILS: ['Shekels', 'Agorot'], TZS: ['Tanzanian Shillings', 'Cents'],
+  UGX: ['Ugandan Shillings', ''], MAD: ['Dirhams', 'Centimes'], ARS: ['Pesos', 'Centavos'], CLP: ['Pesos', ''], COP: ['Pesos', 'Centavos'],
+  PEN: ['Soles', 'Céntimos'], ISK: ['Krónur', ''], GHS: ['Cedis', 'Pesewas'],
 };
 
 export function amountInWords(amount, currency = 'USD', system = 'intl') {

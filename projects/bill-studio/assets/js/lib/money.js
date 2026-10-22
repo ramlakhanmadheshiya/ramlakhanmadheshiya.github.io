@@ -12,7 +12,9 @@ export function currencyDecimals(currency) {
 export function round(value, dp = 2) {
   const f = 10 ** dp;
   const n = Number(value) || 0;
-  return Math.round((n + Math.sign(n) * Number.EPSILON) * f) / f;
+  // Half-up on the decimal value the user sees: 277.775 → 277.78, 1.005 → 1.01 (binary floats store
+  // these just below the half, so trim the float noise to 15 significant digits before rounding).
+  return Math.sign(n) * Math.round(Number((Math.abs(n) * f).toPrecision(15))) / f;
 }
 
 const fmtCache = new Map();
@@ -42,6 +44,12 @@ export function fmtNumber(value, locale = 'en-US', dp = 2) {
 export function fmtPlain(value, currency = 'USD', locale = 'en-US') {
   const d = currencyDecimals(currency);
   return new Intl.NumberFormat(locale, { minimumFractionDigits: d, maximumFractionDigits: d }).format(round(value, d));
+}
+
+// Unit price: never hide decimals the price really has (¥1,234.56 must not print as ¥1,235), up to 4 places.
+export function fmtRate(value, currency = 'USD', locale = 'en-US') {
+  const d = currencyDecimals(currency);
+  return new Intl.NumberFormat(locale, { minimumFractionDigits: d, maximumFractionDigits: Math.max(d, 4) }).format(Number(value) || 0);
 }
 
 export function currencySymbol(currency, locale = 'en-US') {

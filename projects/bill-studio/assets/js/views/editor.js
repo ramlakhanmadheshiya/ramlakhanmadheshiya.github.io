@@ -11,6 +11,10 @@ import { businessTaxError } from '../tax/rules.js';
 import { buildContext, mountPage } from '../render.js';
 import { allTemplates, templateFor } from '../tplstore.js';
 import { setTitle } from '../app.js';
+import { payModes } from '../payui.js';
+
+// Simplified-invoice limits (in the local currency) below which the buyer's address may be left out.
+const SIMPLIFIED_LIMIT = { GB: 250, DE: 250, AT: 400, SE: 4000, DK: 3000, PL: 450, CZ: 10000, HU: 40000, RO: 500 };
 
 const COPY_LABELS = ['', 'Original for Recipient', 'Duplicate for Transporter', 'Triplicate for Supplier'];
 const CHALLAN_LABELS = ['', 'Original for Consignee', 'Duplicate for Transporter', 'Triplicate for Consignor'];
@@ -279,6 +283,7 @@ export async function render(root, params) {
       </div>
       <div class="mt" data-charges>${(doc.charges || []).map((ch, i) => `
         <div class="flex mt-s" data-charge="${i}"><input class="input" data-k="charges.${i}.label" value="${esc(ch.label)}" placeholder="e.g. Shipping" style="flex:2">
+        ${c.showHsn ? `<input class="input" data-k="charges.${i}.hsn" value="${esc(ch.hsn || '')}" placeholder="SAC" aria-label="SAC code" inputmode="numeric" style="flex:.8">` : ''}
         <input class="input" type="number" step="any" data-k="charges.${i}.amount" value="${esc(ch.amount)}" placeholder="Amount" style="flex:1">
         ${registered ? `<select class="input" data-k="charges.${i}.taxId" style="flex:1.4">${taxOptions(ch.taxId)}</select>` : ''}
         <button class="btn icon sm danger" type="button" data-del-charge="${i}" aria-label="Remove charge">${icon('trash-2', 15)}</button></div>`).join('')}
@@ -293,7 +298,9 @@ export async function render(root, params) {
         <div class="field span2"><label>Notes (shown on the bill)</label><textarea class="input" rows="2" data-k="notes" placeholder="Thank you for your business!">${esc(doc.notes)}</textarea></div>
         <div class="field span2"><label>Terms & conditions</label><textarea class="input" rows="3" data-k="terms">${esc(doc.terms)}</textarea></div>
       </div>`;
-    $('[data-add-charge]').addEventListener('click', () => { doc.charges = doc.charges || []; doc.charges.push({ label: 'Shipping', amount: 0, taxId: b.defaultTaxId }); drawExtras(); changed(); });
+    $('[data-add-charge]').addEventListener('click', () => { doc.charges = doc.charges || []; doc.charges.push({ label: 'Shipping', amount: 0, hsn: c.showHsn ? '9965' : '',
+      // Most US states don't tax separately stated delivery charges — start tax-free; the owner can change it.
+      taxId: c.code === 'US' ? (b.taxes.find((x) => x.id === 'exempt')?.id || b.defaultTaxId) : b.defaultTaxId }); drawExtras(); changed(); });
     root.querySelectorAll('[data-del-charge]').forEach((x) => x.addEventListener('click', () => { doc.charges.splice(Number(x.dataset.delCharge), 1); drawExtras(); changed(); }));
     root.querySelectorAll('[data-flag]').forEach((x) => x.addEventListener('change', () => { doc[x.dataset.flag] = x.checked; if (x.dataset.flag === 'taxExempt') drawExtras(); changed(); }));
   }
@@ -305,7 +312,7 @@ export async function render(root, params) {
     sec.innerHTML = `<div class="card-head"><h3>Payment</h3><span class="switch"><input type="checkbox" data-paid-on ${paidNow.on ? 'checked' : ''} aria-label="Payment received"><span></span></span></div>
       <p class="small muted" style="margin:-6px 0 10px">${paidNow.on ? 'Record the money you received with this bill.' : 'Turn on if the customer paid now (fully or partly).'}</p>
       ${paidNow.on ? `<div class="form-grid"><div class="field"><label>Amount received</label><input class="input" type="number" step="any" data-paid-amt value="${paidNow.auto ? '' : esc(paidNow.amount)}" placeholder="Full amount"></div>
-        <div class="field"><label>Mode</label><select class="input" data-paid-mode>${['cash', 'upi', 'card', 'bank transfer', 'cheque', 'wallet', 'other'].map((x) => `<option ${x === paidNow.mode ? 'selected' : ''}>${x}</option>`).join('')}</select></div></div>` : ''}`;
+        <div class="field"><label>Mode</label><select class="input" data-paid-mode>${payModes(paidNow.mode).map((x) => `<option ${x === paidNow.mode ? 'selected' : ''}>${x}</option>`).join('')}</select></div></div>` : ''}`;
     $('[data-paid-on]').addEventListener('change', (e) => { paidNow.on = e.target.checked; drawPayment(); });
     $('[data-paid-amt]')?.addEventListener('input', (e) => { paidNow.auto = e.target.value === ''; paidNow.amount = num(e.target.value); });
     $('[data-paid-mode]')?.addEventListener('change', (e) => (paidNow.mode = e.target.value));
@@ -448,7 +455,7 @@ export async function render(root, params) {
     if (c.gst && b.taxScheme === 'regular' && !cu.taxId && ['invoice', 'receipt'].includes(doc.type) && total >= 50000 && !String(cu.address || '').trim())
       return 'For sales of ₹50,000 or more to an unregistered buyer, GST rules require the buyer’s name, address and state — please add the address.';
     if (doc.taxExempt && !String(doc.exemptReason || '').trim() && b.taxScheme !== 'unregistered') return 'Give the legal reason for the tax exemption (it must be printed on the bill).';
-    if ((c.eu || c.code === 'GB') && b.taxScheme !== 'unregistered' && doc.type === 'invoice' && total > (c.code === 'GB' ? 250 : 100) && !String(cu.address || '').trim())
+    if (needsBuyerAddress(total) && doc.type === 'invoice')
       return 'A full VAT invoice must show the customer’s address. Please add it.';
     if (ty.refInvoice && !doc.refDocId && String(doc.refNumber || '').trim() && !doc.refDate) return 'Please enter the date of the original invoice.';
     if (doc.irn && !/^[0-9a-f]{64}$/i.test(doc.irn.trim())) return 'The IRN should be the 64-character code from the e-invoice portal.';
@@ -460,6 +467,8 @@ export async function render(root, params) {
   function warnDoc() {
     const cu = doc.customer || {};
     const calc = calculate(doc, b);
+    if (['quotation', 'proforma'].includes(doc.type) && needsBuyerAddress(calc.total))
+      return 'This customer has no address. That’s fine for a quotation, but the invoice you convert it into will need the customer’s address. Save anyway?';
     if (c.gst && cu.taxId && validateGSTIN(cu.taxId).ok && cu.taxId.slice(0, 2) !== doc.placeOfSupply && doc.placeOfSupply !== '96')
       return `The customer’s GSTIN is registered in state ${cu.taxId.slice(0, 2)}, but the place of supply is ${doc.placeOfSupply}. That is fine when goods are delivered to another state — otherwise correct the place of supply.`;
     const ownPrefix = /^[A-Z]{2}/.test(String(cu.taxId || '').toUpperCase()) ? String(cu.taxId).toUpperCase().slice(0, 2) === (c.code === 'GR' ? 'EL' : c.code) : true;
@@ -467,6 +476,12 @@ export async function render(root, params) {
     if (calc.total === 0 && TAX_DOCS.includes(doc.type)) return 'This bill’s total is 0. Save it anyway?';
     if (c.code === 'AU' && b.taxScheme !== 'unregistered' && calc.total >= 1000 && !cu.taxId && !cu.address) return 'Australian tax invoices of A$1,000 or more must show the buyer’s identity or ABN. Add the customer’s ABN or address.';
     return '';
+  }
+
+  // EU/UK: above the simplified-invoice limit a full VAT invoice must show the buyer's address.
+  function needsBuyerAddress(total) {
+    if (!(c.eu || c.code === 'GB') || b.taxScheme === 'unregistered' || String(doc.customer?.address || '').trim()) return false;
+    return total > (SIMPLIFIED_LIMIT[c.code] ?? 100);
   }
 
   let saving = false;

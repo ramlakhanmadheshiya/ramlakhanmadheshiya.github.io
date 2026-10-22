@@ -8,6 +8,7 @@ import { whatsappLink, reminderText } from '../lib/share.js';
 import { businessTaxError } from '../tax/rules.js';
 import { getAuth } from '../auth.js';
 import { getCountry } from '../tax/countries.js';
+import { db } from '../db.js';
 
 export async function render(root) {
   const b = state.business;
@@ -45,6 +46,12 @@ export async function render(root) {
   const einv = country.eInvoice;
   let einvSeen = false;
   try { einvSeen = localStorage.getItem('bs-einv-' + b.id) === '1'; } catch { /* private mode */ }
+  // Everything lives in this browser only — nudge the owner to keep a backup (weekly, snoozable for 3 days).
+  const lastBackup = await db.setting('lastBackup');
+  const backupAge = lastBackup ? (Date.now() - new Date(lastBackup).getTime()) / 86400000 : Infinity;
+  let snoozed = false;
+  try { snoozed = Date.now() < Number(localStorage.getItem('bs-backup-snooze') || 0); } catch { /* private mode */ }
+  const needBackup = docs.length > 0 && backupAge >= 7 && !snoozed;
   const hour = new Date().getHours();
   const greet = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
 
@@ -53,6 +60,7 @@ export async function render(root) {
       <div class="actions"><a class="btn" href="#/bills/new/receipt">${icon('receipt', 16)} Quick sale</a><a class="btn" href="#/bills/new/quotation">${icon('file-text', 16)} Quotation</a><a class="btn primary" href="#/bills/new/invoice">${icon('plus', 16)} New invoice</a></div></div>
 
     ${auth.isDefault ? `<div class="notice warn mb">${icon('lock', 18)}<div><b>Change your sign-in.</b> You’re still using the default User ID and password. <a href="#/settings">Change it in Settings →</a></div></div>` : ''}
+    ${needBackup ? `<div class="notice warn mb" data-bk>${icon('download', 18)}<div style="flex:1"><b>${lastBackup ? `Last backup ${Math.floor(backupAge)} days ago.` : 'You have never backed up.'}</b> Your bills are stored only in this browser — clearing browser data, or Safari after 7 days without a visit, can erase them. <a href="#/settings">Back up now →</a></div><button class="btn sm ghost" data-bk-later>Later</button></div>` : ''}
     ${taxErr ? `<div class="notice warn mb">${icon('triangle-alert', 18)}<div><b>Finish your tax setup before issuing bills.</b> ${esc(taxErr)} <a href="#/business">Open Business profile →</a></div></div>` : ''}
     ${einv && !einvSeen ? `<div class="notice mb" data-einv>${icon('sparkles', 18)}<div style="flex:1"><b>E-invoicing in ${esc(country.name)}:</b> ${esc(einv)}</div><button class="btn sm ghost" data-einv-ok>Got it</button></div>` : ''}
     <div class="grid c4">
@@ -89,5 +97,6 @@ export async function render(root) {
     </div>
   </div>`;
   root.querySelectorAll('[data-href]').forEach((tr) => tr.addEventListener('click', () => (location.hash = tr.dataset.href)));
+  root.querySelector('[data-bk-later]')?.addEventListener('click', () => { try { localStorage.setItem('bs-backup-snooze', String(Date.now() + 3 * 86400000)); } catch { /* ignore */ } root.querySelector('[data-bk]')?.remove(); });
   root.querySelector('[data-einv-ok]')?.addEventListener('click', () => { try { localStorage.setItem('bs-einv-' + b.id, '1'); } catch { /* ignore */ } root.querySelector('[data-einv]')?.remove(); });
 }
