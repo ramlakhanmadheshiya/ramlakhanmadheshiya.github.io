@@ -217,6 +217,9 @@ async function boot() {
   await route();
   if (navigator.storage?.persist) navigator.storage.persist().catch(() => {});
   if ('serviceWorker' in navigator && location.protocol !== 'file:') {
+    // Reload only when the owner pressed "Update". The very first install also fires controllerchange
+    // (clients.claim) and must not reload — that would wipe a new user's half-filled setup.
+    let updating = false;
     navigator.serviceWorker.register('sw.js').then((reg) => {
       const offer = (w) => {
         if (!w || document.querySelector('.update-bar')) return;
@@ -224,7 +227,7 @@ async function boot() {
         bar.className = 'toast update-bar';
         bar.style.cssText = 'position:fixed;left:50%;bottom:28px;transform:translateX(-50%);z-index:300;pointer-events:auto';
         bar.innerHTML = `<span>A new version of Bill Studio is ready.</span><button class="btn sm primary" style="margin-left:8px">Update</button>`;
-        bar.querySelector('button').addEventListener('click', () => w.postMessage('skipWaiting'));
+        bar.querySelector('button').addEventListener('click', () => { updating = true; w.postMessage('skipWaiting'); });
         document.body.append(bar);
       };
       if (reg.waiting && navigator.serviceWorker.controller) offer(reg.waiting);
@@ -233,7 +236,7 @@ async function boot() {
         w?.addEventListener('statechange', () => { if (w.state === 'installed' && navigator.serviceWorker.controller) offer(w); });
       });
       let reloaded = false;
-      navigator.serviceWorker.addEventListener('controllerchange', () => { if (!reloaded) { reloaded = true; location.reload(); } });
+      navigator.serviceWorker.addEventListener('controllerchange', () => { if (updating && !reloaded) { reloaded = true; location.reload(); } });
     }).catch(() => {});
   }
 }
