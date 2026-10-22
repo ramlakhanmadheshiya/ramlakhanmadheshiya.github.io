@@ -6,6 +6,7 @@ import { fmtDate, todayISO, toISO, parseISO, periodRange } from '../lib/dates.js
 import { barChart } from '../lib/chart.js';
 import { whatsappLink, reminderText } from '../lib/share.js';
 import { businessTaxError } from '../tax/rules.js';
+import { getAuth } from '../auth.js';
 import { getCountry } from '../tax/countries.js';
 
 export async function render(root) {
@@ -40,6 +41,7 @@ export async function render(root) {
 
   const country = getCountry(b.country);
   const taxErr = businessTaxError(b);
+  const auth = await getAuth();
   const einv = country.eInvoice;
   let einvSeen = false;
   try { einvSeen = localStorage.getItem('bs-einv-' + b.id) === '1'; } catch { /* private mode */ }
@@ -50,6 +52,7 @@ export async function render(root) {
     <div class="large-title"><div><p style="margin:0 0 2px">${esc(fmtDate(todayISO(), b.locale, 'full'))}</p><h1>${greet}.</h1></div>
       <div class="actions"><a class="btn" href="#/bills/new/receipt">${icon('receipt', 16)} Quick sale</a><a class="btn" href="#/bills/new/quotation">${icon('file-text', 16)} Quotation</a><a class="btn primary" href="#/bills/new/invoice">${icon('plus', 16)} New invoice</a></div></div>
 
+    ${auth.isDefault ? `<div class="notice warn mb">${icon('lock', 18)}<div><b>Change your sign-in.</b> You’re still using the default User ID and password. <a href="#/settings">Change it in Settings →</a></div></div>` : ''}
     ${taxErr ? `<div class="notice warn mb">${icon('triangle-alert', 18)}<div><b>Finish your tax setup before issuing bills.</b> ${esc(taxErr)} <a href="#/business">Open Business profile →</a></div></div>` : ''}
     ${einv && !einvSeen ? `<div class="notice mb" data-einv>${icon('sparkles', 18)}<div style="flex:1"><b>E-invoicing in ${esc(country.name)}:</b> ${esc(einv)}</div><button class="btn sm ghost" data-einv-ok>Got it</button></div>` : ''}
     <div class="grid c4">

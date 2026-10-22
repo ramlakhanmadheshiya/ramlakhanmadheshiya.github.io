@@ -7,7 +7,10 @@ import { amountInWords } from './lib/words.js';
 import { qrSvg, paymentQR } from './lib/qr.js';
 import { getCountry, IN_STATES } from './tax/countries.js';
 import { calculate } from './tax/engine.js';
-import { docTitle, DOC_TYPES, blankItem, bizFor } from './store.js';
+import { docTitle, DOC_TYPES, blankItem, bizFor, formatNumber } from './store.js';
+
+// Sample buyer tax numbers in each country's own format (only used for design previews).
+const SAMPLE_BUYER_IDS = { IN: '27AAPFU0939F1ZV', GB: 'GB987654321', DE: 'DE987654321', FR: 'FRXX987654321', IT: 'IT09876543210', ES: 'ESB98765432', NL: 'NL987654321B01', AU: '51824753556', AE: '100987654300003', SA: '310987654300003', JP: 'T9876543210123', CA: '987654321RT0001', SG: '201987654K', NZ: '987654321' };
 import { BLOCK_TYPES, FONTS, PAGE } from './templates.js';
 
 const PAPER_CSS = `
@@ -93,8 +96,8 @@ export function sampleContext(business, type = 'invoice') {
   const m = big * inr;
   const otherRegion = c.regions ? (c.regions.find((r) => r.code !== business.region && r.code === '27') || c.regions[0]).code : '';
   const doc = {
-    id: 'sample', type, number: type === 'invoice' ? 'INV/26-27/0042' : 'SAMPLE-0042', date: '2026-10-15', dueDate: '2026-10-30', validUntil: '2026-10-30',
-    customer: { name: 'Acme Studio Pvt. Ltd.', address: '221B Baker Street\nSuite 4, Riverside Park', taxId: c.code === 'IN' ? '27AAPFU0939F1ZV' : 'GB123456789', phone: '+1 555 0100', email: 'accounts@acme.example', region: otherRegion },
+    id: 'sample', type, number: formatNumber(business, type, 42, '2026-10-15'), date: '2026-10-15', dueDate: '2026-10-30', validUntil: '2026-10-30',
+    customer: { name: { IN: 'Acme Studio Pvt. Ltd.', US: 'Acme Studio LLC', DE: 'Acme Studio GmbH', AT: 'Acme Studio GmbH', FR: 'Acme Studio SARL', JP: 'Acme Studio K.K.' }[c.code] || 'Acme Studio Ltd.', address: '221B Baker Street\nSuite 4, Riverside Park', taxId: SAMPLE_BUYER_IDS[c.code] || '', phone: '', email: 'accounts@acme.example', region: otherRegion },
     shipTo: 'Acme Warehouse\nDock 7, Industrial Estate', placeOfSupply: business.region || otherRegion, reference: 'PO-7781',
     items: [
       mk('Brand identity design', 'Logo, colour palette and typography guide', '998391', 1, 'job', 450 * m),
@@ -181,12 +184,12 @@ const R = {
     const x = ctx.business, k = x.bank || {};
     const rows = [['Bank', k.name], ['Account name', k.holder], ['Account no.', k.account], [ctx.country.code === 'IN' ? 'IFSC' : ctx.country.code === 'US' ? 'Routing no.' : ctx.country.code === 'GB' ? 'Sort code' : 'Bank code', k.code],
       ['IBAN', k.iban], ['SWIFT/BIC', k.swift], ['Branch', k.branch], ['UPI', x.upi]].filter((r) => r[1]);
-    if (!rows.length) return ctx.editing || ctx.sample ? `<div class="lbl">Payment details</div><div style="opacity:.5">Add bank / UPI details in Business profile</div>` : '';
+    if (!rows.length) return ctx.editing || ctx.sample ? `<div class="lbl">Payment details</div><div style="opacity:.5">Add your ${ctx.country.code === 'IN' ? 'bank / UPI' : 'bank / payment'} details in Business profile</div>` : '';
     return `<div class="lbl">${esc(b.props.label || 'Payment details')}</div>${rows.map(([k2, v]) => `<div><span style="opacity:.65">${esc(k2)}:</span> <span style="font-weight:500">${esc(v)}</span></div>`).join('')}`;
   },
   qr(b, ctx) {
     const q = b.props.text ? { payload: fillText(b.props.text, ctx), caption: b.props.caption || '' } : paymentQR(ctx.business, ctx.country, ctx.doc, ctx.totals);
-    if (!q) return ctx.editing ? `<div class="ph">QR appears when UPI / IBAN / pay link is set</div>` : '';
+    if (!q) return ctx.editing ? `<div class="ph">${ctx.country.code === 'IN' ? 'QR appears when your UPI ID is set' : ctx.business.currency === 'EUR' ? 'QR appears when IBAN or pay link is set' : 'QR appears when a payment link is set'}</div>` : '';
     return `<div class="qrbox">${qrSvg(q.payload)}</div><div style="margin-top:4px;line-height:1.2">${esc(b.props.caption || q.caption)}</div>`;
   },
   notes(b, ctx) {
@@ -341,9 +344,10 @@ function blockStyle(b, tpl) {
   return css.join(';');
 }
 
-export function renderPage(ctx, tpl, { editing = false } = {}) {
+export function renderPage(ctx, tpl, { editing = false, width } = {}) {
   ensurePaperCss();
   ctx.editing = editing;
+  if (tpl.kind === 'flow') return renderReceipt(ctx, tpl, width || tpl.page?.w || 302);
   const font = FONTS[tpl.font] || FONTS.system;
   const accent = cssSafe(tpl.accent || ctx.business.accent) || '#0071e3';
   const page = tpl.page || PAGE;
@@ -359,8 +363,11 @@ export function renderPage(ctx, tpl, { editing = false } = {}) {
 }
 
 // After mounting a rendered page: push blocks down when growing blocks overflow.
-export function flowLayout(pageEl, tpl) {
-  const page = tpl.page || PAGE;
+// `pageH` (design px) lets the caller paginate for a different paper height.
+export function flowLayout(pageEl, tpl, pageH) {
+  if (tpl.kind === 'flow') { const h = Math.ceil(pageEl.scrollHeight); return pageH ? Math.max(pageH, Math.ceil(h / pageH) * pageH) : h; }
+  const page = { ...(tpl.page || PAGE) };
+  if (pageH) page.h = pageH;
   const blocks = tpl.blocks.filter((b) => !b.hidden).slice().sort((a, b) => a.y - b.y);
   const el = (b) => pageEl.querySelector(`[data-id="${esc(b.id)}"]`);
   const shift = new Map(blocks.map((b) => [b.id, 0]));
@@ -397,14 +404,89 @@ export function flowLayout(pageEl, tpl) {
 export function mountPage(host, ctx, tpl, { width, flow = true } = {}) {
   host.innerHTML = renderPage(ctx, tpl);
   const pageEl = host.querySelector('.bill-page');
-  let H = (tpl.page || PAGE).h;
+  let H = tpl.kind === 'flow' ? pageEl.scrollHeight : (tpl.page || PAGE).h;
   if (flow) H = flowLayout(pageEl, tpl);
   if (width) {
-    const s = width / (tpl.page || PAGE).w;
+    // Receipts are narrow: don't blow them up to the full preview width.
+    const s = tpl.kind === 'flow' ? Math.min(width, 380) / (tpl.page.w || 302) : width / (tpl.page || PAGE).w;
+    if (tpl.kind === 'flow') host.style.margin = '0 auto';
     host.style.width = width + 'px';
     host.style.height = H * s + 'px';
     pageEl.style.transform = `scale(${s})`;
     pageEl.style.transformOrigin = 'top left';
   }
   return pageEl;
+}
+
+// ---------- Compact receipt (flow layout for thermal rolls and small slips) ----------
+export function renderReceipt(ctx, tpl, widthPx) {
+  const { doc, business: x, country: c, totals: t } = ctx;
+  const o = { logo: true, taxSummary: true, qr: true, terms: true, words: true, signature: false, ...(tpl.options || {}) };
+  const cur = t.currency, loc = x.locale;
+  const m = (v) => fmtMoney(v, cur, loc), p = (v) => fmtPlain(v, cur, loc);
+  const mm = widthPx / 3.7795;
+  const base = mm <= 60 ? 9.5 : mm <= 82 ? 10.5 : mm <= 110 ? 11 : 12;
+  const pad = Math.round(widthPx * (mm <= 82 ? 0.035 : 0.06));
+  const font = FONTS[tpl.font] || FONTS.system;
+  const line = '<div style="border-top:1px dashed #000;margin:6px 0"></div>';
+  const showTaxId = x.taxScheme !== 'unregistered' || c.code === 'AU';
+  const addr = [x.address, [x.city, x.postal].filter(Boolean).join(' ')].filter(Boolean).join(', ');
+  const local = c.titleLocal?.[ctx.title];
+  const cu = doc.customer || {};
+  const q = o.qr ? paymentQR(x, c, doc, t) : null;
+  const items = t.lines.map((l, i) => `<div style="margin:3px 0">
+      <div style="font-weight:600">${i + 1}. ${esc(l.name)}${c.reducedMark === l.taxRate ? ' ※' : ''}</div>
+      ${l.hsn && c.showHsn && x.showHsn !== false ? `<div style="opacity:.75">${esc(c.hsnLabel || 'Code')}: ${esc(l.hsn)}</div>` : ''}
+      <div style="display:flex;justify-content:space-between;gap:6px"><span>${fmtNumber(l.qty, loc, 3)} ${esc(l.unit || '')} × ${p(l.rate)}${l.discountAmt ? ` − ${p(l.discountAmt)}` : ''}${l.taxes.length ? ` · ${fmtNumber(l.taxRate, loc)}%` : ''}</span><span style="font-weight:600">${p(l.taxable)}</span></div></div>`).join('');
+  const tl = (k, v, strong) => `<div style="display:flex;justify-content:space-between;gap:6px;${strong ? 'font-weight:800;font-size:1.25em;margin-top:3px' : ''}"><span>${k}</span><span>${v}</span></div>`;
+  const totalsHtml = [
+    tl('Subtotal', m(t.subtotal)),
+    t.extraDiscount ? tl('Discount', '− ' + m(t.extraDiscount)) : '',
+    ...t.charges.map((ch) => tl(esc(ch.label || 'Charges'), m(ch.taxable))),
+    ...t.taxSummary.map((s2) => tl(`${esc(s2.name)} ${fmtNumber(s2.rate, loc, 3)}%`, m(s2.amount))),
+    t.roundOff ? tl('Round off', m(t.roundOff)) : '',
+    tl(esc(tpl.options?.totalLabel || 'Total'), m(t.total), true),
+    !ctx.sample && t.credited > 0 ? tl('Less: credit notes', '− ' + m(t.credited)) : '',
+    !ctx.sample && t.paid > 0 ? tl('Paid', m(t.paid)) + tl('Balance due', m(t.balance)) : '',
+  ].join('');
+  const notes = [
+    t.rcmIndia ? `Tax of ${m(t.tax)} is payable by the recipient under reverse charge.` : '',
+    !c.gst && doc.reverseCharge ? `Reverse charge: the customer accounts for ${esc(c.taxName)}.` : '',
+    doc.taxExempt ? `Tax exempt${doc.exemptReason ? ': ' + esc(doc.exemptReason) : ''}.` : '',
+    x.taxScheme === 'unregistered' && c.exemptNote ? esc(c.exemptNote) : '',
+    c.gst && x.taxScheme === 'composition' ? 'Composition taxable person, not eligible to collect tax on supplies.' : '',
+    c.gst && SUPPLY_NOTES[doc.supplyType] ? SUPPLY_NOTES[doc.supplyType] : '',
+  ].filter(Boolean).map((n) => `<div style="margin-top:3px">${n}</div>`).join('');
+  const meta = [[`No.`, doc.number || 'Draft'], ['Date', fmtDate(doc.date, loc)],
+    doc.supplyDate && doc.supplyDate !== doc.date ? ['Supply date', fmtDate(doc.supplyDate, loc)] : null,
+    doc.dueDate && DOC_TYPES[doc.type]?.payable && !DOC_TYPES[doc.type]?.paidNow ? ['Due', fmtDate(doc.dueDate, loc)] : null,
+    c.gst && doc.placeOfSupply ? ['Place of supply', (IN_STATES.find((s2) => s2.code === doc.placeOfSupply)?.name || doc.placeOfSupply) + ` (${doc.placeOfSupply})`] : null,
+    doc.refNumber ? ['Against', doc.refNumber + (doc.refDate ? ' · ' + fmtDate(doc.refDate, loc) : '')] : null,
+    c.gst && doc.irn ? ['IRN', doc.irn] : null].filter(Boolean)
+    .map(([k, v]) => `<div style="display:flex;justify-content:space-between;gap:6px"><span>${k}</span><span style="font-weight:600;text-align:right;word-break:break-all">${esc(v)}</span></div>`).join('');
+  return `<div class="bill-page receipt" style="width:${widthPx}px;height:auto;padding:${pad}px;background:#fff;color:#000;font-family:${font.css};font-size:${base}px;line-height:1.35;font-variant-numeric:tabular-nums">
+    <div style="text-align:center">
+      ${o.logo && safeImg(x.logo) ? `<img src="${safeImg(x.logo)}" alt="" style="max-height:${Math.round(widthPx * 0.22)}px;max-width:60%;object-fit:contain;margin-bottom:4px">` : ''}
+      <div style="font-weight:800;font-size:1.35em;line-height:1.15">${esc(x.name || 'Your Business')}</div>
+      ${addr ? `<div>${esc(addr)}</div>` : ''}
+      ${x.phone ? `<div>${esc(x.phone)}</div>` : ''}
+      ${x.taxId && showTaxId ? `<div style="font-weight:600">${esc(c.taxIdLabel)}: ${esc(x.taxId)}</div>` : ''}
+      ${x.secondaryId ? `<div>${esc(c.secondaryIdLabel || 'Reg. No.')}: ${esc(x.secondaryId)}</div>` : ''}
+      ${line}
+      <div style="font-weight:800;font-size:1.2em;text-transform:uppercase;letter-spacing:.04em">${esc(ctx.title)}</div>
+      ${local ? `<div dir="rtl" lang="ar" style="font-weight:700">${esc(local)}</div>` : ''}
+      ${doc.copyLabel && x.taxScheme !== 'unregistered' ? `<div style="font-size:.85em">${esc(doc.copyLabel)}</div>` : ''}
+    </div>
+    ${line}${meta}
+    ${cu.name ? `${line}<div><span style="opacity:.75">${doc.type === 'purchase' ? 'Vendor' : 'Customer'}:</span> <b>${esc(cu.name)}</b></div>${cu.address ? `<div>${esc(cu.address).replace(/\n/g, ', ')}</div>` : ''}${cu.taxId ? `<div>${esc(c.taxIdLabel)}: ${esc(cu.taxId)}</div>` : ''}` : ''}
+    ${line}${items || '<div style="opacity:.5">No items</div>'}
+    ${line}${totalsHtml}
+    ${notes ? `<div style="font-size:.88em">${notes}</div>` : ''}
+    ${o.taxSummary && t.tax ? `${line}<div style="font-size:.88em">${t.rateSummary.map((r) => `<div style="display:flex;justify-content:space-between;gap:6px"><span>${c.gst ? 'GST' : esc(c.taxName)} ${fmtNumber(r.rate, loc)}% on ${p(r.taxable)}</span><span>${p(r.tax)}</span></div>`).join('')}</div>` : ''}
+    ${o.words ? `<div style="margin-top:4px;font-size:.88em">${esc(amountInWords(t.total, cur, c.numberSystem))}</div>` : ''}
+    ${q ? `<div style="text-align:center;margin-top:6px"><div class="qrbox" style="width:${Math.min(Math.round(widthPx * 0.42), 140)}px;margin:0 auto">${qrSvg(q.payload)}</div><div style="font-size:.85em">${esc(q.caption)}</div></div>` : ''}
+    ${o.terms && doc.terms ? `${line}<div style="font-size:.85em;white-space:pre-line">${esc(doc.terms)}</div>` : ''}
+    ${o.signature ? `<div style="margin-top:22px;text-align:right;font-size:.88em">For ${esc(x.name)}<br><br>Authorised signatory</div>` : ''}
+    ${x.footer ? `${line}<div style="text-align:center;font-weight:600">${esc(x.footer)}</div>` : ''}
+  </div>`;
 }

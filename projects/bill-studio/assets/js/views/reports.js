@@ -221,13 +221,13 @@ export async function render(root) {
   const drawGallery = () => {
     root.innerHTML = `<div class="page">
       <div class="large-title"><div><h1>Reports</h1><p>Choose a report. Every report can be exported to PDF or CSV for your accountant.</p></div></div>
-      <div class="grid c3">${REPORTS.map((r) => `<a class="card" href="javascript:void 0" data-r="${r.key}" style="text-decoration:none;color:inherit;display:block;transition:transform .3s var(--spring),box-shadow .3s">
+      <div class="grid c3">${REPORTS.map((r) => `<a class="card" href="#" role="button" data-r="${r.key}" style="text-decoration:none;color:inherit;display:block;transition:transform .3s var(--spring),box-shadow .3s">
         <div class="ic-wrap" style="width:44px;height:44px;border-radius:12px;display:grid;place-items:center;background:var(--accent-soft);color:var(--accent);margin-bottom:12px">${icon(r.icon, 22)}</div>
         <div style="font-weight:600;font-size:16px;letter-spacing:-.01em">${esc(r.name)}</div><div class="small muted" style="margin-top:2px">${esc(r.desc)}</div></a>`).join('')}</div></div>`;
     root.querySelectorAll('[data-r]').forEach((a) => {
       a.addEventListener('mouseenter', () => (a.style.transform = 'translateY(-2px)'));
       a.addEventListener('mouseleave', () => (a.style.transform = ''));
-      a.addEventListener('click', () => { ui.report = a.dataset.r; drawReport(); });
+      a.addEventListener('click', (e) => { e.preventDefault(); ui.report = a.dataset.r; drawReport(); });
     });
   };
 
@@ -237,7 +237,7 @@ export async function render(root) {
     const r = range();
     const subtitle = rep.asOf ? `As of ${fmtDate(todayISO(), b.locale)}` : ui.period === 'all' ? 'All time' : `${fmtDate(r.from, b.locale)} – ${fmtDate(r.to, b.locale)}`;
     root.innerHTML = `<div class="page">
-      <div class="large-title"><div><p style="margin:0 0 4px"><a href="javascript:void 0" data-back>${icon('chevron-left', 14)} Reports</a></p><h1>${esc(def.name)}</h1><p>${esc(subtitle)}</p></div>
+      <div class="large-title"><div><p style="margin:0 0 4px"><a href="#" role="button" data-back>${icon('chevron-left', 14)} Reports</a></p><h1>${esc(def.name)}</h1><p>${esc(subtitle)}</p></div>
         <div class="actions"><button class="btn" data-csv>${icon('file-spreadsheet', 16)} CSV</button><button class="btn primary" data-pdf>${icon('download', 16)} PDF</button></div></div>
       ${rep.asOf ? '' : `<div class="toolbar"><select class="input" data-period style="width:auto;height:36px">${[['month', 'This month'], ['lastmonth', 'Last month'], ['quarter', 'This quarter'], ['fy', 'This financial year'], ['lastfy', 'Last financial year'], ['year', 'This calendar year'], ['all', 'All time'], ['custom', 'Custom range']].map(([v, l]) => `<option value="${v}" ${ui.period === v ? 'selected' : ''}>${l}</option>`).join('')}</select>
         ${ui.period === 'custom' ? `<input class="input" type="date" data-from value="${ui.from}" style="width:auto;height:36px"><span class="muted">to</span><input class="input" type="date" data-to value="${ui.to}" style="width:auto;height:36px">` : ''}</div>`}
@@ -248,7 +248,7 @@ export async function render(root) {
         ${s.foot ? `<tfoot><tr>${s.foot.map((v, j) => `<td class="${s.align?.[j] === 'right' ? 'num' : ''}">${esc(v)}</td>`).join('')}</tr></tfoot>` : ''}</table></div></div>`).join('')}
       ${ui.report === 'gstr1' ? `<div class="notice">${icon('sparkles', 18)}<div>Section CSVs use the GSTR-1 offline-tool column names. Customers with a GSTIN are treated as B2B. Please review with your tax advisor before filing.</div></div>` : ''}
     </div>`;
-    root.querySelector('[data-back]').addEventListener('click', () => { ui.report = ''; drawGallery(); });
+    root.querySelector('[data-back]').addEventListener('click', (e) => { e.preventDefault(); ui.report = ''; drawGallery(); });
     root.querySelector('[data-period]')?.addEventListener('change', (e) => { ui.period = e.target.value; if (ui.period === 'custom' && !ui.from) { ui.from = periodRange('month').from; ui.to = todayISO(); } drawReport(); });
     root.querySelector('[data-from]')?.addEventListener('change', (e) => { ui.from = e.target.value; drawReport(); });
     root.querySelector('[data-to]')?.addEventListener('change', (e) => { ui.to = e.target.value; drawReport(); });

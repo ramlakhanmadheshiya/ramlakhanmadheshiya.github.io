@@ -69,7 +69,7 @@ export async function render(root) {
       ${f('bank.account', 'Account number', b.bank?.account)}${f('bank.code', bankCodeLabel, b.bank?.code)}
       ${f('bank.iban', 'IBAN', b.bank?.iban, '', b.currency === 'EUR' ? 'Adds a SEPA “GiroCode” QR to your bills.' : '')}${f('bank.swift', 'SWIFT / BIC', b.bank?.swift)}
       ${f('bank.branch', 'Branch', b.bank?.branch)}
-      ${f('payLink', 'Online payment link', b.payLink, 'placeholder="https://paypal.me/you or Stripe link"', 'Shown as a QR when no UPI / IBAN is set.')}
+      ${f('payLink', 'Online payment link', b.payLink, 'placeholder="https://paypal.me/you or Stripe link"', c.code === 'IN' ? 'Shown as a QR when no UPI ID is set.' : b.currency === 'EUR' ? 'Shown as a QR when no IBAN is set.' : 'Printed on bills as a scan-to-pay QR code.')}
     </div></div>
 
     <div class="section-title">Bill defaults</div>
@@ -113,6 +113,21 @@ export async function render(root) {
     if (c.gst && e.target.value !== state.business.taxScheme) toast(e.target.value === 'regular' ? 'New bills will be Tax Invoices with GST' : e.target.value === 'composition' ? 'New bills will be Bills of Supply without GST' : 'New bills will be plain invoices without GST', 'info');
   });
 
+  // Switching country changes the whole tax setup, so it is confirmed and applied immediately,
+  // and the form is redrawn with that country's own fields (never another country's labels).
+  root.querySelector('[name=country]').addEventListener('change', async (e) => {
+    const nc = getCountry(e.target.value);
+    if (!(await confirmDialog(`Switch to ${nc.name}?`, `Tax system, rates, currency, financial year and bill titles change to ${nc.name}'s. Your tax number is cleared so you can enter the ${nc.taxIdLabel}. Bills you already issued keep their original details.`, { ok: 'Switch country' }))) { e.target.value = state.business.country; return; }
+    const out = JSON.parse(JSON.stringify(state.business));
+    for (const k of ['name', 'legalName', 'address', 'city', 'postal', 'phone', 'email', 'website', 'footer']) { const el = root.querySelector(`[name=${k}]`); if (el) out[k] = el.value.trim(); }
+    Object.assign(out, {
+      country: nc.code, taxes: JSON.parse(JSON.stringify(nc.presets)), defaultTaxId: defaultPreset(nc.presets)?.id || '', taxId: '', secondaryId: '',
+      currency: nc.currency, locale: nc.locale, fyStartMonth: nc.fyStartMonth, region: '', taxScheme: 'regular', showHsn: !!nc.showHsn, roundOff: nc.code === 'IN', upi: nc.code === 'IN' ? out.upi : '',
+    });
+    await saveBusiness(out);
+    toast(`Switched to ${nc.name} — please complete your tax details`, 'info');
+  });
+
   const save = async () => {
     const out = JSON.parse(JSON.stringify(state.business));
     root.querySelectorAll('[name]').forEach((el) => {
@@ -125,15 +140,9 @@ export async function render(root) {
     if (!out.name) { toast('Business name is required', 'err'); return; }
     if (!taxIdRule(out.country, out.taxScheme).show) out.taxId = '';
     out.taxId = String(out.taxId || '').toUpperCase().replace(/\s/g, '');
-    if (out.country === state.business.country) { const err = businessTaxError(out); if (err) { toast(err, 'err'); return; } }
+    { const err = businessTaxError(out); if (err) { toast(err, 'err'); return; } }
     if (!validateEmail(out.email)) { toast('Email looks wrong', 'err'); return; }
     if (c.code === 'IN' && out.secondaryId && !validatePAN(out.secondaryId).ok) toast('PAN format looks unusual — saved anyway', 'info');
-    if (out.country !== state.business.country) {
-      const nc = getCountry(out.country);
-      if (!(await confirmDialog(`Switch to ${nc.name}?`, `Tax rates, currency and bill titles will change to ${nc.name}'s defaults. Existing bills keep their numbers but will recalculate with the new rates.`, { ok: 'Switch country' }))) return;
-      out.taxes = JSON.parse(JSON.stringify(nc.presets)); out.defaultTaxId = defaultPreset(nc.presets)?.id || ''; out.taxId = ''; out.secondaryId = '';
-      out.currency = nc.currency; out.locale = nc.locale; out.fyStartMonth = nc.fyStartMonth; out.region = '';
-    }
     await saveBusiness(out);
     const pending = businessTaxError(out);
     toast(pending ? `Saved. ${pending}` : 'Business profile saved', pending ? 'err' : 'ok');

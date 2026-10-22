@@ -4,8 +4,11 @@ import { db, uid, STORES } from '../db.js';
 import { state, saveBusiness, DOC_TYPE_LIST, formatNumber, nextNumber, defaultPreset, switchBusiness } from '../store.js';
 import { getCountry } from '../tax/countries.js';
 import { presetRate } from '../tax/engine.js';
-import { todayISO } from '../lib/dates.js';
-import { makeBackup, readBackup } from '../backup.js';
+import { todayISO, addDays, periodRange, fmtDate } from '../lib/dates.js';
+import { makeBackup, readBackup, exportData, importData } from '../backup.js';
+import { getAuth, changeCredentials, setAutoLock, lockNow } from '../auth.js';
+import { PAPERS } from '../print.js';
+import { BUILD, BUILT_ON } from '../version.js';
 import { applyTheme, rerenderShell } from '../app.js';
 
 let installEvt = null;
@@ -19,6 +22,7 @@ export async function render(root) {
   const est = await navigator.storage?.estimate?.().catch(() => null);
   const persisted = await navigator.storage?.persisted?.().catch(() => false);
   const lastBackup = await db.setting('lastBackup');
+  const auth = await getAuth();
   const standalone = matchMedia('(display-mode: standalone)').matches || navigator.standalone;
   const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
 
@@ -27,6 +31,19 @@ export async function render(root) {
 
     <div class="section-title">Appearance</div>
     <div class="group"><div class="row"><span class="grow">Theme</span><span data-theme-seg></span></div></div>
+
+    <div class="section-title">Owner sign-in</div>
+    <div class="card">
+      ${auth.isDefault ? `<div class="notice warn mb">${icon('triangle-alert', 18)}<div>You are using the <b>default</b> User ID and password. Change them now so only you can open your data.</div></div>` : ''}
+      <dl class="kv"><dt>Owner name</dt><dd>${esc(auth.ownerName || 'Owner')}</dd><dt>User ID</dt><dd class="mono">${esc(auth.userId)}</dd><dt>Password last changed</dt><dd>${auth.isDefault ? 'Never (default)' : new Date(auth.updatedAt).toLocaleDateString(b.locale)}</dd></dl>
+      <div class="form-grid mt"><div class="field"><label>Lock automatically after</label><select class="input" data-autolock>${[[0, 'Never'], [5, '5 minutes'], [15, '15 minutes'], [30, '30 minutes'], [60, '1 hour'], [240, '4 hours']].map(([v, l]) => `<option value="${v}" ${Number(auth.autoLockMin || 0) === v ? 'selected' : ''}>${l} of inactivity</option>`).join('')}</select></div></div>
+      <div class="btn-row mt"><button class="btn primary" data-cred>${icon('lock', 16)} Change name, ID or password</button><button class="btn" data-lock-now>Lock now</button></div>
+      <p class="help mt-s">The sign-in keeps other people out of the app on this device. For full protection also use your computer’s own login, and keep backups encrypted with a passphrase.</p>
+    </div>
+
+    <div class="section-title">Printing</div>
+    <div class="group"><div class="row"><span class="grow">Default bill size<div class="sub">Used by Print and PDF; you can still choose another size each time.</div></span>
+      <select class="input" data-paper-default style="width:auto;max-width:260px">${PAPERS.filter((x) => x.id !== 'custom').map((x) => `<option value="${x.id}" ${(b.printDefaults?.paper || (['US', 'CA', 'MX', 'PH'].includes(b.country) ? 'letter' : 'a4')) === x.id ? 'selected' : ''}>${esc(x.label)}</option>`).join('')}</select></div></div>
 
     <div class="section-title">Install as an app</div>
     <div class="card">
@@ -65,8 +82,12 @@ export async function render(root) {
         <dt>Storage used</dt><dd>${est ? (est.usage / 1048576).toFixed(1) + ' MB' : '—'}</dd>
         <dt>Protected from automatic clean-up</dt><dd>${persisted ? 'Yes' : 'Not yet'}</dd></dl>
       <div class="btn-row mt">
-        <button class="btn primary" data-backup>${icon('download', 16)} Back up now</button>
-        <button class="btn" data-restore>${icon('upload', 16)} Restore from backup</button>
+        <button class="btn primary" data-backup>${icon('download', 16)} Full backup</button>
+        <button class="btn" data-export>${icon('file-down', 16)} Export a period / business</button>
+        <button class="btn" data-import>${icon('upload', 16)} Import data</button>
+      </div>
+      <p class="help mt-s"><b>Moving to another computer or browser?</b> Make a full backup here, open Bill Studio on the other device, sign in, then use Import → Replace everything. To send only some days (e.g. from a branch), use Export a period, then Import → Merge on the other device.</p>
+      <div class="btn-row" hidden>
       </div>
     </div>
 
@@ -74,6 +95,21 @@ export async function render(root) {
     <div class="group">${state.businesses.map((x) => `<div class="row"><span class="biz-avatar">${x.logo ? `<img src="${safeImg(x.logo)}" alt="">` : esc((x.name || '?')[0])}</span><div class="grow"><div class="title">${esc(x.name || 'Untitled')}</div><div class="sub">${esc(getCountry(x.country).name)} · ${esc(x.currency)}</div></div>
       ${x.id === b.id ? '<span class="badge partial">Active</span>' : `<button class="btn sm" data-switch-biz="${x.id}">Switch</button><button class="btn sm danger" data-del-biz="${x.id}">Delete</button>`}</div>`).join('')}
       <a class="row" href="#/welcome">${icon('plus', 18)}<span class="grow">Add another business</span>${icon('chevron-right', 16, 'chev')}</a></div>
+
+    ${location.protocol === 'file:' ? '' : `<div class="section-title">Run without internet / on your own server</div>
+    <div class="card">
+      <p class="small muted" style="margin-top:0">Bill Studio already works offline once opened. You can also keep a copy that runs straight from a file — no internet, no server, no installation.</p>
+      <div class="btn-row"><a class="btn primary" href="downloads/Bill-Studio-offline.html" download>${icon('download', 16)} Offline app (single file)</a><a class="btn" href="downloads/bill-studio-offline.zip" download>${icon('download', 16)} Full package (.zip) for your server</a></div>
+      <p class="help mt-s">Each copy keeps its own data in the browser it runs in. Move data between copies with Full backup → Import.</p>
+    </div>`}
+
+    <div class="section-title">About</div>
+    <div class="card small">
+      <dl class="kv"><dt>Version</dt><dd class="mono">${esc(BUILD)} · ${esc(BUILT_ON)}</dd><dt>Running as</dt><dd>${location.protocol === 'file:' ? 'Offline file' : standalone ? 'Installed app' : 'Web app'}</dd></dl>
+      <p><b>Privacy.</b> Everything you enter stays in this browser on this device. Bill Studio has no account server, no analytics, no ads and no cookies; it never uploads your data. Sharing (WhatsApp, email, PDF) only happens when you tap it.</p>
+      <p><b>Tax content.</b> Tax rates, titles and rules are researched defaults for each country (as of October 2026). You are responsible for your invoices — confirm with your tax advisor, and use your government’s e-invoicing system where it is mandatory.</p>
+      <p><b>Open-source components.</b> qrcode-generator (MIT, Kazuhiko Arase) · html2canvas (MIT, Niklas von Hertzen) · jsPDF (MIT, yWorks / James Hall) · Inter typeface (SIL Open Font License, Rasmus Andersson) · Lucide icons (ISC).</p>
+    </div>
 
     <div class="section-title">Danger zone</div>
     <div class="group"><div class="row"><div class="grow"><div class="title">Erase everything</div><div class="sub">Deletes all businesses, bills, customers and designs from this device.</div></div><button class="btn sm danger filled" data-wipe>Erase</button></div></div>
@@ -95,7 +131,7 @@ export async function render(root) {
         <div class="field span2"><label>Name shown on bills</label><input class="input" data-label value="${esc(t.label)}" placeholder="e.g. ${esc(c.taxName)} 18%"></div>
         ${t.gst ? `<div class="field span2"><label>GST rate %</label><input class="input" type="number" step="any" data-gst value="${esc(t.rate)}"><div class="help">Split automatically: half CGST + half SGST/UTGST within your state, full IGST across states.</div></div>`
           : `<div class="field span2"><label>Components</label><div data-comps>${comps.map((x, j) => `<div class="flex mt-s" data-comp="${j}"><input class="input" data-cn value="${esc(x.name)}" placeholder="Tax name"><input class="input" data-cr type="number" step="any" value="${esc(x.rate)}" placeholder="%" style="width:110px"></div>`).join('')}</div>
-            <button class="btn sm mt-s" data-add-comp>${icon('plus', 14)} Add component</button><div class="help">E.g. Canada BC: GST 5% + PST 7%. Leave a single 0% component for exempt.</div></div>`}
+            <button class="btn sm mt-s" data-add-comp>${icon('plus', 14)} Add component</button><div class="help">${c.code === 'CA' ? 'E.g. British Columbia: GST 5% + PST 7%.' : c.code === 'US' ? 'E.g. State 6% + County 1.5% + City 1%.' : `E.g. ${esc(c.taxName)} plus a local levy.`} Leave a single 0% component for exempt.</div></div>`}
         <label class="check span2 flex"><input type="checkbox" data-def ${t.id === b.defaultTaxId ? 'checked' : ''}> Use as default for new items</label>
       </div>`,
       foot: `${i != null ? '<button class="btn danger" data-del style="margin-right:auto">Delete</button>' : ''}<button class="btn" data-close>Cancel</button><button class="btn primary" data-ok>Save</button>`,
@@ -166,29 +202,100 @@ export async function render(root) {
       m.close(); toast('Backup downloaded'); render(root);
     });
   });
-  root.querySelector('[data-restore]').addEventListener('click', async () => {
+  const askPass = (text) => new Promise((res) => {
+    const m = modal({ title: 'Encrypted file', body: `<div class="field"><label>Passphrase</label><input class="input" type="password" data-pass></div>`, foot: `<button class="btn" data-close>Cancel</button><button class="btn primary" data-ok>Unlock</button>` });
+    m.el.querySelector('[data-ok]').addEventListener('click', async () => { try { const d = await readBackup(text, m.el.querySelector('[data-pass]').value); m.close(); res(d); } catch (er) { toast(er.message, 'err'); } });
+    m.done.then(() => res(null));
+  });
+  root.querySelector('[data-export]').addEventListener('click', () => {
+    const m = modal({
+      title: 'Export data',
+      body: `<div class="form-grid">
+        <div class="field span2"><label>Which business</label><select class="input" data-biz><option value="${b.id}">${esc(b.name)} (this business)</option>${state.businesses.length > 1 ? '<option value="">All businesses on this device</option>' : ''}</select></div>
+        <div class="field span2"><label>Period</label><select class="input" data-per>${[['all', 'Everything (all dates)'], ['7', 'Last 7 days'], ['30', 'Last 30 days'], ['90', 'Last 90 days'], ['month', 'This month'], ['lastmonth', 'Last month'], ['fy', 'This financial year'], ['lastfy', 'Last financial year'], ['custom', 'Custom dates…']].map(([v, l]) => `<option value="${v}">${l}</option>`).join('')}</select></div>
+        <div class="field" data-cd hidden><label>From</label><input class="input" type="date" data-from value="${addDays(todayISO(), -30)}"></div>
+        <div class="field" data-cd hidden><label>To</label><input class="input" type="date" data-to value="${todayISO()}"></div>
+        <div class="field span2"><label>Passphrase (optional, recommended)</label><input class="input" type="password" data-pass autocomplete="new-password" placeholder="Encrypts the file"></div>
+      </div><p class="help">Bills, payments and expenses are filtered by date. Your business profile, customers, items and designs are always included so the other device can keep working.</p>`,
+      foot: `<button class="btn" data-close>Cancel</button><button class="btn primary" data-ok>${icon('download', 16)} Export</button>`,
+    });
+    const per = m.el.querySelector('[data-per]');
+    per.addEventListener('change', () => m.el.querySelectorAll('[data-cd]').forEach((x) => (x.hidden = per.value !== 'custom')));
+    m.el.querySelector('[data-ok]').addEventListener('click', async () => {
+      let from = '', to = '';
+      const v = per.value;
+      if (/^\d+$/.test(v)) { from = addDays(todayISO(), -(Number(v) - 1)); to = todayISO(); }
+      else if (v === 'custom') { from = m.el.querySelector('[data-from]').value; to = m.el.querySelector('[data-to]').value; if (!from || !to || from > to) { toast('Choose a valid date range', 'err'); return; } }
+      else if (v !== 'all') { const r = periodRange(v, b.fyStartMonth); from = r.from; to = r.to; }
+      const businessId = m.el.querySelector('[data-biz]').value || null;
+      const pass = m.el.querySelector('[data-pass]').value;
+      const blob = await exportData({ businessId, from, to, passphrase: pass });
+      const tag = businessId ? (state.businesses.find((x) => x.id === businessId)?.name || 'business').replace(/[^\w-]+/g, '-').slice(0, 30) : 'all';
+      downloadBlob(blob, `bill-studio-${tag}-${from || 'start'}-to-${to || todayISO()}${pass ? '-encrypted' : ''}.json`);
+      if (!from && !to && !businessId) await db.setting('lastBackup', new Date().toISOString());
+      m.close(); toast('Export downloaded');
+    });
+  });
+  root.querySelector('[data-import]').addEventListener('click', async () => {
     const f = await pickFile('.json,application/json'); if (!f) return;
     const text = await f.text();
     let data;
-    try { data = await readBackup(text); }
-    catch (e) {
-      if (e.code !== 'PASS') { toast(e.message || 'Not a valid backup', 'err'); return; }
-      const m = modal({ title: 'Encrypted backup', body: `<div class="field"><label>Passphrase</label><input class="input" type="password" data-pass></div>`, foot: `<button class="btn" data-close>Cancel</button><button class="btn primary" data-ok>Unlock</button>` });
-      data = await new Promise((res) => {
-        m.el.querySelector('[data-ok]').addEventListener('click', async () => { try { const d = await readBackup(text, m.el.querySelector('[data-pass]').value); m.close(); res(d); } catch (er) { toast(er.message, 'err'); } });
-        m.done.then(() => res(null));
-      });
-      if (!data) return;
-    }
-    const counts = STORES.map((s) => `${(data.stores?.[s] || []).length} ${s}`).join(', ');
-    if (!(await confirmDialog('Restore this backup?', `It contains ${counts}. Everything currently on this device will be replaced.`, { ok: 'Replace & restore', danger: true }))) return;
-    try {
-      await db.importAll(data);
-      const { loadState } = await import('../store.js');
-      await loadState();
-      toast('Backup restored');
-      location.hash = '#/'; rerenderShell();
-    } catch (e) { toast(e.message, 'err'); }
+    try { data = await readBackup(text); } catch (e) { if (e.code !== 'PASS') { toast(e.message || 'Not a Bill Studio file', 'err'); return; } data = await askPass(text); if (!data) return; }
+    if (!data || data.app !== 'bill-studio' || !data.stores) { toast('This file is not a Bill Studio export', 'err'); return; }
+    const n = (k) => (data.stores[k] || []).length;
+    const partial = data.kind === 'range' || data.kind === 'business';
+    const m = modal({
+      title: 'Import data',
+      body: `<dl class="kv"><dt>Exported</dt><dd>${data.exportedAt ? new Date(data.exportedAt).toLocaleString(b.locale) : '—'}</dd>
+        <dt>Businesses</dt><dd>${esc((data.businessNames || (data.stores.businesses || []).map((x) => x.name)).join(', ') || '—')}</dd>
+        <dt>Period</dt><dd>${data.from || data.to ? `${data.from ? fmtDate(data.from, b.locale) : 'start'} – ${data.to ? fmtDate(data.to, b.locale) : 'today'}` : 'All dates'}</dd>
+        <dt>Bills / payments / expenses</dt><dd>${n('documents')} / ${n('payments')} / ${n('expenses')}</dd>
+        <dt>Customers / items / designs</dt><dd>${n('customers')} / ${n('products')} / ${n('templates')}</dd></dl>
+        <div class="group mt" style="box-shadow:none;border:1px solid var(--sep)">
+          <label class="row" style="cursor:pointer"><input type="radio" name="mode" value="merge" checked><span class="grow"><b>Merge into this device</b><div class="sub">Adds new records and updates ones that changed. Nothing here is deleted.</div></span></label>
+          ${partial ? '' : `<label class="row" style="cursor:pointer"><input type="radio" name="mode" value="replace"><span class="grow"><b>Replace everything</b><div class="sub">Erases this device’s data first, then loads the file — including its sign-in ID and password.</div></span></label>`}
+        </div>`,
+      foot: `<button class="btn" data-close>Cancel</button><button class="btn primary" data-ok>${icon('upload', 16)} Import</button>`,
+    });
+    m.el.querySelector('[data-ok]').addEventListener('click', async () => {
+      const mode = m.el.querySelector('[name=mode]:checked').value;
+      if (mode === 'replace' && !(await confirmDialog('Replace everything?', 'All Bill Studio data on this device will be replaced by the file. Make a backup first if you might need it.', { ok: 'Replace', danger: true }))) return;
+      try {
+        const res = await importData(data, mode);
+        m.close();
+        const { loadState } = await import('../store.js');
+        await loadState();
+        if (!state.business && state.businesses[0]) state.business = state.businesses[0];
+        const msg = mode === 'replace' ? 'Data replaced from file' : `Imported: ${res.added} new, ${res.updated} updated${res.skipped.length ? `, ${res.skipped.length} skipped` : ''}`;
+        if (res.skipped.length) await confirmDialog('Some bills were skipped', res.skipped.slice(0, 12).join('\n') + (res.skipped.length > 12 ? `\n…and ${res.skipped.length - 12} more` : ''), { ok: 'OK' });
+        toast(msg);
+        location.hash = '#/'; rerenderShell();
+      } catch (e) { toast(e.message, 'err'); }
+    });
+  });
+
+  // Owner sign-in
+  root.querySelector('[data-autolock]').addEventListener('change', async (e) => { await setAutoLock(e.target.value); toast('Auto-lock updated — takes effect next sign-in'); });
+  root.querySelector('[data-lock-now]').addEventListener('click', () => lockNow());
+  root.querySelector('[data-paper-default]').addEventListener('change', async (e) => { await saveBusiness({ ...b, printDefaults: { ...(b.printDefaults || {}), paper: e.target.value } }, { quiet: true }); toast('Default bill size saved'); });
+  root.querySelector('[data-cred]').addEventListener('click', () => {
+    const m = modal({
+      title: 'Owner sign-in',
+      body: `<form data-f autocomplete="on"><div class="form-grid">
+        <div class="field span2"><label>Owner name</label><input class="input" name="ownerName" value="${esc(auth.ownerName || 'Owner')}"></div>
+        <div class="field span2"><label>User ID</label><input class="input" name="userId" autocomplete="username" value="${esc(auth.userId)}"></div>
+        <div class="field span2"><label>Current password *</label><input class="input" type="password" name="current" autocomplete="current-password"></div>
+        <div class="field"><label>New password</label><input class="input" type="password" name="pw1" autocomplete="new-password" placeholder="Leave empty to keep"></div>
+        <div class="field"><label>Repeat new password</label><input class="input" type="password" name="pw2" autocomplete="new-password"></div>
+      </div></form><p class="help">Write your password down somewhere safe. It can’t be recovered — only a backup can bring your data back.</p>`,
+      foot: `<button class="btn" data-close>Cancel</button><button class="btn primary" data-ok>Save</button>`,
+    });
+    m.el.querySelector('[data-ok]').addEventListener('click', async () => {
+      const g = (n) => m.el.querySelector(`[name=${n}]`).value;
+      if (g('pw1') !== g('pw2')) { toast('New passwords don’t match', 'err'); return; }
+      try { await changeCredentials({ currentPassword: g('current'), ownerName: g('ownerName'), userId: g('userId'), newPassword: g('pw1') }); m.close(); toast('Sign-in updated'); render(root); }
+      catch (e) { toast(e.message, 'err'); }
+    });
   });
 
   root.querySelectorAll('[data-switch-biz]').forEach((x) => x.addEventListener('click', () => switchBusiness(x.dataset.switchBiz)));

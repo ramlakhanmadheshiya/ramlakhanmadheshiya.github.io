@@ -54,7 +54,7 @@ export async function render(root, { adding } = {}) {
         <div class="country-grid" role="listbox">${list.map((x) => `<button class="country-btn ${x.code === country ? 'on' : ''}" data-c="${x.code}" role="option" aria-selected="${x.code === country}"><span class="flag">${x.flag}</span><span><div style="font-weight:500">${esc(x.name)}</div><div class="tiny muted">${esc(x.taxName)} · ${x.currency}</div></span></button>`).join('') || '<div class="muted small">No match — choose “Other country”.</div>'}</div>
         <div class="notice mt">${icon('sparkles', 18)}<div><b>${c.flag} ${esc(c.name)}:</b> ${esc(c.taxName)} · ${esc(c.currency)} · financial year starts in ${new Date(2000, c.fyStartMonth - 1, 1).toLocaleString('en', { month: 'long' })}.${c.notes ? ' ' + esc(c.notes) : ''}</div></div>
         ${c.eInvoice ? `<div class="notice warn mt-s">${icon('triangle-alert', 18)}<div><b>E-invoicing:</b> ${esc(c.eInvoice)}</div></div>` : ''}
-        <div class="flex between mt"><button class="btn" data-back>${adding ? 'Cancel' : 'Back'}</button><button class="btn primary" data-next>Continue</button></div>
+        <div class="flex between mt"><button class="btn" data-back>${adding ? 'Cancel' : 'Back'}</button><button class="btn primary" data-next>Continue with ${c.flag} ${esc(c.name)}</button></div>
       </div>`;
   };
 

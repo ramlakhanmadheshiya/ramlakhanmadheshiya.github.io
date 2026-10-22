@@ -2,6 +2,7 @@ import { icon } from '../lib/icons.js';
 import { esc, menu, toast, confirmDialog, promptDialog, modal } from '../ui.js';
 import { db } from '../db.js';
 import { state, DOC_TYPE_LIST, saveBusiness, docTitle } from '../store.js';
+import { getCountry } from '../tax/countries.js';
 import { allTemplates, defaultTemplateId } from '../tplstore.js';
 import { cloneTemplate, PAGE } from '../templates.js';
 import { sampleContext, mountPage } from '../render.js';
@@ -18,7 +19,7 @@ export async function render(root) {
       <div class="actions"><button class="btn" data-blank>${icon('plus', 16)} Blank design</button></div></div>
     <div class="section-title" style="margin-top:0">What do you want to create?</div>
     <div class="chips mb" data-types>${DOC_TYPE_LIST.map((t) => `<button class="chip ${ui.type === t.key ? 'on' : ''}" data-t="${t.key}">${icon(t.icon, 14)} ${esc(t.label)}</button>`).join('')}</div>
-    <div class="notice mb">${icon('sparkles', 18)}<div>The highlighted design is used for new <b>${esc(docTitle(ui.type, b))}</b> bills. Your logo, colours and GST/tax details come from <a href="#/business">Business profile</a>.</div></div>
+    <div class="notice mb">${icon('sparkles', 18)}<div>The highlighted design is used for new <b>${esc(docTitle(ui.type, b))}</b> bills. Your logo, colours and ${esc(getCountry(b.country).taxName)} details come from <a href="#/business">Business profile</a>.</div></div>
     <div class="tpl-grid">${templates.map((t) => `
       <div class="tpl-card ${t.id === def ? 'default' : ''}" data-id="${t.id}">
         <div class="tpl-thumb" data-preview="${t.id}" title="Preview"><div class="thumb-inner" data-thumb="${t.id}"></div></div>
@@ -52,8 +53,28 @@ export async function render(root) {
     await saveBusiness(b);
     toast(`Default design for ${docTitle(ui.type, b)} updated`);
   }));
+  const receiptOptions = async (t) => {
+    const copy = t.builtin ? (templates.find((x) => !x.builtin && x.basedOn === t.id) || cloneTemplate(t, { name: `${t.name} (my version)`, businessId: b.id })) : t;
+    const o = { logo: true, taxSummary: true, qr: true, terms: true, words: true, signature: false, ...(copy.options || {}) };
+    const rows = [['logo', 'Show logo'], ['taxSummary', 'Tax summary by rate'], ['words', 'Amount in words'], ['qr', 'Payment QR code'], ['terms', 'Terms & conditions'], ['signature', 'Signature line']];
+    const m = modal({
+      title: 'Compact receipt options',
+      body: `<div class="group" style="box-shadow:none;border:1px solid var(--sep)">${rows.map(([k, l]) => `<label class="row" style="cursor:pointer"><span class="grow">${l}</span><span class="switch"><input type="checkbox" data-k="${k}" ${o[k] ? 'checked' : ''}><span></span></span></label>`).join('')}</div>
+        <div class="form-grid mt"><div class="field"><label>Name</label><input class="input" data-name value="${esc(copy.name)}"></div>
+        <div class="field"><label>Default roll / paper</label><select class="input" data-paper>${[['t80', 'Thermal 80 mm'], ['t58', 'Thermal 58 mm'], ['t76', 'POS 76 mm'], ['a6', 'A6'], ['a7', 'A7 (1/8 page)'], ['a5', 'A5 (half page)']].map(([v, l]) => `<option value="${v}" ${copy.page?.paper === v ? 'selected' : ''}>${l}</option>`).join('')}</select></div></div>`,
+      foot: '<button class="btn" data-close>Cancel</button><button class="btn primary" data-ok>Save</button>',
+    });
+    m.el.querySelector('[data-ok]').addEventListener('click', async () => {
+      m.el.querySelectorAll('[data-k]').forEach((i) => (o[i.dataset.k] = i.checked));
+      copy.options = o; copy.name = m.el.querySelector('[data-name]').value.trim() || copy.name;
+      copy.page = { ...copy.page, paper: m.el.querySelector('[data-paper]').value };
+      await db.put('templates', copy);
+      m.close(true); toast('Receipt design saved'); render(root);
+    });
+  };
   const openDesigner = async (id) => {
     const t = templates.find((x) => x.id === id);
+    if (t.kind === 'flow') { receiptOptions(t); return; }
     if (t.builtin) {
       // Re-open the user's existing version of this design instead of piling up copies.
       const copy = templates.find((x) => !x.builtin && x.basedOn === t.id) || cloneTemplate(t, { name: `${t.name} (my version)`, businessId: b.id });

@@ -6,12 +6,17 @@ import { BLOCK_TYPES, FONTS, PAGE, newBlock, builtinById } from '../templates.js
 import { renderPage, sampleContext, flowLayout } from '../render.js';
 
 const SNAP = 4, GUIDE_T = 5;
+// Canvas shapes (always 794 px wide so text sizes stay natural; height follows the paper's proportions).
+const FORMATS = [['a4', 'A4 / A5 / A6 / A7 portrait', 1123], ['a5l', 'Half page — A5 landscape', 561], ['letter', 'US Letter', 1027], ['legal', 'US Legal', 1308],
+  ['halfletter', 'Half Letter portrait', 1228], ['executive', 'Executive', 1151], ['b5', 'B5', 1128]];
 const COLS = [['idx', '#'], ['desc', 'Item description'], ['hsn', 'HSN / code'], ['qty', 'Quantity'], ['rate', 'Rate'], ['disc', 'Discount'], ['tax', 'Tax %'], ['taxamt', 'Tax amount']];
 
 export async function render(root, { id }) {
   const b = state.business;
   let tpl = await db.get('templates', id);
+  if (tpl?.kind === 'flow') { location.hash = '#/templates'; return; }
   if (!tpl || tpl.businessId !== state.business.id) { root.innerHTML = `<div class="page"><div class="empty"><h3>Design not found</h3><a class="btn" href="#/templates">Back to templates</a></div></div>`; return; }
+  const pg = () => tpl.page || PAGE;
   let sel = null, zoom = 1, showGrid = false, snapOn = true, preview = false, docType = 'invoice';
   const undo = [], redo = [];
   const snapshot = () => JSON.stringify({ blocks: tpl.blocks, accent: tpl.accent, font: tpl.font, page: tpl.page });
@@ -52,7 +57,7 @@ export async function render(root, { id }) {
   const wrap = $('[data-wrap]');
   const holder = $('[data-canvas-holder]');
 
-  const fitZoom = () => { zoom = Math.max(0.3, Math.min(1.25, (wrap.clientWidth - 60) / PAGE.w)); };
+  const fitZoom = () => { zoom = Math.max(0.3, Math.min(1.25, (wrap.clientWidth - 60) / pg().w)); };
   fitZoom();
 
   const persist = debounce(async () => {
@@ -77,13 +82,13 @@ export async function render(root, { id }) {
     const ctx = sampleContext(b, docType);
     holder.innerHTML = renderPage(ctx, tpl, { editing: !preview });
     const page = holder.querySelector('.bill-page');
-    let H = PAGE.h;
+    let H = pg().h;
     if (preview) H = flowLayout(page, tpl);
     page.classList.toggle('grid-on', showGrid && !preview);
     if (showGrid && !preview) page.style.backgroundImage = 'linear-gradient(rgba(0,113,227,.07) 1px,transparent 1px),linear-gradient(90deg,rgba(0,113,227,.07) 1px,transparent 1px)', page.style.backgroundSize = '8px 8px';
     page.style.transform = `scale(${zoom})`; page.style.transformOrigin = 'top left';
     page.style.boxShadow = '0 10px 40px rgba(0,0,0,.14)';
-    holder.style.width = PAGE.w * zoom + 'px'; holder.style.height = H * zoom + 'px';
+    holder.style.width = pg().w * zoom + 'px'; holder.style.height = H * zoom + 'px';
     $('[data-zoom-label]').textContent = Math.round(zoom * 100) + '%';
     if (preview) return;
     page.querySelectorAll('.blk').forEach((el) => {
@@ -118,7 +123,7 @@ export async function render(root, { id }) {
 
   function guidesFor(x, rect) {
     // Snap candidate lines: page edges/centre, margins, and other blocks' edges/centres.
-    const vs = [0, 48, PAGE.w / 2, PAGE.w - 48, PAGE.w], hs = [0, 48, PAGE.h / 2, PAGE.h - 48, PAGE.h];
+    const vs = [0, 48, pg().w / 2, pg().w - 48, pg().w], hs = [0, 48, pg().h / 2, pg().h - 48, pg().h];
     for (const o of tpl.blocks) {
       if (o.id === x.id || o.hidden) continue;
       vs.push(o.x, o.x + o.w / 2, o.x + o.w); hs.push(o.y, o.y + o.h / 2, o.y + o.h);
@@ -210,6 +215,7 @@ export async function render(root, { id }) {
         <div class="form-grid" style="grid-template-columns:1fr 1fr">
           <div class="field"><label>Brand colour</label><input type="color" class="color-input" data-page="accent" value="${esc(tpl.accent)}"></div>
           <div class="field"><label>Paper</label><input type="color" class="color-input" data-page="bg" value="${esc(tpl.page?.bg || '#ffffff')}"></div>
+          <div class="field span2"><label>Page shape</label><select class="input" data-format>${FORMATS.map(([id, l]) => `<option value="${id}" ${(tpl.page?.paper || 'a4') === id ? 'selected' : ''}>${l}</option>`).join('')}</select><div class="help">Designs scale to any paper of the same shape when printing.</div></div>
           <div class="field span2"><label>Font</label><select class="input" data-page="font">${Object.entries(FONTS).map(([k, v]) => `<option value="${k}" ${k === tpl.font ? 'selected' : ''}>${v.label}</option>`).join('')}</select></div>
           <div class="field span2"><label>Description</label><input class="input" data-page="description" value="${esc(tpl.description || '')}"></div>
           <div class="field span2"><label>Preview as</label><select class="input" data-doctype>${DOC_TYPE_LIST.map((t) => `<option value="${t.key}" ${t.key === docType ? 'selected' : ''}>${t.label}</option>`).join('')}</select></div>
@@ -228,6 +234,15 @@ export async function render(root, { id }) {
       }));
       insp.querySelectorAll('[data-page]').forEach((el) => el.addEventListener('change', () => { commit(); if (el.dataset.page === 'accent') drawInspector(); }));
       insp.querySelectorAll('[data-swatch]').forEach((el) => el.addEventListener('click', () => { tpl.accent = el.dataset.swatch; commit(); draw(); }));
+      insp.querySelector('[data-format]').addEventListener('change', (e) => {
+        const f = FORMATS.find((x) => x[0] === e.target.value);
+        const oldH = pg().h, newH = f[2];
+        const k = newH / oldH;
+        // Keep the layout proportional when the page gets taller or shorter.
+        tpl.blocks.forEach((bl) => { bl.y = Math.round(bl.y * k); if (!BLOCK_TYPES[bl.type]?.grow) bl.h = Math.max(1, Math.round(bl.h * Math.min(1, k))); });
+        tpl.page = { ...pg(), w: 794, h: newH, paper: f[0] };
+        commit(); draw();
+      });
       insp.querySelector('[data-doctype]').addEventListener('change', (e) => { docType = e.target.value; drawCanvas(); });
       insp.querySelector('[data-reset]').addEventListener('click', async () => {
         const base = builtinById(tpl.basedOn);
@@ -352,8 +367,8 @@ export async function render(root, { id }) {
       { label: 'Send backward', icon: 'arrow-down', onClick: () => order('down') },
       { label: 'Send to back', icon: 'send-to-back', onClick: () => order('back') },
       '-',
-      { label: 'Centre horizontally on page', icon: 'align-center', onClick: () => { x.x = Math.round((PAGE.w - x.w) / 2); commit(); draw(); } },
-      { label: 'Full width (margins)', icon: 'separator-horizontal', onClick: () => { x.x = 48; x.w = PAGE.w - 96; commit(); draw(); } },
+      { label: 'Centre horizontally on page', icon: 'align-center', onClick: () => { x.x = Math.round((pg().w - x.w) / 2); commit(); draw(); } },
+      { label: 'Full width (margins)', icon: 'separator-horizontal', onClick: () => { x.x = 48; x.w = pg().w - 96; commit(); draw(); } },
       { label: x.locked ? 'Unlock' : 'Lock position', icon: 'lock', onClick: () => { x.locked = !x.locked; commit(); draw(); } },
     ]));
   }
@@ -394,7 +409,7 @@ export async function render(root, { id }) {
   function addBlock(type) {
     const wrapRect = wrap.getBoundingClientRect();
     const holderRect = holder.getBoundingClientRect();
-    const cy = Math.max(40, Math.min(PAGE.h - 120, (wrapRect.top + wrapRect.height / 2 - holderRect.top) / zoom - 40));
+    const cy = Math.max(40, Math.min(pg().h - 120, (wrapRect.top + wrapRect.height / 2 - holderRect.top) / zoom - 40));
     const x = newBlock(type, 80, Math.round(cy / SNAP) * SNAP);
     x.z = Math.max(0, ...tpl.blocks.map((y) => y.z || 0)) + 1;
     if (type === 'items') { x.x = 48; }

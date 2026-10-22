@@ -6,7 +6,7 @@ import { fmtMoney } from '../lib/money.js';
 import { fmtDate } from '../lib/dates.js';
 import { buildContext, mountPage } from '../render.js';
 import { templateFor, allTemplates } from '../tplstore.js';
-import { printDoc, downloadPdf, sharePdf } from '../export.js';
+import { printDialog } from '../print.js';
 import { whatsappLink, mailLink, billShareText } from '../lib/share.js';
 import { paymentDialog } from '../payui.js';
 import { setTitle } from '../app.js';
@@ -60,7 +60,7 @@ export async function render(root, { id }) {
         <div class="group">
           ${doc.customer?.phone ? `<a class="row" target="_blank" rel="noopener" href="${esc(whatsappLink(doc.customer.phone, billShareText({ business: b, doc, total: totals.total, title }), b.country))}">${icon('message-circle', 18)}<span class="grow">WhatsApp message</span>${icon('chevron-right', 16, 'chev')}</a>` : ''}
           <a class="row" href="${esc(mailLink(doc.customer?.email, `${title} ${doc.number} from ${b.name}`, billShareText({ business: b, doc, total: totals.total, title })))}">${icon('mail', 18)}<span class="grow">Email</span>${icon('chevron-right', 16, 'chev')}</a>
-          <a class="row" data-act="share" href="javascript:void 0">${icon('share-2', 18)}<span class="grow">Share PDF…</span>${icon('chevron-right', 16, 'chev')}</a>
+          <a class="row" data-act="share" href="#" role="button">${icon('share-2', 18)}<span class="grow">Share PDF…</span>${icon('chevron-right', 16, 'chev')}</a>
         </div>
         <div class="section-title">Design</div>
         <div class="group"><div class="row"><select class="input" data-tpl>${templates.map((x) => `<option value="${x.id}" ${x.id === tpl.id ? 'selected' : ''}>${esc(x.name)}</option>`).join('')}</select></div></div>
@@ -76,14 +76,20 @@ export async function render(root, { id }) {
   // Re-render in place only if the user is still on this bill (a dialog may outlive navigation).
   const again = () => { window.removeEventListener('resize', onResize); if (root.isConnected && location.hash === `#/bills/${id}`) render(root, { id }); };
 
+  const openPrint = (mode) => printDialog({
+    mode, doc, business: bizFor(doc, b), templates, tpl,
+    ctxFor: (label) => buildContext(label ? { ...doc, copyLabel: label } : doc, b, { paid, credited: st.credited || 0 }),
+    shareText: billShareText({ business: b, doc, total: totals.total, title }),
+    onTemplate: async (tid) => { doc.templateId = tid; tpl = await templateFor(doc); await db.put('documents', doc); draw(); const sel = root.querySelector('[data-tpl]'); if (sel) sel.value = tid; },
+  });
   const busy = async (btn, fn) => {
     const prev = btn?.innerHTML; if (btn) { btn.disabled = true; }
     try { await fn(); } catch (e) { toast(e.message || 'Something went wrong', 'err'); console.error(e); } finally { if (btn) { btn.disabled = false; btn.innerHTML = prev; } }
   };
   const actions = {
-    print: () => printDoc(ctx(), tpl),
-    pdf: (btn) => busy(btn, () => downloadPdf(ctx(), tpl)),
-    share: (btn) => busy(btn, () => sharePdf(ctx(), tpl, billShareText({ business: b, doc, total: totals.total, title }))),
+    print: () => openPrint('print'),
+    pdf: () => openPrint('pdf'),
+    share: () => openPrint('share'),
     pay: async () => { if (await paymentDialog({ doc, due: st.due })) again(); },
     convert: () => { location.hash = doc.convertedTo ? `#/bills/${doc.convertedTo}` : `#/bills/new/invoice?from=${doc.id}`; },
   };

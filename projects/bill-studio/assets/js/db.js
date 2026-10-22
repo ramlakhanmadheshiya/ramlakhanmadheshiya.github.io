@@ -57,6 +57,8 @@ export const db = {
     await tx(store, 'readwrite', (os) => os.put(obj));
     return obj;
   },
+  // Write without touching timestamps (used by imports).
+  async putRaw(store, obj) { await tx(store, 'readwrite', (os) => os.put(obj)); return obj; },
   async del(store, id) { await tx(store, 'readwrite', (os) => os.delete(id)); },
   async all(store, businessId) {
     const d = await open();

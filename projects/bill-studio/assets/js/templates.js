@@ -61,7 +61,7 @@ function cupertino() {
 
 function classic() {
   return {
-    id: 'tpl-classic', builtin: true, name: 'Classic GST', description: 'Formal boxed layout with HSN tax summary — ideal for GST.',
+    id: 'tpl-classic', builtin: true, name: 'Classic', description: 'Formal boxed layout with a full tax summary table.',
     accent: '#1d3a8a', font: 'system', page: { ...PAGE, bg: '#ffffff' },
     blocks: [
       B('shape', 24, 24, 746, 1075, { bg: 'transparent', borderColor: '#1d1d1f', borderWidth: 1 }, { fullHeight: true }),
@@ -162,7 +162,41 @@ function elegant() {
   };
 }
 
-export const BUILTIN_TEMPLATES = [cupertino(), classic(), minimal(), bold(), elegant()];
+// Half page (A5 landscape = top or bottom half of an A4 sheet).
+function halfPage() {
+  const W = 794, H = 559;
+  return {
+    id: 'tpl-half', builtin: true, name: 'Half page', description: 'Compact landscape bill for A5 / half an A4 sheet.',
+    accent: '#0071e3', font: 'system', page: { w: W, h: H, bg: '#ffffff', paper: 'a5l' },
+    blocks: [
+      B('logo', 28, 24, 52, 52),
+      B('business', 90, 24, 330, 70, { fontSize: 9.5, color: GRAY }, { nameSize: 15 }),
+      B('title', 470, 22, 296, 30, { fontSize: 18, weight: 700, align: 'right' }),
+      B('meta', 470, 54, 296, 62, { fontSize: 9, align: 'right' }),
+      B('line', 28, 122, 738, 1, { bg: '#d2d2d7' }),
+      B('billto', 28, 130, 360, 70, { fontSize: 9.5 }),
+      B('shipto', 406, 130, 360, 70, { fontSize: 9.5 }),
+      B('items', 28, 206, 738, 120, { fontSize: 9 }, { header: 'filled' }),
+      B('words', 28, 336, 420, 30, { fontSize: 8.5, color: GRAY }),
+      B('taxsummary', 28, 372, 420, 60, { fontSize: 8 }, { mode: 'rate' }),
+      B('totals', 516, 336, 250, 110, { fontSize: 9.5 }, { totalStyle: 'filled' }),
+      B('bank', 28, 440, 300, 70, { fontSize: 8.5 }),
+      B('qr', 340, 440, 76, 90, { fontSize: 7, align: 'center', color: GRAY }),
+      B('signature', 596, 456, 170, 70, { fontSize: 8.5, align: 'center' }),
+      B('text', 28, 534, 738, 16, { fontSize: 8, color: GRAY, align: 'center' }, { text: '{{business.footer}}', anchor: 'bottom' }),
+    ],
+  };
+}
+
+function receipt() {
+  return {
+    id: 'tpl-receipt', builtin: true, kind: 'flow', name: 'Compact receipt', description: 'For thermal rolls (58/80 mm), A6/A7 slips and quick cash bills.',
+    accent: '#000000', font: 'system', page: { w: 302, h: 0, bg: '#ffffff', paper: 't80' },
+    options: { logo: true, taxSummary: true, qr: true, terms: true, words: true, signature: false }, blocks: [],
+  };
+}
+
+export const BUILTIN_TEMPLATES = [cupertino(), classic(), minimal(), bold(), elegant(), halfPage(), receipt()];
 
 export function builtinById(id) { return BUILTIN_TEMPLATES.find((t) => t.id === id) || null; }
 

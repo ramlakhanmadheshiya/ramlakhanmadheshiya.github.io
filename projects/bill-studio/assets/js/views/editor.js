@@ -69,6 +69,8 @@ export async function render(root, params) {
   const sym = currencySymbol(b.currency, b.locale);
   const taxOptions = (sel) => b.taxes.map((x) => `<option value="${esc(x.id)}" ${x.id === sel ? 'selected' : ''}>${esc(x.label)}</option>`).join('');
   const registered = b.taxScheme !== 'unregistered' && b.taxScheme !== 'composition';
+  // Reverse charge exists in India and VAT systems (EU, UK, Gulf, etc.) — not in US sales tax and similar.
+  const RC_COUNTRY = !!(c.gst || c.taxName === 'VAT');
 
   setTitle(isNew ? `New ${t().label.toLowerCase()}` : `Edit ${doc.number}`);
 
@@ -283,8 +285,8 @@ export async function render(root, params) {
         <button class="btn sm mt-s" type="button" data-add-charge>${icon('plus', 14)} Add charge (shipping, packing…)</button></div>
       <div class="group mt" style="box-shadow:none;border:1px solid var(--sep)">
         <label class="row" style="cursor:pointer"><span class="grow">Round off total</span><span class="switch"><input type="checkbox" data-flag="roundOff" ${doc.roundOff ? 'checked' : ''}><span></span></span></label>
-        ${registered ? `<label class="row" style="cursor:pointer"><span class="grow">Reverse charge<div class="sub">${c.gst ? 'Tax payable by the recipient' : 'Customer accounts for tax (B2B cross-border)'}</div></span><span class="switch"><input type="checkbox" data-flag="reverseCharge" ${doc.reverseCharge ? 'checked' : ''}><span></span></span></label>
-        <label class="row" style="cursor:pointer"><span class="grow">Tax exempt sale<div class="sub">e.g. resale certificate, exempt customer</div></span><span class="switch"><input type="checkbox" data-flag="taxExempt" ${doc.taxExempt ? 'checked' : ''}><span></span></span></label>
+        ${registered && RC_COUNTRY ? `<label class="row" style="cursor:pointer"><span class="grow">Reverse charge<div class="sub">${c.gst ? 'Tax payable by the recipient' : 'Customer accounts for tax (B2B cross-border)'}</div></span><span class="switch"><input type="checkbox" data-flag="reverseCharge" ${doc.reverseCharge ? 'checked' : ''}><span></span></span></label>` : ''}
+        ${registered ? `        <label class="row" style="cursor:pointer"><span class="grow">Tax exempt sale<div class="sub">e.g. resale certificate, exempt customer</div></span><span class="switch"><input type="checkbox" data-flag="taxExempt" ${doc.taxExempt ? 'checked' : ''}><span></span></span></label>
         ${doc.taxExempt ? `<div class="row"><input class="input" data-k="exemptReason" value="${esc(doc.exemptReason || '')}" placeholder="Legal reason, e.g. “Exempt intra-Community supply, Art. 138 Directive 2006/112/EC” or certificate no."></div>` : ''}` : ''}
       </div>
       <div class="form-grid mt">

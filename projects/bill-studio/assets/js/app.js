@@ -2,6 +2,7 @@ import { icon } from './lib/icons.js';
 import { esc, menu, toast, safeImg } from './ui.js';
 import { state, loadState, onChange, switchBusiness } from './store.js';
 import { getCountry } from './tax/countries.js';
+import { isUnlocked, showLogin, startAutoLock, lockNow } from './auth.js';
 
 const ROUTES = [
   { re: /^\/?$/, view: 'dashboard', title: 'Home' },
@@ -77,6 +78,7 @@ function shellHtml() {
         <div class="topbar-title" id="topbar-title"></div>
         <div class="spacer"></div>
         <button class="btn icon ghost" data-theme-btn aria-label="Change theme" title="Appearance">${themeIcon()}</button>
+        <button class="btn icon ghost" data-lock aria-label="Lock Bill Studio" title="Lock">${icon('lock', 18)}</button>
         <a href="#/bills/new/invoice" class="btn primary sm desktop-only">${icon('plus', 15)} New bill</a>
       </header>
       <main id="view" tabindex="-1"></main>
@@ -93,6 +95,7 @@ function shellHtml() {
 
 function bindShell(root) {
   root.querySelector('[data-theme-btn]').addEventListener('click', (e) => cycleTheme(e.currentTarget));
+  root.querySelector('[data-lock]').addEventListener('click', () => lockNow());
   root.querySelector('[data-biz]').addEventListener('click', (e) => {
     menu(e.currentTarget, [
       ...state.businesses.map((x) => ({ label: (x.id === state.business.id ? '✓ ' : '') + (x.name || 'Untitled business'), icon: 'building-2', onClick: () => switchBusiness(x.id) })),
@@ -198,6 +201,17 @@ async function boot() {
   }
   try { state.theme = localStorage.getItem('bs-theme') || 'light'; } catch { state.theme = 'light'; }
   applyTheme(state.theme);
+  if (!window.crypto?.subtle) {
+    document.getElementById('app').innerHTML = `<div style="padding:40px;font-family:system-ui;text-align:center"><h2>Secure context required</h2><p>Open Bill Studio over https://, from localhost, or as the offline file — this browser blocks the security features it needs here.</p></div>`;
+    return;
+  }
+  // Owner sign-in before anything is shown.
+  if (!isUnlocked()) {
+    const app = document.getElementById('app');
+    await showLogin(app, { firstRun: !state.business });
+    app.dataset.mode = '';
+  }
+  startAutoLock();
   onChange(() => rerenderShell());
   window.addEventListener('hashchange', route);
   await route();

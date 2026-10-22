@@ -240,7 +240,7 @@ select.input {
 .input-affix .ic { position: absolute; left: 11px; top: 50%; transform: translateY(-50%); color: var(--text-3); }
 
 /* Toggle switch */
-.switch { position: relative; width: 51px; height: 31px; flex: none; }
+.switch { position: relative; display: inline-block; vertical-align: middle; width: 51px; height: 31px; flex: none; }
 .switch input { opacity: 0; width: 100%; height: 100%; margin: 0; position: absolute; cursor: pointer; z-index: 1; }
 .switch span { position: absolute; inset: 0; border-radius: 31px; background: var(--fill-2); transition: background 0.25s var(--ease); }
 .switch span::after { content: ''; position: absolute; top: 2px; left: 2px; width: 27px; height: 27px; border-radius: 50%; background: #fff; box-shadow: 0 3px 8px rgba(0,0,0,.15), 0 1px 1px rgba(0,0,0,.16); transition: transform 0.25s var(--spring); }
@@ -510,3 +510,7 @@ table.table { width: 100%; border-collapse: collapse; font-size: 14px; font-vari
   .designer-bar .title-input { width: 110px; min-width: 0; }
   .large-title .actions { width: 100%; }
 }
+
+/* Print sheets (any paper size) */
+.print-sheet:last-child { break-after: auto !important; page-break-after: auto !important; }
+@media print { #print-root .print-sheet { box-shadow: none !important; } }
