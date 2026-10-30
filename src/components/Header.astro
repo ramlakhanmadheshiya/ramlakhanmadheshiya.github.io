@@ -5,7 +5,7 @@ const active = (href: string) => path === href || path.startsWith(href);
 ---
 <header class="site-header">
 	<div class="wrap">
-		<a class="brand" href="/">{SITE_TITLE}</a>
+		<a class="brand" href="/">Ramlakhan<span class="brand-rest"> Madheshiya</span></a>
 		<nav aria-label="Main">
 			{NAV.map((item) => (
 				<a href={item.href} aria-current={active(item.href) ? 'page' : undefined}>{item.label}</a>

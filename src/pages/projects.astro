@@ -24,7 +24,7 @@ const prs = (repo: string) => pullRequests.filter((p) => p.repo === repo);
 
 	<section class="group" id="open-source" style="margin-top:0">
 		<h2>Open source</h2>
-		<p class="group-desc">Contributions to projects I don't own. State as of 30 October 2026.</p>
+		<p class="group-desc">Contributions to projects maintained by others. Status as of 30 October 2026.</p>
 		<ul class="rows">
 			{openSource.map((p) => (
 				<li class="row">
@@ -39,7 +39,7 @@ const prs = (repo: string) => pullRequests.filter((p) => p.repo === repo);
 							<li>
 								<span class="num">#{pr.number}</span>
 								<a href={pr.url}>{pr.title}</a>
-								<span class={`badge ${pr.state}`}>{pr.state}</span>
+								<span class={`badge ${pr.state}`}>{pr.state === 'merged' ? 'accepted' : 'under review'}</span>
 							</li>
 						))}
 					</ul>

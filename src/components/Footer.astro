@@ -1,22 +1,32 @@
 ---
-import { NAV, SOCIAL, SITE_TITLE } from '../consts';
+import { NAV, SOCIAL, SITE_TITLE, EMAIL } from '../consts';
 const year = new Date().getFullYear();
 ---
 <footer class="site-footer">
 	<div class="wrap">
-		<div class="footer-row">
-			<div class="footer-links" aria-label="Pages">
-				{NAV.map((item) => <a href={item.href}>{item.label}</a>)}
-				<a href="/BrainnovaStudio/games/">Games</a>
-				<a href="/rss.xml">RSS</a>
+		<div class="footer-grid">
+			<div class="footer-about">
+				<a class="brand" href="/">{SITE_TITLE}</a>
+				<p>Software engineer. Open-source contributor to SciML, builder of games and offline-first web apps.</p>
 			</div>
-			<div class="footer-links" aria-label="Elsewhere">
-				{SOCIAL.map((item) => <a href={item.href} rel="me noopener">{item.label}</a>)}
-			</div>
+			<nav aria-label="Pages">
+				<h2>Pages</h2>
+				<ul>
+					{NAV.map((item) => <li><a href={item.href}>{item.label}</a></li>)}
+					<li><a href="/BrainnovaStudio/games/">Games</a></li>
+				</ul>
+			</nav>
+			<nav aria-label="Elsewhere">
+				<h2>Elsewhere</h2>
+				<ul>
+					{SOCIAL.filter((s) => s.label !== 'Email').map((item) => <li><a href={item.href} rel="me noopener">{item.label}</a></li>)}
+					<li><a href={`mailto:${EMAIL}`}>Email</a></li>
+				</ul>
+			</nav>
 		</div>
-		<div class="footer-row">
+		<div class="footer-base">
 			<span>© {year} {SITE_TITLE}</span>
-			<span>Built with <a href="https://astro.build">Astro</a> · <a href="https://github.com/ramlakhanmadheshiya/ramlakhanmadheshiya.github.io">Source</a></span>
+			<span><a href="/rss.xml">RSS</a> · Built with <a href="https://astro.build">Astro</a> · <a href="https://github.com/ramlakhanmadheshiya/ramlakhanmadheshiya.github.io">Source</a></span>
 		</div>
 	</div>
 </footer>

@@ -29,13 +29,12 @@ const canonical = new URL(Astro.url.pathname, Astro.site);
 		<meta property="og:type" content={type} />
 		<meta property="og:url" content={canonical} />
 		<meta name="twitter:card" content="summary" />
-		<meta name="theme-color" content="#fbfaf7" media="(prefers-color-scheme: light)" />
-		<meta name="theme-color" content="#121316" media="(prefers-color-scheme: dark)" />
+		<meta name="theme-color" content="#ffffff" />
 		<script is:inline>
 			(function () {
 				var t;
 				try { t = localStorage.getItem('theme'); } catch (e) {}
-				if (!t) t = matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+				if (t !== 'dark') t = 'light';
 				document.documentElement.dataset.theme = t;
 			})();
 		</script>

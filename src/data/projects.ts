@@ -46,7 +46,7 @@ export const openSource: Project[] = [
 		year: '2026',
 		blurb: 'Julia solvers for ODEs, DDEs and DAEs. I work on the delay-equation side (DelayDiffEq\'s MethodOfSteps): lag handling, constrained mode, composite algorithms and unit-carrying time types.',
 		tags: ['Julia', 'DDE', 'Numerical solvers'],
-		status: '2 merged · 5 open',
+		status: '2 accepted · 5 under review',
 		links: [{ label: 'Repository', href: 'https://github.com/SciML/OrdinaryDiffEq.jl' }],
 	},
 	{
@@ -54,7 +54,7 @@ export const openSource: Project[] = [
 		year: '2024',
 		blurb: 'The portable Python dataframe library. Made the documentation\'s navigation dropdowns scrollable.',
 		tags: ['Python', 'Docs'],
-		status: '1 merged',
+		status: '1 accepted',
 		links: [{ label: 'Pull request', href: 'https://github.com/ibis-project/ibis/pull/10090' }],
 	},
 ];

@@ -1,11 +1,11 @@
 :root {
-	--bg: #fbfaf7;
-	--surface: #f3f1ec;
-	--ink: #1a1b1e;
-	--muted: #6a6d75;
-	--line: #e4e1d9;
-	--accent: #2f4b7c;
-	--accent-soft: #e8edf6;
+	--bg: #ffffff;
+	--surface: #f7f7f5;
+	--ink: #20232a;
+	--muted: #6b7078;
+	--line: #ebebe7;
+	--accent: #34568b;
+	--accent-soft: #edf1f8;
 	--ok: #2f7a4f;
 	--warn: #9a6a14;
 	--serif: ui-serif, 'Iowan Old Style', 'Palatino Linotype', Charter, Georgia, serif;
@@ -16,13 +16,13 @@
 	color-scheme: light;
 }
 :root[data-theme='dark'] {
-	--bg: #121316;
-	--surface: #1a1c20;
+	--bg: #191b20;
+	--surface: #20232a;
 	--ink: #ecebe7;
-	--muted: #9a9da6;
-	--line: #2a2c32;
+	--muted: #a0a4ad;
+	--line: #2d3038;
 	--accent: #9db8ea;
-	--accent-soft: #1d2433;
+	--accent-soft: #232b3b;
 	--ok: #6cc08f;
 	--warn: #e0b45c;
 	color-scheme: dark;
@@ -203,3 +203,64 @@ p { margin: 0 0 1em; }
 @media print { .site-header, .site-footer, .actions { display: none; } body { background: #fff; color: #000; } }
 .rows.grid > .row, .pr-list > li > * { min-width: 0; }
 .row, .post-list li { overflow-wrap: anywhere; }
+
+/* ---- airier spacing, header, footer (overrides) ---- */
+body { line-height: 1.75; }
+main { padding: 5rem 1.5rem 7rem; }
+.section { margin-top: 6rem; }
+.group { margin-top: 5rem; }
+.page-head { margin-bottom: 4.5rem; }
+.page-head h1, .hero h1 { margin-bottom: 1.4rem; }
+.hero { padding-top: 3rem; }
+.actions { margin-top: 2.2rem; gap: 0.9rem; }
+.btn { padding: 0.7rem 1.4rem; border-radius: 8px; border-color: var(--line); }
+.btn.primary { border-color: var(--ink); }
+.row { padding: 1.6rem 0; }
+.row p { margin: 0.5rem 0 0.9rem; line-height: 1.7; }
+.rows.grid { gap: 1.5rem; grid-template-columns: repeat(auto-fill, minmax(21rem, 1fr)); }
+.rows.grid .row { padding: 1.7rem 1.7rem 1.5rem; border-color: var(--line); background: var(--bg); border-radius: 12px; transition: border-color .15s, box-shadow .15s; }
+.rows.grid .row:hover { border-color: color-mix(in srgb, var(--accent) 35%, var(--line)); box-shadow: 0 6px 24px -14px rgb(30 40 70 / .25); }
+.pr-list li { padding: 0.8rem 0; }
+.now { gap: 1.2rem; }
+.post-list li { padding: 2rem 0; }
+.cv-item { padding: 1.6rem 0; }
+.toc { gap: 0.6rem 1.8rem; margin-top: 2rem; }
+.section-head { margin-bottom: 1rem; }
+
+.site-header { border-bottom: 1px solid var(--line); background: var(--bg); position: sticky; top: 0; z-index: 20; }
+.site-header .wrap { height: 4.5rem; }
+.brand { white-space: nowrap; }
+.site-header nav { gap: 2rem; }
+.site-header nav a { padding: 0.4rem 0; }
+.site-header nav .theme-toggle { margin-left: -0.9rem; }
+
+.site-footer { border-top: 1px solid var(--line); background: var(--surface); margin-top: 2rem; font-size: 0.95rem; }
+.site-footer .wrap { padding-top: 4rem; padding-bottom: 2.5rem; display: block; }
+.footer-grid { display: grid; grid-template-columns: 1.6fr 1fr 1fr; gap: 3rem; }
+.footer-about p { margin: 0.8rem 0 0; max-width: 22rem; color: var(--muted); line-height: 1.7; }
+.footer-grid h2 { font: 0.75rem var(--mono); letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); margin: 0 0 1rem; }
+.footer-grid ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.6rem; }
+.footer-grid a { text-decoration: none; }
+.footer-grid a:hover { color: var(--accent); }
+.footer-base { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 0.6rem 2rem; margin-top: 3.5rem; padding-top: 1.6rem; border-top: 1px solid var(--line); font-size: 0.85rem; color: var(--muted); }
+.footer-base a { text-decoration: none; }
+.footer-base a:hover { color: var(--accent); }
+
+@media (max-width: 40rem) {
+	main { padding: 3rem 1.25rem 5rem; }
+	.wrap { padding: 0 1.25rem; }
+	.section { margin-top: 4.5rem; }
+	.group { margin-top: 4rem; }
+	.page-head { margin-bottom: 3rem; }
+	.site-header .wrap { height: 4rem; }
+	.site-header nav { gap: 1.1rem; }
+	.site-header nav .theme-toggle { margin-left: -0.6rem; }
+	.brand-rest { display: none; }
+	.rows.grid { grid-template-columns: 1fr; gap: 1.1rem; }
+	.rows.grid .row { padding: 1.4rem; }
+	.footer-grid { grid-template-columns: 1fr 1fr; gap: 2.2rem 1.5rem; }
+	.footer-about { grid-column: 1 / -1; }
+	.footer-base { flex-direction: column; margin-top: 2.5rem; }
+	.site-footer .wrap { padding-top: 3rem; }
+	.cv-item { padding: 1.3rem 0; }
+}

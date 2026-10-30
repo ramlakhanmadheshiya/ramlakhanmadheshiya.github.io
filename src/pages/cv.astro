@@ -3,16 +3,16 @@ import Base from '../layouts/Base.astro';
 import { CV_PDF, EMAIL } from '../consts';
 
 const experience = [
-	{ when: 'Apr – Nov 2025', title: 'SDE Intern', org: 'National Technical Research Organisation (NTRO)', note: 'Onsite · 3 months, in phases', points: ['Built a security tool to improve internal compliance and operational processes (details confidential under NDA).'] },
-	{ when: 'Jul – Dec 2024', title: 'Web Developer Intern', org: 'Krtya Technologies Pvt. Ltd', note: 'React, Node.js, Express, PostgreSQL', points: ['Developed a scalable full-stack checkout portal with secure payments and order management.'] },
-	{ when: 'Jan 2024 – Jan 2025', title: 'Technical Content Writer', org: 'GeeksforGeeks', note: 'Remote', points: ['Authored 12+ technical articles on Python, web technologies, PyTorch and Selenium testing.'] },
+	{ when: 'Apr – Nov 2025', title: 'SDE Intern', org: 'National Technical Research Organisation (NTRO)', note: 'Onsite · 3 months, in phases', points: ['Designed and built a security tool that supports internal compliance and operations (details confidential under NDA).'] },
+	{ when: 'Jul – Dec 2024', title: 'Web Developer Intern', org: 'Krtya Technologies Pvt. Ltd', note: 'React, Node.js, Express, PostgreSQL', points: ['Built a full-stack checkout portal with secure payments and order management.'] },
+	{ when: 'Jan 2024 – Jan 2025', title: 'Technical Content Writer', org: 'GeeksforGeeks', note: 'Remote', points: ['Wrote more than 12 technical articles on Python, web technologies, PyTorch and software testing.'] },
 ];
 ---
 <Base title="CV" description="Curriculum vitae of Ramlakhan Madheshiya: open-source work, experience, projects, education and skills.">
 	<header class="page-head">
 		<p class="eyebrow">Curriculum vitae</p>
 		<h1>Ramlakhan Madheshiya</h1>
-		<p class="lede">Software engineer and B.Tech CSE graduate (2026). Open-source contributor to SciML; builder of games and offline-first web apps.</p>
+		<p class="lede">Software engineer with a B.Tech in Computer Science and Engineering (2026). I contribute to SciML's OrdinaryDiffEq.jl and build games and offline-first web apps.</p>
 		<div class="actions">
 			<a class="btn primary" href={CV_PDF}>Download PDF</a>
 			<a class="btn" href={`mailto:${EMAIL}`}>Email me</a>
@@ -25,14 +25,14 @@ const experience = [
 			<span class="when">Oct 2026 – now</span>
 			<div>
 				<h3>SciML / OrdinaryDiffEq.jl</h3>
-				<p>2 merged and 5 open pull requests and 5 issues reported on delay differential equation solvers: lag handling, constrained mode, composite algorithms and unit-carrying time types.</p>
+				<p>Fixes to the delay differential equation solvers: lag handling, constrained step sizes, composite algorithms and unit-carrying time types. 7 pull requests (2 accepted, 5 under review) and 5 issues reported.</p>
 			</div>
 		</div>
 		<div class="cv-item">
 			<span class="when">Sep 2024</span>
 			<div>
 				<h3>ibis-project / ibis</h3>
-				<p>Made the documentation's navigation dropdowns scrollable (merged).</p>
+				<p>Improved the documentation site's navigation by making dropdown menus scrollable.</p>
 			</div>
 		</div>
 		<p style="margin-top:0.8rem;font-size:0.93rem"><a href="/projects/#open-source">Full list of pull requests →</a></p>
