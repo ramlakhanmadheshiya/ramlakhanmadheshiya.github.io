@@ -10,6 +10,7 @@ import { paymentDialog } from '../payui.js';
 import { customerDialog } from './customers.js';
 import { setTitle } from '../app.js';
 import { downloadStatementPdf } from '../reports-pdf.js';
+import { can, audit } from '../session.js';
 
 export async function render(root, { id }) {
   const b = state.business;
@@ -32,7 +33,7 @@ export async function render(root, { id }) {
   root.innerHTML = `<div class="page">
     <div class="large-title"><div><p style="margin:0 0 4px"><a href="#/customers">${icon('chevron-left', 14)} Customers</a></p><h1>${esc(c.name)}</h1>
       <p>${esc([c.phone, c.email, c.taxId ? `${country.taxIdLabel} ${c.taxId}` : ''].filter(Boolean).join(' · '))}</p></div>
-      <div class="actions"><button class="btn" data-edit>${icon('pencil', 16)} Edit</button><button class="btn" data-pay>${icon('wallet', 16)} Receive payment</button><a class="btn primary" href="#/bills/new/invoice?customer=${c.id}">${icon('plus', 16)} New bill</a><button class="btn icon" data-more aria-label="More">${icon('ellipsis', 18)}</button></div></div>
+      <div class="actions"><button class="btn" data-edit data-perm="customers.manage">${icon('pencil', 16)} Edit</button><button class="btn" data-pay data-perm="payments.record">${icon('wallet', 16)} Receive payment</button><a class="btn primary" href="#/bills/new/invoice?customer=${c.id}" data-perm="bills.create">${icon('plus', 16)} New bill</a><button class="btn icon" data-more aria-label="More">${icon('ellipsis', 18)}</button></div></div>
 
     <div class="grid c3">
       <div class="stat"><div class="label">Balance</div><div class="value ${ledger.balance > 0 ? 'warn-text' : ledger.balance < 0 ? 'pos' : ''}">${m(Math.abs(ledger.balance))}</div><div class="hint">${ledger.balance > 0.004 ? 'They owe you' : ledger.balance < -0.004 ? 'Advance / credit with you' : 'All settled'}</div></div>
@@ -63,6 +64,7 @@ export async function render(root, { id }) {
   root.querySelectorAll('[data-href]').forEach((x) => x.addEventListener('click', () => (location.hash = x.dataset.href)));
   const again = () => { if (root.isConnected && location.hash === `#/customers/${id}`) render(root, { id }); };
   root.querySelectorAll('[data-pay-id]').forEach((x) => x.addEventListener('click', async () => {
+    if (!can('payments.delete')) return; // editing a recorded payment needs “Edit or delete payments”
     const p = payments.find((y) => y.id === x.dataset.payId);
     const linked = p.documentId ? docs.find((d) => d.id === p.documentId) : null;
     if (await paymentDialog({ customers, payment: p, doc: linked, openDocs: open.map((o) => ({ doc: o.doc, due: o.due })) })) again();
@@ -75,11 +77,11 @@ export async function render(root, { id }) {
   root.querySelector('[data-statement]')?.addEventListener('click', () => downloadStatementPdf(c, ledger, b));
   root.querySelector('[data-more]').addEventListener('click', (e) => menu(e.currentTarget, [
     { label: 'Download statement PDF', icon: 'file-down', onClick: () => downloadStatementPdf(c, ledger, b) },
-    { label: 'Delete customer', icon: 'trash-2', danger: true, onClick: async () => {
+    ...(can('customers.manage') ? [{ label: 'Delete customer', icon: 'trash-2', danger: true, onClick: async () => {
       if (mine.length) { toast('This customer has bills — delete those first', 'err'); return; }
       if (payments.some((p) => p.customerId === c.id)) { toast('This customer has payments recorded — delete those first in Payments', 'err'); return; }
       if (!(await confirmDialog(`Delete ${c.name}?`, 'The customer will be removed from this device.', { ok: 'Delete', danger: true }))) return;
-      await db.del('customers', c.id); toast('Customer deleted'); location.hash = '#/customers';
-    } },
+      await db.del('customers', c.id); audit('Customer deleted', c.name, { businessId: c.businessId }); toast('Customer deleted'); location.hash = '#/customers';
+    } }] : []),
   ]));
 }

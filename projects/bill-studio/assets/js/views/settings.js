@@ -6,7 +6,8 @@ import { getCountry } from '../tax/countries.js';
 import { presetRate } from '../tax/engine.js';
 import { todayISO, addDays, periodRange, fmtDate } from '../lib/dates.js';
 import { makeBackup, readBackup, exportData, importData } from '../backup.js';
-import { getAuth, changeCredentials, setAutoLock, lockNow } from '../auth.js';
+import { getOrg, saveOrg, changeOwnPassword, lockNow, signOut, newRecoveryKey, passwordError } from '../auth.js';
+import { session, can, isOwner, audit } from '../session.js';
 import { PAPERS } from '../print.js';
 import { BUILD, BUILT_ON } from '../version.js';
 import { applyTheme, rerenderShell } from '../app.js';
@@ -22,7 +23,8 @@ export async function render(root) {
   const est = await navigator.storage?.estimate?.().catch(() => null);
   const persisted = await navigator.storage?.persisted?.().catch(() => false);
   const lastBackup = await db.setting('lastBackup');
-  const auth = await getAuth();
+  const org = (await getOrg()) || {};
+  const u = session.user;
   const standalone = matchMedia('(display-mode: standalone)').matches || navigator.standalone;
   const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
 
@@ -32,17 +34,25 @@ export async function render(root) {
     <div class="section-title">Appearance</div>
     <div class="group"><div class="row"><span class="grow">Theme</span><span data-theme-seg></span></div></div>
 
-    <div class="section-title">Owner sign-in</div>
+    <div class="section-title">Your account</div>
     <div class="card">
-      ${auth.isDefault ? `<div class="notice warn mb">${icon('triangle-alert', 18)}<div>You are using the <b>default</b> User ID and password. Change them now so only you can open your data.</div></div>` : ''}
-      <dl class="kv"><dt>Owner name</dt><dd>${esc(auth.ownerName || 'Owner')}</dd><dt>User ID</dt><dd class="mono">${esc(auth.userId)}</dd><dt>Password last changed</dt><dd>${auth.isDefault ? 'Never (default)' : new Date(auth.updatedAt).toLocaleDateString(b.locale)}</dd></dl>
-      <div class="form-grid mt"><div class="field"><label>Lock automatically after</label><select class="input" data-autolock>${[[0, 'Never'], [5, '5 minutes'], [15, '15 minutes'], [30, '30 minutes'], [60, '1 hour'], [240, '4 hours']].map(([v, l]) => `<option value="${v}" ${Number(auth.autoLockMin || 0) === v ? 'selected' : ''}>${l} of inactivity</option>`).join('')}</select></div></div>
-      <div class="btn-row mt"><button class="btn primary" data-cred>${icon('lock', 16)} Change name, ID or password</button><button class="btn" data-lock-now>Lock now</button></div>
-      <p class="help mt-s">The sign-in keeps other people out of the app on this device. For full protection also use your computer’s own login, and keep backups encrypted with a passphrase.</p>
+      <dl class="kv"><dt>Name</dt><dd>${esc(u.name)}</dd><dt>User ID</dt><dd class="mono">${esc(u.username)}</dd><dt>Role</dt><dd>${esc(session.role?.name || '')}</dd>
+        <dt>Password last changed</dt><dd>${u.passwordChangedAt ? new Date(u.passwordChangedAt).toLocaleDateString(b.locale) : '—'}</dd></dl>
+      <div class="btn-row mt"><button class="btn primary" data-cred>${icon('key-round', 16)} Change name or password</button><button class="btn" data-lock-now>${icon('lock', 16)} Lock</button><button class="btn" data-sign-out>${icon('log-out', 16)} Sign out</button>
+        ${can('users.view|audit.view') ? `<a class="btn" href="#/team">${icon('shield', 16)} Team & roles</a>` : ''}</div>
     </div>
 
-    <div class="section-title">Printing</div>
-    <div class="group"><div class="row"><span class="grow">Default bill size<div class="sub">Used by Print and PDF; you can still choose another size each time.</div></span>
+    ${can('users.manage') ? `<div class="section-title">Security</div>
+    <div class="card">
+      <div class="form-grid"><div class="field"><label>Lock automatically after (everyone on this device)</label><select class="input" data-autolock>${[[0, 'Never'], [5, '5 minutes'], [15, '15 minutes'], [30, '30 minutes'], [60, '1 hour'], [240, '4 hours']].map(([v, l]) => `<option value="${v}" ${Number(org.autoLockMin ?? 15) === v ? 'selected' : ''}>${l}</option>`).join('')}</select></div>
+        <div class="field"><label>Organisation name</label><input class="input" data-org-name value="${esc(org.name || '')}" placeholder="Shown on the sign-in page"></div></div>
+      ${isOwner() ? `<div class="btn-row mt"><button class="btn" data-recovery>${icon('key-round', 16)} Create a new recovery key</button></div>
+        <p class="help mt-s">${org.recovery ? 'A recovery key is set. Making a new one cancels the old key.' : '<b>No recovery key yet.</b> Create one so you can get back in if you forget your password.'}</p>` : ''}
+      <p class="help mt-s">Sign-in keeps people out of each other’s work on this device and records who did what. Data is stored unencrypted in this browser, so also protect the computer with its own login, and keep backups encrypted with a passphrase.</p>
+    </div>` : ''}
+
+    <div class="section-title" data-perm="business.manage">Printing</div>
+    <div class="group" data-perm="business.manage"><div class="row"><span class="grow">Default bill size<div class="sub">Used by Print and PDF; you can still choose another size each time.</div></span>
       <select class="input" data-paper-default style="width:auto;max-width:260px">${PAPERS.filter((x) => x.id !== 'custom').map((x) => `<option value="${x.id}" ${(b.printDefaults?.paper || (['US', 'CA', 'MX', 'PH'].includes(b.country) ? 'letter' : 'a4')) === x.id ? 'selected' : ''}>${esc(x.label)}</option>`).join('')}</select></div></div>
 
     <div class="section-title">Install as an app</div>
@@ -53,8 +63,8 @@ export async function render(root) {
       <div class="small" style="line-height:1.7">${isIOS ? `<b>iPhone / iPad:</b> tap the <b>Share</b> button in Safari, then <b>Add to Home Screen</b>.` : `<b>Chrome / Edge (Windows, Mac, Android):</b> use the install icon in the address bar, or the browser menu → <b>Install Bill Studio</b>.<br><b>iPhone / iPad:</b> Safari → Share → <b>Add to Home Screen</b>.`}</div>`}
     </div>
 
-    <div class="section-title">Taxes</div>
-    <div class="card">
+    <div class="section-title" data-perm="business.manage">Taxes</div>
+    <div class="card" data-perm="business.manage">
       <p class="small muted" style="margin-top:0">${esc(c.flag)} ${esc(c.name)} defaults are pre-filled. Edit the names and rates to match your business.${c.gst ? ' GST rates are split into CGST + SGST or IGST automatically.' : ''}</p>
       <div class="table-wrap"><table class="table"><thead><tr><th>Name on bill</th><th>Components</th><th class="num">Total</th><th></th></tr></thead>
       <tbody>${b.taxes.map((t, i) => `<tr><td>${esc(t.label)} ${t.id === b.defaultTaxId ? '<span class="badge partial">Default</span>' : ''}</td><td class="small muted">${t.gst ? 'CGST + SGST / IGST' : (t.components || []).map((x) => `${esc(x.name)} ${x.rate}%`).join(' + ') || 'No tax'}</td><td class="num">${presetRate(t)}%</td>
@@ -62,8 +72,8 @@ export async function render(root) {
       <div class="btn-row mt"><button class="btn sm" data-add-tax>${icon('plus', 14)} Add tax rate</button><button class="btn sm ghost" data-reset-tax>${icon('rotate-ccw', 14)} Restore ${esc(c.name)} defaults</button></div>
     </div>
 
-    <div class="section-title">Bill numbering</div>
-    <div class="card">
+    <div class="section-title" data-perm="business.manage">Bill numbering</div>
+    <div class="card" data-perm="business.manage">
       <p class="small muted" style="margin-top:0">Numbers are sequential${b.fyStartMonth !== 1 ? ' and restart every financial year' : ''}. ${c.maxNumberLength ? `GST rules allow up to ${c.maxNumberLength} characters.` : ''}</p>
       <div class="table-wrap"><table class="table"><thead><tr><th>Document</th><th>Prefix</th><th>Digits</th><th>Year in number</th><th>Next number</th></tr></thead><tbody>
       ${DOC_TYPE_LIST.map((t) => { const s = b.series?.[t.key] || {}; return `<tr data-series="${t.key}"><td>${esc(t.label)}</td>
@@ -75,24 +85,24 @@ export async function render(root) {
       <div class="btn-row mt"><button class="btn sm primary" data-save-series>Save numbering</button></div>
     </div>
 
-    <div class="section-title">Your data</div>
-    <div class="card">
+    <div class="section-title" data-perm="data.backup|data.import">Your data</div>
+    <div class="card" data-perm="data.backup|data.import">
       <div class="notice mb">${icon('lock', 18)}<div>Your data is stored <b>only on this device</b>, inside this browser. Nobody else can see it — not even us. Back it up regularly and keep the file safe; if you clear browser data or lose the device, the backup is the only copy.</div></div>
       <dl class="kv"><dt>Last backup</dt><dd>${lastBackup ? new Date(lastBackup).toLocaleString(b.locale) : '<span class="warn-text">Never</span>'}</dd>
         <dt>Storage used</dt><dd>${est ? (est.usage / 1048576).toFixed(1) + ' MB' : '—'}</dd>
         <dt>Protected from automatic clean-up</dt><dd>${persisted ? 'Yes' : 'Not yet'}</dd></dl>
       <div class="btn-row mt">
-        <button class="btn primary" data-backup>${icon('download', 16)} Full backup</button>
-        <button class="btn" data-export>${icon('file-down', 16)} Export a period / business</button>
-        <button class="btn" data-import>${icon('upload', 16)} Import data</button>
+        <button class="btn primary" data-backup data-perm="data.backup">${icon('download', 16)} Full backup</button>
+        <button class="btn" data-export data-perm="data.backup">${icon('file-down', 16)} Export a period / business</button>
+        <button class="btn" data-import data-perm="data.import">${icon('upload', 16)} Import data</button>
       </div>
       <p class="help mt-s"><b>Moving to another computer or browser?</b> Make a full backup here, open Bill Studio on the other device, sign in, then use Import → Replace everything. To send only some days (e.g. from a branch), use Export a period, then Import → Merge on the other device.</p>
       <div class="btn-row" hidden>
       </div>
     </div>
 
-    <div class="section-title">Businesses on this device</div>
-    <div class="group">${state.businesses.map((x) => `<div class="row"><span class="biz-avatar">${x.logo ? `<img src="${safeImg(x.logo)}" alt="">` : esc((x.name || '?')[0])}</span><div class="grow"><div class="title">${esc(x.name || 'Untitled')}</div><div class="sub">${esc(getCountry(x.country).name)} · ${esc(x.currency)}</div></div>
+    <div class="section-title" data-perm="business.add">Businesses on this device</div>
+    <div class="group" data-perm="business.add">${state.businesses.map((x) => `<div class="row"><span class="biz-avatar">${x.logo ? `<img src="${safeImg(x.logo)}" alt="">` : esc((x.name || '?')[0])}</span><div class="grow"><div class="title">${esc(x.name || 'Untitled')}</div><div class="sub">${esc(getCountry(x.country).name)} · ${esc(x.currency)}</div></div>
       ${x.id === b.id ? '<span class="badge partial">Active</span>' : `<button class="btn sm" data-switch-biz="${x.id}">Switch</button><button class="btn sm danger" data-del-biz="${x.id}">Delete</button>`}</div>`).join('')}
       <a class="row" href="#/welcome">${icon('plus', 18)}<span class="grow">Add another business</span>${icon('chevron-right', 16, 'chev')}</a></div>
 
@@ -111,8 +121,8 @@ export async function render(root) {
       <p><b>Open-source components.</b> qrcode-generator (MIT, Kazuhiko Arase) · html2canvas (MIT, Niklas von Hertzen) · jsPDF (MIT, yWorks / James Hall) · Inter typeface (SIL Open Font License, Rasmus Andersson) · Lucide icons (ISC).</p>
     </div>
 
-    <div class="section-title">Danger zone</div>
-    <div class="group"><div class="row"><div class="grow"><div class="title">Erase everything</div><div class="sub">Deletes all businesses, bills, customers and designs from this device.</div></div><button class="btn sm danger filled" data-wipe>Erase</button></div></div>
+    <div class="section-title" ${isOwner() ? '' : 'hidden style="display:none"'}>Danger zone</div>
+    <div class="group" ${isOwner() ? '' : 'hidden style="display:none"'}><div class="row"><div class="grow"><div class="title">Erase everything</div><div class="sub">Deletes all businesses, bills, customers and designs from this device.</div></div><button class="btn sm danger filled" data-wipe>Erase</button></div></div>
 
     <p class="small muted mt-l" style="text-align:center">Bill Studio · free and private, made for every business.<br>Tax rates are defaults — please confirm them with your tax advisor.</p>
   </div>`;
@@ -198,6 +208,7 @@ export async function render(root) {
       const pass = m.el.querySelector('[data-pass]').value;
       const blob = await makeBackup(pass);
       downloadBlob(blob, `bill-studio-backup-${todayISO()}${pass ? '-encrypted' : ''}.json`);
+      audit('Full backup downloaded', pass ? 'encrypted' : 'not encrypted');
       await db.setting('lastBackup', new Date().toISOString());
       m.close(); toast('Backup downloaded'); render(root);
     });
@@ -232,6 +243,7 @@ export async function render(root) {
       const blob = await exportData({ businessId, from, to, passphrase: pass });
       const tag = businessId ? (state.businesses.find((x) => x.id === businessId)?.name || 'business').replace(/[^\w-]+/g, '-').slice(0, 30) : 'all';
       downloadBlob(blob, `bill-studio-${tag}-${from || 'start'}-to-${to || todayISO()}${pass ? '-encrypted' : ''}.json`);
+      audit('Data exported', `${tag} ${from || 'start'} to ${to || todayISO()}`);
       if (!from && !to && !businessId) await db.setting('lastBackup', new Date().toISOString());
       m.close(); toast('Export downloaded');
     });
@@ -262,6 +274,7 @@ export async function render(root) {
       if (mode === 'replace' && !(await confirmDialog('Replace everything?', 'All Bill Studio data on this device will be replaced by the file. Make a backup first if you might need it.', { ok: 'Replace', danger: true }))) return;
       try {
         const res = await importData(data, mode);
+        audit(mode === 'replace' ? 'Data restored (replace everything)' : 'Data imported (merge)', `${res.added} added, ${res.updated} updated`);
         m.close();
         const { loadState } = await import('../store.js');
         await loadState();
@@ -274,27 +287,46 @@ export async function render(root) {
     });
   });
 
-  // Owner sign-in
-  root.querySelector('[data-autolock]').addEventListener('change', async (e) => { await setAutoLock(e.target.value); toast('Auto-lock updated — takes effect next sign-in'); });
+  // Account & security
   root.querySelector('[data-lock-now]').addEventListener('click', () => lockNow());
-  root.querySelector('[data-paper-default]').addEventListener('change', async (e) => { await saveBusiness({ ...b, printDefaults: { ...(b.printDefaults || {}), paper: e.target.value } }, { quiet: true }); toast('Default bill size saved'); });
+  root.querySelector('[data-sign-out]').addEventListener('click', () => signOut());
+  root.querySelector('[data-paper-default]').addEventListener('change', async (e) => { await saveBusiness({ ...b, printDefaults: { ...(b.printDefaults || {}), paper: e.target.value } }, { quiet: true, log: 'Default bill size changed' }); toast('Default bill size saved'); });
+  root.querySelector('[data-autolock]')?.addEventListener('change', async (e) => { await saveOrg({ ...(await getOrg()), autoLockMin: Number(e.target.value) }); audit('Auto-lock changed', `${e.target.value} min`); toast('Auto-lock updated — takes effect at next sign-in'); });
+  root.querySelector('[data-org-name]')?.addEventListener('change', async (e) => { await saveOrg({ ...(await getOrg()), name: e.target.value.trim() }); audit('Organisation renamed', e.target.value.trim()); toast('Saved'); });
+  root.querySelector('[data-recovery]')?.addEventListener('click', async () => {
+    if (org.recovery && !(await confirmDialog('Create a new recovery key?', 'Your old recovery key will stop working.', { ok: 'Create new key' }))) return;
+    const key = await newRecoveryKey();
+    const m = modal({ title: 'Your new recovery key', body: `<p class="small" style="margin-top:0">Keep it somewhere safe, away from this computer. It is shown only now.</p><div class="mono" style="font-size:20px;text-align:center;padding:16px;border-radius:12px;background:var(--fill)">${esc(key)}</div>`,
+      foot: `<button class="btn primary" data-close>I saved it</button>` });
+    await m.done; render(root);
+  });
   root.querySelector('[data-cred]').addEventListener('click', () => {
     const m = modal({
-      title: 'Owner sign-in',
+      title: 'Your account',
       body: `<form data-f autocomplete="on"><div class="form-grid">
-        <div class="field span2"><label>Owner name</label><input class="input" name="ownerName" value="${esc(auth.ownerName || 'Owner')}"></div>
-        <div class="field span2"><label>User ID</label><input class="input" name="userId" autocomplete="username" value="${esc(auth.userId)}"></div>
-        <div class="field span2"><label>Current password *</label><input class="input" type="password" name="current" autocomplete="current-password"></div>
+        <div class="field span2"><label>Your name</label><input class="input" name="name" value="${esc(u.name)}"></div>
+        <div class="field span2"><label>Email</label><input class="input" name="email" type="email" value="${esc(u.email || '')}"></div>
+        <input type="text" name="username" autocomplete="username" value="${esc(u.username)}" hidden>
+        <div class="field span2"><label>Current password (needed to change it)</label><input class="input" type="password" name="current" autocomplete="current-password"></div>
         <div class="field"><label>New password</label><input class="input" type="password" name="pw1" autocomplete="new-password" placeholder="Leave empty to keep"></div>
         <div class="field"><label>Repeat new password</label><input class="input" type="password" name="pw2" autocomplete="new-password"></div>
-      </div></form><p class="help">Write your password down somewhere safe. It can’t be recovered — only a backup can bring your data back.</p>`,
+      </div></form><p class="help">Your User ID can be changed only by deleting and re-adding the account, so your history stays linked to you.</p>`,
       foot: `<button class="btn" data-close>Cancel</button><button class="btn primary" data-ok>Save</button>`,
     });
     m.el.querySelector('[data-ok]').addEventListener('click', async () => {
       const g = (n) => m.el.querySelector(`[name=${n}]`).value;
-      if (g('pw1') !== g('pw2')) { toast('New passwords don’t match', 'err'); return; }
-      try { await changeCredentials({ currentPassword: g('current'), ownerName: g('ownerName'), userId: g('userId'), newPassword: g('pw1') }); m.close(); toast('Sign-in updated'); render(root); }
-      catch (e) { toast(e.message, 'err'); }
+      if (!g('name').trim()) { toast('Enter your name', 'err'); return; }
+      try {
+        if (g('pw1')) {
+          if (g('pw1') !== g('pw2')) { toast('New passwords don’t match', 'err'); return; }
+          const pe = passwordError(g('pw1'), u.username); if (pe) { toast(pe, 'err'); return; }
+          await changeOwnPassword(g('current'), g('pw1'));
+        }
+        const rec = await db.get('users', u.id);
+        Object.assign(rec, { name: g('name').trim().slice(0, 60), email: g('email').trim() });
+        await db.put('users', rec); Object.assign(session.user, rec);
+        m.close(); toast('Account updated'); rerenderShell();
+      } catch (e) { toast(e.message, 'err'); }
     });
   });
 
@@ -304,10 +336,12 @@ export async function render(root) {
     if (!(await confirmDialog(`Delete ${biz.name}?`, 'All its bills, customers, items, payments and designs will be removed from this device.', { ok: 'Delete business', danger: true }))) return;
     for (const s of STORES.filter((s) => s !== 'businesses')) for (const r of await db.all(s, biz.id)) await db.del(s, r.id);
     await db.del('businesses', biz.id);
+    audit('Business deleted', biz.name || '');
     state.businesses = await db.all('businesses');
     toast('Business deleted'); render(root);
   }));
   root.querySelector('[data-wipe]').addEventListener('click', async () => {
+    if (!isOwner()) return;
     if (!(await confirmDialog('Erase everything?', 'All data in Bill Studio on this device will be permanently deleted. Download a backup first if you might need it.', { ok: 'Erase everything', danger: true }))) return;
     await db.wipe(); state.business = null; state.businesses = [];
     toast('All data erased'); location.hash = '#/'; rerenderShell();

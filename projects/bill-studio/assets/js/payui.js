@@ -3,6 +3,7 @@ import { db } from './db.js';
 import { state } from './store.js';
 import { todayISO } from './lib/dates.js';
 import { num, fmtMoney } from './lib/money.js';
+import { audit } from './session.js';
 
 const COMMON_MODES = ['cash', 'card', 'bank transfer', 'cheque', 'wallet', 'other'];
 // Popular local instant-payment methods, offered only in their own country.
@@ -33,7 +34,7 @@ export function paymentDialog({ customers = [], customerId = '', doc = null, due
       <div class="field"><label>Reference</label><input class="input" name="reference" value="${esc(p.reference)}" placeholder="${esc(refPlaceholder())}"></div>
       <div class="field span2"><label>Note</label><input class="input" name="note" value="${esc(p.note)}"></div>
     </div>`,
-    foot: `${payment ? '<button class="btn danger" data-del style="margin-right:auto">Delete</button>' : ''}<button class="btn" data-close>Cancel</button><button class="btn primary" data-ok>Save payment</button>`,
+    foot: `${payment ? '<button class="btn danger" data-del data-perm="payments.delete" style="margin-right:auto">Delete</button>' : ''}<button class="btn" data-close>Cancel</button><button class="btn primary" data-ok>Save payment</button>`,
   });
   const el = m.el;
   const docSel = el.querySelector('[name=documentId]');
@@ -48,7 +49,7 @@ export function paymentDialog({ customers = [], customerId = '', doc = null, due
   docSel?.addEventListener('change', () => { const o = docSel.selectedOptions[0]; if (o?.dataset.due) el.querySelector('[name=amount]').value = o.dataset.due; });
   el.querySelector('[data-del]')?.addEventListener('click', async () => {
     if (!(await confirmDialog('Delete payment?', 'The bill and customer balance will be updated.', { ok: 'Delete', danger: true }))) return;
-    await db.del('payments', payment.id); toast('Payment deleted'); m.close('deleted');
+    await db.del('payments', payment.id); audit('Payment deleted', fmtMoney(payment.amount, b.currency, b.locale), { businessId: b.id }); toast('Payment deleted'); m.close('deleted');
   });
   el.querySelector('[data-ok]').addEventListener('click', async () => {
     const v = (n) => el.querySelector(`[name=${n}]`)?.value ?? '';
@@ -65,6 +66,7 @@ export function paymentDialog({ customers = [], customerId = '', doc = null, due
     if (doc && !payment && docDue <= 0.005 && !(await confirmDialog('Bill already settled', 'Nothing is due on this bill. Record this payment as an advance?', { ok: 'Record advance' }))) return;
     const rec = { ...(payment || {}), businessId: b.id, customerId: cust, documentId: doc ? doc.id : v('documentId'), amount, date: v('date') || todayISO(), mode: v('mode'), reference: v('reference'), note: v('note') };
     await db.put('payments', rec);
+    audit(payment ? 'Payment edited' : 'Payment recorded', `${fmtMoney(amount, b.currency, b.locale)} · ${rec.mode}${doc ? ` · ${doc.number}` : ''}`, { businessId: b.id });
     toast(payment ? 'Payment updated' : 'Payment recorded');
     m.close(rec);
   });

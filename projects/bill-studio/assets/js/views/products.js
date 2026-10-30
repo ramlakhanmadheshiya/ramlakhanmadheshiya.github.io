@@ -5,6 +5,7 @@ import { state, list } from '../store.js';
 import { getCountry, UNITS } from '../tax/countries.js';
 import { fmtMoney, num } from '../lib/money.js';
 import { presetRate } from '../tax/engine.js';
+import { can, audit } from '../session.js';
 
 function productDialog(p = null) {
   const b = state.business;
@@ -43,13 +44,15 @@ function productDialog(p = null) {
     if (!rec.name) { toast('Name is required', 'err'); return; }
     if (rec.price < 0 || rec.cost < 0) { toast('Prices can’t be negative', 'err'); return; }
     if (c.gst && rec.hsn && !/^\d{4}(\d{2})?(\d{2})?$/.test(rec.hsn)) { toast('HSN/SAC must be 4, 6 or 8 digits', 'err'); return; }
+    if (!can('items.manage')) return;
     await db.put('products', rec);
+    audit(p ? 'Item edited' : 'Item added', rec.name, { businessId: b.id });
     toast('Item saved');
     m.close(rec);
   });
   m.el.querySelector('[data-del]')?.addEventListener('click', async () => {
     if (!(await confirmDialog('Delete item?', `${x.name} will be removed from your catalogue. Existing bills are not affected.`, { ok: 'Delete', danger: true }))) return;
-    await db.del('products', x.id); toast('Item deleted'); m.close('deleted');
+    await db.del('products', x.id); audit('Item deleted', x.name, { businessId: b.id }); toast('Item deleted'); m.close('deleted');
   });
   return m.done;
 }
@@ -68,13 +71,13 @@ export async function render(root) {
 
   root.innerHTML = `<div class="page">
     <div class="large-title"><div><h1>Items</h1><p>${products.length} products & services${stockValue ? ` · stock worth ${m(stockValue)}` : ''}</p></div>
-      <div class="actions"><button class="btn" data-import>${icon('upload', 16)} Import CSV</button><button class="btn" data-export>${icon('download', 16)} Export</button><button class="btn primary" data-new>${icon('plus', 16)} New item</button></div></div>
+      <div class="actions"><button class="btn" data-import data-perm="items.manage">${icon('upload', 16)} Import CSV</button><button class="btn" data-export data-perm="reports.export|data.backup">${icon('download', 16)} Export</button><button class="btn primary" data-new data-perm="items.manage">${icon('plus', 16)} New item</button></div></div>
     <div class="toolbar"><div class="searchbar">${icon('search', 16)}<input class="input" data-q placeholder="Search name, ${c.showHsn ? 'HSN, ' : ''}SKU" aria-label="Search items"></div></div>
     <div data-list></div></div>`;
 
   const draw = () => {
     const host = root.querySelector('[data-list]');
-    if (!products.length) { host.innerHTML = emptyState('package', 'No items yet', 'Save the products and services you sell — then add them to any bill with a tap.', `<button class="btn primary" data-new2>${icon('plus', 16)} Add item</button>`); host.querySelector('[data-new2]').onclick = add; return; }
+    if (!products.length) { host.innerHTML = emptyState('package', 'No items yet', 'Save the products and services you sell — then add them to any bill with a tap.', `<button class="btn primary" data-new2 data-perm="items.manage">${icon('plus', 16)} Add item</button>`); host.querySelector('[data-new2]').onclick = add; return; }
     const f = products.filter((p) => !q || [p.name, p.sku, p.hsn].join(' ').toLowerCase().includes(q));
     host.innerHTML = `<div class="card" style="padding:6px 8px"><div class="table-wrap"><table class="table">
       <thead><tr><th>Item</th>${c.showHsn ? `<th class="desktop-only">${esc(c.hsnLabel)}</th>` : ''}<th class="desktop-only">Tax</th><th class="num">Price</th><th class="num">Stock</th><th class="num desktop-only">Sold</th></tr></thead>
@@ -85,7 +88,7 @@ export async function render(root) {
         <td class="num" style="font-weight:600">${m(p.price)}</td>
         <td class="num">${p.trackStock ? `<span class="badge ${num(p.stock) <= 0 ? 'overdue' : low ? 'unpaid' : 'paid'}">${num(p.stock)}</span>` : '<span class="muted">—</span>'}</td>
         <td class="num desktop-only muted">${sold.get(p.id) || 0}</td></tr>`; }).join('')}</tbody></table></div></div>`;
-    host.querySelectorAll('[data-id]').forEach((tr) => tr.addEventListener('click', async () => { if (await productDialog(products.find((p) => p.id === tr.dataset.id))) render(root); }));
+    host.querySelectorAll('[data-id]').forEach((tr) => tr.addEventListener('click', async () => { if (!can('items.manage')) return; if (await productDialog(products.find((p) => p.id === tr.dataset.id))) render(root); }));
   };
   const add = async () => { if (await productDialog()) render(root); };
   draw();

@@ -1,5 +1,5 @@
 // Backups: plain JSON or passphrase-encrypted (PBKDF2 + AES-GCM via WebCrypto).
-import { db, STORES } from './db.js';
+import { db, STORES, ORG_STORES } from './db.js';
 
 const enc = new TextEncoder(), dec = new TextDecoder();
 const b64 = (buf) => btoa(String.fromCharCode(...new Uint8Array(buf)));
@@ -51,7 +51,8 @@ export async function exportData({ businessId = null, from = '', to = '', passph
   }
   data.counts = Object.fromEntries(Object.entries(data.stores).map(([k, v]) => [k, v.length]));
   data.businessNames = data.stores.businesses.map((b) => b.name);
-  if (data.kind === 'full') { data.settings = (await db.exportAll()).settings; }
+  // A full export also carries the team, roles and activity log so a new device signs in the same way.
+  if (data.kind === 'full') { const all = await db.exportAll(); data.settings = all.settings; for (const s of ORG_STORES) data.stores[s] = all.stores[s]; data.counts = Object.fromEntries(Object.entries(data.stores).map(([k, v]) => [k, v.length])); }
   return seal(JSON.stringify(data), passphrase);
 }
 
@@ -74,7 +75,7 @@ export async function importData(data, mode = 'merge') {
     }
   }
   // Only copy settings that don't take over this device (keep its sign-in and active business).
-  for (const [k, v] of Object.entries(data.settings || {})) if (!['auth', 'activeBusiness'].includes(k) && (await db.setting(k)) === undefined) await db.setting(k, v);
+  for (const [k, v] of Object.entries(data.settings || {})) if (!['auth', 'activeBusiness', 'org'].includes(k) && (await db.setting(k)) === undefined) await db.setting(k, v);
   return res;
 }
 

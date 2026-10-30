@@ -7,6 +7,7 @@ import { fmtDate, periodRange, todayISO } from '../lib/dates.js';
 import { paymentDialog, payModes } from '../payui.js';
 import { getCountry } from '../tax/countries.js';
 import { validateTaxId } from '../lib/validators.js';
+import { can, audit } from '../session.js';
 
 const CATS = ['Rent', 'Salaries', 'Purchases / stock', 'Utilities', 'Transport', 'Marketing', 'Repairs', 'Office supplies', 'Bank charges', 'Taxes & fees', 'Other'];
 const ui = { tab: 'in', period: 'month' };
@@ -37,11 +38,12 @@ function expenseDialog(e = null) {
     if (rec.tax < 0 || rec.tax > rec.amount) { toast('Tax included must be between 0 and the total amount', 'err'); return; }
     if (rec.supplierTaxId && c.gst && !validateTaxId(c.code, rec.supplierTaxId).ok) { toast(`Supplier GSTIN: ${validateTaxId(c.code, rec.supplierTaxId).msg}`, 'err'); return; }
     if (rec.tax > 0 && c.gst && (!rec.supplierTaxId || !rec.reference)) toast('Tip: add the supplier’s GSTIN and invoice number — you need them to claim input tax credit.', 'info');
-    await db.put('expenses', rec); toast('Expense saved'); m.close(rec);
+    if (!can('expenses.manage')) return;
+    await db.put('expenses', rec); audit(e ? 'Expense edited' : 'Expense added', `${rec.vendor || rec.category} · ${rec.amount}`, { businessId: b.id }); toast('Expense saved'); m.close(rec);
   });
   m.el.querySelector('[data-del]')?.addEventListener('click', async () => {
     if (!(await confirmDialog('Delete expense?', 'This cannot be undone.', { ok: 'Delete', danger: true }))) return;
-    await db.del('expenses', x.id); m.close('deleted');
+    await db.del('expenses', x.id); audit('Expense deleted', `${x.vendor || x.category} · ${x.amount}`, { businessId: b.id }); m.close('deleted');
   });
   return m.done;
 }
@@ -56,13 +58,15 @@ export async function render(root, { query = {} } = {}) {
 
   root.innerHTML = `<div class="page">
     <div class="large-title"><div><h1>Payments</h1><p>Money in from customers and money out on expenses.</p></div>
-      <div class="actions"><button class="btn" data-export>${icon('download', 16)} Export</button><button class="btn" data-exp>${icon('minus', 16)} Add expense</button><button class="btn primary" data-pay>${icon('plus', 16)} Record payment</button></div></div>
+      <div class="actions"><button class="btn" data-export data-perm="reports.export|data.backup">${icon('download', 16)} Export</button><button class="btn" data-exp data-perm="expenses.manage">${icon('minus', 16)} Add expense</button><button class="btn primary" data-pay data-perm="payments.record">${icon('plus', 16)} Record payment</button></div></div>
     <div class="toolbar"><span data-seg></span>
       <select class="input" data-period style="width:auto;height:36px">${[['month', 'This month'], ['lastmonth', 'Last month'], ['quarter', 'This quarter'], ['fy', 'This financial year'], ['lastfy', 'Last financial year'], ['all', 'All time']].map(([v, l]) => `<option value="${v}" ${ui.period === v ? 'selected' : ''}>${l}</option>`).join('')}</select></div>
     <div class="grid c3 mb" data-stats></div>
     <div data-list></div></div>`;
 
-  root.querySelector('[data-seg]').append(segmented([['in', 'Received'], ['out', 'Expenses']], ui.tab, (v) => { ui.tab = v; draw(); }));
+  const tabs = [can('payments.view') && ['in', 'Received'], can('expenses.view') && ['out', 'Expenses']].filter(Boolean);
+  if (!tabs.some(([k]) => k === ui.tab)) ui.tab = tabs[0][0];
+  root.querySelector('[data-seg]').append(segmented(tabs, ui.tab, (v) => { ui.tab = v; draw(); }));
 
   const draw = () => {
     const r = periodRange(ui.period, b.fyStartMonth);
@@ -81,6 +85,7 @@ export async function render(root, { query = {} } = {}) {
         <div class="end tnum pos" style="font-weight:600">+ ${m(p.amount)}</div></div>`).join('')}</div>`
         : emptyState('wallet', 'No payments in this period', 'Payments you record against bills or customer accounts show up here.');
       host.querySelectorAll('[data-pid]').forEach((x) => x.addEventListener('click', async () => {
+        if (!can('payments.delete')) return;
         const p = payments.find((y) => y.id === x.dataset.pid);
         const linked = p.documentId ? docs.find((d) => d.id === p.documentId) : null;
         if (await paymentDialog({ customers, payment: p, openDocs, doc: linked })) render(root, {});
@@ -93,7 +98,7 @@ export async function render(root, { query = {} } = {}) {
         <div class="grow"><div class="title">${esc(e.vendor || e.category)}</div><div class="sub">${fmtDate(e.date, b.locale)} · ${esc(e.category)} · ${esc(e.mode)}</div></div>
         <div class="end tnum" style="font-weight:600">− ${m(e.amount)}</div></div>`).join('')}</div>`
         : emptyState('banknote', 'No expenses in this period', 'Track rent, purchases and other costs to see your real profit in Reports.');
-      host.querySelectorAll('[data-eid]').forEach((x) => x.addEventListener('click', async () => { if (await expenseDialog(expenses.find((y) => y.id === x.dataset.eid))) render(root, {}); }));
+      host.querySelectorAll('[data-eid]').forEach((x) => x.addEventListener('click', async () => { if (!can('expenses.manage')) return; if (await expenseDialog(expenses.find((y) => y.id === x.dataset.eid))) render(root, {}); }));
     }
   };
   draw();

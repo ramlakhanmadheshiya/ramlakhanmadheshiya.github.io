@@ -3,19 +3,21 @@ import { esc, menu, emptyState, toCSV, downloadText } from '../ui.js';
 import { state, list, DOC_TYPES, DOC_TYPE_LIST, payStatus, docTotals } from '../store.js';
 import { fmtMoney } from '../lib/money.js';
 import { fmtDate, periodRange } from '../lib/dates.js';
+import { can, visibleDocs } from '../session.js';
 
 const ui = { type: 'all', status: 'all', q: '', period: 'all' };
 
 export async function render(root) {
   const b = state.business;
-  const [docs, payments] = await Promise.all([list('documents'), list('payments'), list('customers')]);
+  const [allDocs, payments] = await Promise.all([list('documents'), list('payments'), list('customers')]);
+  const docs = visibleDocs(allDocs); // staff without “see others’ bills” see only their own
   const rows = docs.map((d) => { const t = docTotals(d, b); return { d, t, st: payStatus(d, payments, t) }; })
     .sort((a, c) => (c.d.date + (c.d.createdAt || '')).localeCompare(a.d.date + (a.d.createdAt || '')));
   const m = (v) => fmtMoney(v, b.currency, b.locale);
 
   root.innerHTML = `<div class="page">
     <div class="large-title"><div><h1>Bills</h1><p>Invoices, receipts, quotations and notes — all in one place.</p></div>
-      <div class="actions"><button class="btn" data-export>${icon('download', 16)} Export</button><button class="btn primary" data-new>${icon('plus', 16)} New ${icon('chevron-down', 14)}</button></div></div>
+      <div class="actions"><button class="btn" data-export data-perm="reports.export|data.backup">${icon('download', 16)} Export</button><button class="btn primary" data-new data-perm="bills.create">${icon('plus', 16)} New ${icon('chevron-down', 14)}</button></div></div>
     <div class="toolbar">
       <div class="searchbar">${icon('search', 16)}<input class="input" data-q placeholder="Search number, customer, item" value="${esc(ui.q)}" aria-label="Search bills"></div>
       <select class="input" data-period style="width:auto;height:36px">
@@ -54,7 +56,7 @@ export async function render(root) {
   const draw = () => {
     const f = filtered();
     const host = root.querySelector('[data-list]');
-    if (!rows.length) { host.innerHTML = emptyState('file-text', 'No bills yet', 'Your invoices, receipts and quotations will appear here.', `<a class="btn primary" href="#/bills/new/invoice">${icon('plus', 16)} Create your first bill</a>`); return; }
+    if (!rows.length) { host.innerHTML = emptyState('file-text', 'No bills yet', 'Your invoices, receipts and quotations will appear here.', can('bills.create') ? `<a class="btn primary" href="#/bills/new/invoice">${icon('plus', 16)} Create your first bill</a>` : ''); return; }
     if (!f.length) { host.innerHTML = emptyState('search', 'Nothing found', 'Try a different filter or search term.'); return; }
     // Only issued bills count — drafts and cancelled bills are listed but not totalled.
     const total = f.filter((x) => x.d.status === 'final').reduce((s, x) => s + (DOC_TYPES[x.d.type].ledger || 0) * x.t.total, 0);

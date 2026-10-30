@@ -4,6 +4,7 @@ import { getCountry } from './tax/countries.js';
 import { calculate, isTaxRegistered } from './tax/engine.js';
 import { fyLabel, todayISO, addDays, daysBetween } from './lib/dates.js';
 import { round, currencyDecimals } from './lib/money.js';
+import { businessAllowed, audit } from './session.js';
 
 export const state = { business: null, businesses: [], theme: 'light' };
 const listeners = new Set();
@@ -80,16 +81,17 @@ export function newBusiness(countryCode) {
 
 const OLD_DEFAULT_TERMS = 'Payment is due within 15 days.\nGoods once sold will not be taken back.';
 export async function loadState() {
-  state.businesses = await db.all('businesses');
+  state.businesses = (await db.all('businesses')).filter((b) => businessAllowed(b.id));
   // Older versions pre-filled a no-returns clause that consumer law in many countries forbids — drop it if untouched.
   for (const b of state.businesses) if (b.terms === OLD_DEFAULT_TERMS) { b.terms = 'Payment is due within 15 days.'; await db.put('businesses', b); }
   const activeId = await db.setting('activeBusiness');
   state.business = state.businesses.find((b) => b.id === activeId) || state.businesses[0] || null;
 }
 
-export async function saveBusiness(b, { quiet = false } = {}) {
+export async function saveBusiness(b, { quiet = false, log = 'Business settings changed' } = {}) {
   await db.put('businesses', b);
-  state.businesses = await db.all('businesses');
+  if (log) audit(log, b.name || '', { businessId: b.id });
+  state.businesses = (await db.all('businesses')).filter((x) => businessAllowed(x.id));
   if (!state.business || state.business.id === b.id) state.business = b;
   await db.setting('activeBusiness', state.business.id);
   if (!quiet) emit();
@@ -268,9 +270,11 @@ export async function saveDocument(doc, { paidNow = null } = {}) {
   doc.snap = snapshotOf(business);
   doc.totalCache = calculate(doc, business).total;
   await db.put('documents', doc);
+  audit(isNew ? `${DOC_TYPES[doc.type]?.label || 'Bill'} created` : `${DOC_TYPES[doc.type]?.label || 'Bill'} edited`, `${doc.number}${doc.customer?.name ? ' · ' + doc.customer.name : ''} · ${doc.totalCache}${doc.status === 'draft' ? ' · draft' : ''}`, { businessId: business.id });
   await adjustStock(doc, 1);
   if (paidNow && paidNow.amount > 0) {
     await db.put('payments', { businessId: business.id, documentId: doc.id, customerId: doc.customerId, amount: paidNow.amount, mode: paidNow.mode || 'cash', date: doc.date, reference: '', note: `Against ${doc.number}` });
+    audit('Payment recorded', `${paidNow.amount} · ${paidNow.mode || 'cash'} · ${doc.number}`, { businessId: business.id });
   }
   return doc;
 }
@@ -280,4 +284,5 @@ export async function deleteDocument(doc) {
   const pays = (await list('payments')).filter((p) => p.documentId === doc.id);
   for (const p of pays) await db.del('payments', p.id);
   await db.del('documents', doc.id);
+  audit(`${DOC_TYPES[doc.type]?.label || 'Bill'} deleted`, `${doc.number}${pays.length ? ` (with ${pays.length} payment${pays.length > 1 ? 's' : ''})` : ''}`, { businessId: doc.businessId });
 }

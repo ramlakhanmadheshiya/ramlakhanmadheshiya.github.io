@@ -5,6 +5,7 @@ import { getCountry, IN_STATES } from '../tax/countries.js';
 import { fmtMoney, fmtNumber, num, round } from '../lib/money.js';
 import { fmtDate, periodRange, todayISO, daysBetween, MONTHS } from '../lib/dates.js';
 import { reportPdf } from '../reports-pdf.js';
+import { can, audit } from '../session.js';
 
 const ui = { report: '', period: 'month', from: '', to: '' };
 
@@ -242,11 +243,11 @@ export async function render(root) {
     const subtitle = rep.asOf ? `As of ${fmtDate(todayISO(), b.locale)}` : ui.period === 'all' ? 'All time' : `${fmtDate(r.from, b.locale)} – ${fmtDate(r.to, b.locale)}`;
     root.innerHTML = `<div class="page">
       <div class="large-title"><div><p style="margin:0 0 4px"><a href="#" role="button" data-back>${icon('chevron-left', 14)} Reports</a></p><h1>${esc(def.name)}</h1><p>${esc(subtitle)}</p></div>
-        <div class="actions"><button class="btn" data-csv>${icon('file-spreadsheet', 16)} CSV</button><button class="btn primary" data-pdf>${icon('download', 16)} PDF</button></div></div>
+        <div class="actions"><button class="btn" data-csv data-perm="reports.export">${icon('file-spreadsheet', 16)} CSV</button><button class="btn primary" data-pdf data-perm="reports.export">${icon('download', 16)} PDF</button></div></div>
       ${rep.asOf ? '' : `<div class="toolbar"><select class="input" data-period style="width:auto;height:36px">${[['month', 'This month'], ['lastmonth', 'Last month'], ['quarter', 'This quarter'], ['fy', 'This financial year'], ['lastfy', 'Last financial year'], ['year', 'This calendar year'], ['all', 'All time'], ['custom', 'Custom range']].map(([v, l]) => `<option value="${v}" ${ui.period === v ? 'selected' : ''}>${l}</option>`).join('')}</select>
         ${ui.period === 'custom' ? `<input class="input" type="date" data-from value="${ui.from}" style="width:auto;height:36px"><span class="muted">to</span><input class="input" type="date" data-to value="${ui.to}" style="width:auto;height:36px">` : ''}</div>`}
       <div class="grid c4 mb">${rep.summary.map(([k, v]) => `<div class="stat"><div class="label">${esc(k)}</div><div class="value" style="font-size:22px">${esc(v)}</div></div>`).join('')}</div>
-      ${rep.sections.map((s, i) => `<div class="card mb" style="padding:14px 10px 6px">${s.heading || s.csv ? `<div class="card-head" style="padding:0 6px"><h3 style="font-size:15px">${esc(s.heading || '')}</h3>${s.csv ? `<button class="btn sm" data-sec-csv="${i}">${icon('download', 14)} CSV</button>` : ''}</div>` : ''}
+      ${rep.sections.map((s, i) => `<div class="card mb" style="padding:14px 10px 6px">${s.heading || s.csv ? `<div class="card-head" style="padding:0 6px"><h3 style="font-size:15px">${esc(s.heading || '')}</h3>${s.csv ? `<button class="btn sm" data-sec-csv="${i}" data-perm="reports.export">${icon('download', 14)} CSV</button>` : ''}</div>` : ''}
         <div class="table-wrap"><table class="table"><thead><tr>${s.columns.map((c, j) => `<th class="${s.align?.[j] === 'right' ? 'num' : ''}">${esc(c)}</th>`).join('')}</tr></thead>
         <tbody>${s.rows.length ? s.rows.map((row) => `<tr>${row.map((v, j) => `<td class="${s.align?.[j] === 'right' ? 'num' : ''}">${esc(v)}</td>`).join('')}</tr>`).join('') : `<tr><td colspan="${s.columns.length}" class="muted" style="text-align:center;padding:22px">No data for this period</td></tr>`}</tbody>
         ${s.foot ? `<tfoot><tr>${s.foot.map((v, j) => `<td class="${s.align?.[j] === 'right' ? 'num' : ''}">${esc(v)}</td>`).join('')}</tr></tfoot>` : ''}</table></div></div>`).join('')}
@@ -257,7 +258,7 @@ export async function render(root) {
     root.querySelector('[data-from]')?.addEventListener('change', (e) => { ui.from = e.target.value; drawReport(); });
     root.querySelector('[data-to]')?.addEventListener('change', (e) => { ui.to = e.target.value; drawReport(); });
     const base = (ui.period === 'all' ? `${def.name} all time` : `${def.name} ${r.from} to ${r.to}`).replace(/[^\w\- ]+/g, '');
-    root.querySelector('[data-pdf]').addEventListener('click', () => reportPdf({ title: def.name, subtitle, summary: rep.summary, sections: rep.sections }, b, `${base}.pdf`));
+    root.querySelector('[data-pdf]').addEventListener('click', () => { audit('Report downloaded', `${def.name} (PDF)`, { businessId: b.id }); reportPdf({ title: def.name, subtitle, summary: rep.summary, sections: rep.sections }, b, `${base}.pdf`); });
     root.querySelector('[data-csv]').addEventListener('click', () => {
       const rows = rep.sections.flatMap((s) => [[s.heading || def.name], s.columns, ...s.rows, ...(s.foot ? [s.foot] : []), []]);
       downloadText(toCSV(rows), `${base}.csv`, 'text/csv');

@@ -12,6 +12,7 @@ import { buildContext, mountPage } from '../render.js';
 import { allTemplates, templateFor } from '../tplstore.js';
 import { setTitle } from '../app.js';
 import { payModes } from '../payui.js';
+import { can, docVisible } from '../session.js';
 
 // Simplified-invoice limits (in the local currency) below which the buyer's address may be left out.
 const SIMPLIFIED_LIMIT = { GB: 250, DE: 250, AT: 400, SE: 4000, DK: 3000, PL: 450, CZ: 10000, HU: 40000, RO: 500 };
@@ -30,7 +31,7 @@ export async function render(root, params) {
 
   if (params.id) {
     doc = await db.get('documents', params.id);
-    if (!ownRecord(doc)) { root.innerHTML = '<div class="page"><div class="empty"><h3>Bill not found</h3><a class="btn" href="#/bills">Back to bills</a></div></div>'; return; }
+    if (!ownRecord(doc) || !docVisible(doc)) { root.innerHTML = '<div class="page"><div class="empty"><h3>Bill not found</h3><a class="btn" href="#/bills">Back to bills</a></div></div>'; return; }
     if (doc.status === 'cancelled') { root.innerHTML = `<div class="page"><div class="empty"><h3>This bill is cancelled</h3><p>Cancelled bills can’t be edited. Duplicate it to issue a new bill.</p><a class="btn primary" href="#/bills/new/${doc.type}?dup=${doc.id}">Duplicate</a> <a class="btn" href="#/bills/${doc.id}">Back</a></div></div>`; return; }
     doc = JSON.parse(JSON.stringify(doc));
     delete doc.snap; // re-issued with the current business details when saved
@@ -56,7 +57,7 @@ export async function render(root, params) {
     const n = await nextNumber(b, doc.type, doc.date);
     doc.number = n.number;
   }
-  let saveCustomer = isNew && !doc.customerId;
+  let saveCustomer = isNew && !doc.customerId && can('customers.manage');
   let paidNow = DOC_TYPES[doc.type].paidNow ? { on: true, amount: 0, mode: 'cash', auto: true } : { on: false, amount: 0, mode: 'cash', auto: true };
   let tpl = await templateFor(doc);
 
@@ -124,7 +125,7 @@ export async function render(root, params) {
         ${c.gst ? `<div class="field"><label>Place of supply</label><select class="input" data-k="placeOfSupply">${c.regions.map((r) => `<option value="${r.code}" ${r.code === doc.placeOfSupply ? 'selected' : ''}>${esc(r.name)} (${r.code})</option>`).join('')}</select>
           <div class="help" data-pos-help></div></div>` : '<div></div>'}
       </div>
-      ${!doc.customerId ? `<label class="flex mt-s small" style="cursor:pointer"><input type="checkbox" data-save-cust ${saveCustomer ? 'checked' : ''}> Save to my customers</label>` : `<div class="help mt-s">${icon('check', 13)} Saved customer — edits here only change this bill.</div>`}`;
+      ${!doc.customerId && can('customers.manage') ? `<label class="flex mt-s small" style="cursor:pointer"><input type="checkbox" data-save-cust ${saveCustomer ? 'checked' : ''}> Save to my customers</label>` : `<div class="help mt-s">${icon('check', 13)} Saved customer — edits here only change this bill.</div>`}`;
     posHelp();
     const inp = $('[data-cust-input]');
     const sug = $('[data-cust-suggest]');

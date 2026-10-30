@@ -5,6 +5,7 @@ import { state, list, customerLedger } from '../store.js';
 import { getCountry } from '../tax/countries.js';
 import { fmtMoney, num } from '../lib/money.js';
 import { validateTaxId, validateEmail } from '../lib/validators.js';
+import { can, audit } from '../session.js';
 
 export function customerDialog(cust = null) {
   const b = state.business;
@@ -45,7 +46,9 @@ export function customerDialog(cust = null) {
     if (!validateEmail(rec.email)) { toast('Email looks wrong', 'err'); return; }
     if (c.gst && rec.taxId) { const v = validateTaxId('IN', rec.taxId); if (!v.ok) { toast(`GSTIN: ${v.msg}`, 'err'); return; } if (v.state && rec.region !== v.state) rec.region = v.state; }
     if (rec.openingBalance < 0) { toast('Opening balance can’t be negative — record an advance as a payment instead.', 'err'); return; }
+    if (!can('customers.manage')) return;
     await db.put('customers', rec);
+    audit(cust ? 'Customer edited' : 'Customer added', rec.name, { businessId: b.id });
     toast('Customer saved');
     m.close(rec);
   });
@@ -64,13 +67,13 @@ export async function render(root, { query = {} } = {}) {
 
   root.innerHTML = `<div class="page">
     <div class="large-title"><div><h1>Customers</h1><p>${customers.length} customers · ${m(totalDue)} to collect</p></div>
-      <div class="actions"><button class="btn" data-import>${icon('upload', 16)} Import CSV</button><button class="btn" data-export>${icon('download', 16)} Export</button><button class="btn primary" data-new>${icon('plus', 16)} New customer</button></div></div>
+      <div class="actions"><button class="btn" data-import data-perm="customers.manage">${icon('upload', 16)} Import CSV</button><button class="btn" data-export data-perm="reports.export|data.backup">${icon('download', 16)} Export</button><button class="btn primary" data-new data-perm="customers.manage">${icon('plus', 16)} New customer</button></div></div>
     <div class="toolbar"><div class="searchbar">${icon('search', 16)}<input class="input" data-q placeholder="Search name, phone, tax ID" aria-label="Search customers"></div></div>
     <div data-list></div></div>`;
 
   const draw = () => {
     const host = root.querySelector('[data-list]');
-    if (!customers.length) { host.innerHTML = emptyState('users', 'No customers yet', 'Save customers to bill them faster and keep track of what they owe you.', `<button class="btn primary" data-new2>${icon('plus', 16)} Add customer</button>`); host.querySelector('[data-new2]').onclick = add; return; }
+    if (!customers.length) { host.innerHTML = emptyState('users', 'No customers yet', 'Save customers to bill them faster and keep track of what they owe you.', `<button class="btn primary" data-new2 data-perm="customers.manage">${icon('plus', 16)} Add customer</button>`); host.querySelector('[data-new2]').onclick = add; return; }
     const f = rows.filter(({ c }) => !q || [c.name, c.phone, c.email, c.taxId].join(' ').toLowerCase().includes(q));
     host.innerHTML = `<div class="group">${f.map(({ c, bal, bills }) => `
       <a class="row" href="#/customers/${c.id}"><span class="biz-avatar" style="border-radius:50%;background:var(--accent-soft);color:var(--accent)">${esc(c.name.slice(0, 1).toUpperCase())}</span>

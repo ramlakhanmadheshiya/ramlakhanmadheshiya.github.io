@@ -4,6 +4,7 @@ import { COUNTRY_LIST, getCountry, CURRENCIES } from '../tax/countries.js';
 import { validateTaxId } from '../lib/validators.js';
 import { taxIdRule, businessTaxError, CA_PROVINCES, normTaxId } from '../tax/rules.js';
 import { newBusiness, state } from '../store.js';
+import { session, audit } from '../session.js';
 import { rerenderShell } from '../app.js';
 import { db } from '../db.js';
 import { seedSample } from '../seed.js';
@@ -33,12 +34,12 @@ export async function render(root, { adding } = {}) {
 
   const hero = () => `
     <div class="hero-mark">${icon('receipt', 42)}</div>
-    <h1>Billing.<br>Beautifully simple.</h1>
-    <p class="lead">Create professional bills in seconds, follow up on dues and see your numbers clearly — for any country, in any currency.</p>
-    <button class="btn primary lg" data-next>Get started ${icon('chevron-right', 18)}</button>
+    <h1>Welcome${session.user ? `, ${esc(session.user.name.split(' ')[0])}` : ''}.</h1>
+    <p class="lead">Let’s set up your first business. It takes about a minute: pick your country, then add your details. You can add your team afterwards.</p>
+    <button class="btn primary lg" data-next>Set up my business ${icon('chevron-right', 18)}</button>
     <div class="features">
       <div class="feature">${icon('globe', 22)}<b>Made for every country</b><span>GST, VAT, sales tax and more — formatted the way your tax office expects.</span></div>
-      <div class="feature">${icon('lock', 22)}<b>Private by design</b><span>Everything stays on this device. Works offline. No account, no fees.</span></div>
+      <div class="feature">${icon('lock', 22)}<b>Private by design</b><span>Everything stays on this device and works offline. No subscription.</span></div>
       <div class="feature">${icon('layout-template', 22)}<b>Your bill, your style</b><span>Five beautiful templates you can rearrange freely, like slides.</span></div>
     </div>`;
 
@@ -169,10 +170,13 @@ export async function render(root, { adding } = {}) {
       const btn = root.querySelector('[data-finish]');
       btn.disabled = true;
       await db.put('businesses', biz);
-      state.businesses = await db.all('businesses');
+      // Someone limited to certain businesses gets access to the one they just created.
+      if (session.user?.businessIds?.length) { const me = await db.get('users', session.user.id); me.businessIds = [...me.businessIds, biz.id]; await db.put('users', me); session.user.businessIds = me.businessIds; }
+      state.businesses = (await db.all('businesses')).filter((x) => !session.user?.businessIds?.length || session.user.businessIds.includes(x.id));
       state.business = biz;
       await db.setting('activeBusiness', biz.id);
       if (seed) { try { await seedSample(biz); } catch (e) { console.error(e); } }
+      audit(adding ? 'Business added' : 'First business set up', biz.name, { businessId: biz.id });
       toast(adding ? 'Business added' : 'Welcome to Bill Studio');
       if (location.hash === '#/') rerenderShell(); else location.hash = '#/';
     });
