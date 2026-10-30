@@ -1,0 +1,74 @@
+---
+import Base from '../layouts/Base.astro';
+import { openSource, games, webApps, security, research, pullRequests, issues } from '../data/projects';
+import type { Project } from '../data/projects';
+
+const groups: { id: string; title: string; desc: string; items: Project[] }[] = [
+	{ id: 'games', title: 'Games', desc: 'Puzzle and arcade games made with Godot 4 for Android and the web, published under Brainnova Studio. Levels are generated and verified by solvers and tests rather than checked by hand.', items: games },
+	{ id: 'web', title: 'Web apps & tools', desc: 'Offline-first apps and the sites that run them.', items: webApps },
+	{ id: 'security', title: 'Security & systems', desc: 'Tooling built for compliance and hardening work.', items: security },
+	{ id: 'research', title: 'Research', desc: '', items: research },
+];
+const prs = (repo: string) => pullRequests.filter((p) => p.repo === repo);
+---
+<Base title="Projects" description="Open-source contributions, games, web apps, security tooling and research by Ramlakhan Madheshiya.">
+	<header class="page-head">
+		<p class="eyebrow">Projects</p>
+		<h1>Things I've built and fixed.</h1>
+		<p class="lede">Open-source work comes first. The rest is grouped by kind.</p>
+		<nav class="toc" aria-label="On this page">
+			<a href="#open-source">Open source</a>
+			{groups.map((g) => <a href={`#${g.id}`}>{g.title}</a>)}
+		</nav>
+	</header>
+
+	<section class="group" id="open-source" style="margin-top:0">
+		<h2>Open source</h2>
+		<p class="group-desc">Contributions to projects I don't own. State as of 30 October 2026.</p>
+		<ul class="rows">
+			{openSource.map((p) => (
+				<li class="row">
+					<div class="row-top">
+						<h3>{p.name}</h3>
+						<span class="badge">{p.status}</span>
+					</div>
+					<p>{p.blurb}</p>
+					<div class="tags">{p.tags.map((t) => <span class="tag">{t}</span>)}</div>
+					<ul class="pr-list">
+						{prs(p.name.replace(' / ', '/')).map((pr) => (
+							<li>
+								<span class="num">#{pr.number}</span>
+								<a href={pr.url}>{pr.title}</a>
+								<span class={`badge ${pr.state}`}>{pr.state}</span>
+							</li>
+						))}
+					</ul>
+				</li>
+			))}
+		</ul>
+		<p class="sub-label">Issues reported</p>
+		<p style="font-size:0.93rem;margin-top:0.5rem">
+			{issues.map((l, i) => (<><a href={l.href}>{l.label}</a>{i < issues.length - 1 ? ' · ' : ''}</>))}
+		</p>
+	</section>
+
+	{groups.map((g) => (
+		<section class="group" id={g.id}>
+			<h2>{g.title}</h2>
+			{g.desc && <p class="group-desc">{g.desc}</p>}
+			<ul class="rows">
+				{g.items.map((p) => (
+					<li class="row">
+						<div class="row-top">
+							<h3>{p.name}</h3>
+							<span class="meta">{p.status ? `${p.status} · ` : ''}{p.year}</span>
+						</div>
+						<p>{p.blurb}</p>
+						<div class="tags">{p.tags.map((t) => <span class="tag">{t}</span>)}</div>
+						{p.links.length > 0 && <div class="links" style="margin-top:0.5rem">{p.links.map((l) => <a href={l.href}>{l.label} ↗</a>)}</div>}
+					</li>
+				))}
+			</ul>
+		</section>
+	))}
+</Base>

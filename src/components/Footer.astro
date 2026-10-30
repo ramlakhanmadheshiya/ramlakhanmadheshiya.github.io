@@ -1,0 +1,22 @@
+---
+import { NAV, SOCIAL, SITE_TITLE } from '../consts';
+const year = new Date().getFullYear();
+---
+<footer class="site-footer">
+	<div class="wrap">
+		<div class="footer-row">
+			<div class="footer-links" aria-label="Pages">
+				{NAV.map((item) => <a href={item.href}>{item.label}</a>)}
+				<a href="/BrainnovaStudio/games/">Games</a>
+				<a href="/rss.xml">RSS</a>
+			</div>
+			<div class="footer-links" aria-label="Elsewhere">
+				{SOCIAL.map((item) => <a href={item.href} rel="me noopener">{item.label}</a>)}
+			</div>
+		</div>
+		<div class="footer-row">
+			<span>© {year} {SITE_TITLE}</span>
+			<span>Built with <a href="https://astro.build">Astro</a> · <a href="https://github.com/ramlakhanmadheshiya/ramlakhanmadheshiya.github.io">Source</a></span>
+		</div>
+	</div>
+</footer>

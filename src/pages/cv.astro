@@ -1,0 +1,93 @@
+---
+import Base from '../layouts/Base.astro';
+import { CV_PDF, EMAIL } from '../consts';
+
+const experience = [
+	{ when: 'Apr – Nov 2025', title: 'SDE Intern', org: 'National Technical Research Organisation (NTRO)', note: 'Onsite · 3 months, in phases', points: ['Built a security tool to improve internal compliance and operational processes (details confidential under NDA).'] },
+	{ when: 'Jul – Dec 2024', title: 'Web Developer Intern', org: 'Krtya Technologies Pvt. Ltd', note: 'React, Node.js, Express, PostgreSQL', points: ['Developed a scalable full-stack checkout portal with secure payments and order management.'] },
+	{ when: 'Jan 2024 – Jan 2025', title: 'Technical Content Writer', org: 'GeeksforGeeks', note: 'Remote', points: ['Authored 12+ technical articles on Python, web technologies, PyTorch and Selenium testing.'] },
+];
+---
+<Base title="CV" description="Curriculum vitae of Ramlakhan Madheshiya: open-source work, experience, projects, education and skills.">
+	<header class="page-head">
+		<p class="eyebrow">Curriculum vitae</p>
+		<h1>Ramlakhan Madheshiya</h1>
+		<p class="lede">Software engineer and B.Tech CSE graduate (2026). Open-source contributor to SciML; builder of games and offline-first web apps.</p>
+		<div class="actions">
+			<a class="btn primary" href={CV_PDF}>Download PDF</a>
+			<a class="btn" href={`mailto:${EMAIL}`}>Email me</a>
+		</div>
+	</header>
+
+	<section class="group" style="margin-top:0">
+		<h2>Open source</h2>
+		<div class="cv-item">
+			<span class="when">Oct 2026 – now</span>
+			<div>
+				<h3>SciML / OrdinaryDiffEq.jl</h3>
+				<p>2 merged and 5 open pull requests and 5 issues reported on delay differential equation solvers: lag handling, constrained mode, composite algorithms and unit-carrying time types.</p>
+			</div>
+		</div>
+		<div class="cv-item">
+			<span class="when">Sep 2024</span>
+			<div>
+				<h3>ibis-project / ibis</h3>
+				<p>Made the documentation's navigation dropdowns scrollable (merged).</p>
+			</div>
+		</div>
+		<p style="margin-top:0.8rem;font-size:0.93rem"><a href="/projects/#open-source">Full list of pull requests →</a></p>
+	</section>
+
+	<section class="group">
+		<h2>Experience</h2>
+		{experience.map((e) => (
+			<div class="cv-item">
+				<span class="when">{e.when}</span>
+				<div>
+					<h3>{e.title} · {e.org}</h3>
+					<p>{e.note}</p>
+					<ul>{e.points.map((p) => <li>{p}</li>)}</ul>
+				</div>
+			</div>
+		))}
+	</section>
+
+	<section class="group">
+		<h2>Education</h2>
+		<div class="cv-item">
+			<span class="when">2022 – 2026</span>
+			<div>
+				<h3>B.Tech, Computer Science and Engineering</h3>
+				<p>Uka Tarsadia University (UTU), Bardoli, Gujarat, India · CGPA 8.97 / 10</p>
+			</div>
+		</div>
+	</section>
+
+	<section class="group">
+		<h2>Highlights</h2>
+		<div class="cv-item">
+			<span class="when">2024</span>
+			<div>
+				<h3>Smart India Hackathon finalist</h3>
+				<p>Reached the final round of India's largest national hackathon with a security tool for NTRO.</p>
+			</div>
+		</div>
+		<div class="cv-item">
+			<span class="when">2025</span>
+			<div>
+				<h3>First-author manuscript</h3>
+				<p>Windows CVE Analysis: Vulnerabilities, Exploits, and Defenses. <a href="https://github.com/ramlakhanmadheshiya/Research-Papers/tree/main/2025-Windows_CVE_Analysis">Read the paper</a>.</p>
+			</div>
+		</div>
+		<p style="margin-top:0.8rem;font-size:0.93rem"><a href="/projects/">Games, apps and other projects →</a></p>
+	</section>
+
+	<section class="group">
+		<h2>Skills</h2>
+		<dl class="skills">
+			<dt>Languages</dt><dd>Julia, Python, C, C++, C#, JavaScript, TypeScript, GDScript, HTML/CSS, Shell</dd>
+			<dt>Frameworks & tools</dt><dd>Godot, Astro, .NET/WPF, React, Node.js, Flutter, Docker, Git, GitHub Actions</dd>
+			<dt>Interests</dt><dd>Scientific computing, numerical solvers, game design, security</dd>
+		</dl>
+	</section>
+</Base>

@@ -1,0 +1,28 @@
+---
+import Base from '../../layouts/Base.astro';
+import { getPosts, fmtDate, readingTime } from '../../utils';
+
+const posts = await getPosts();
+const years = [...new Set(posts.map((p) => p.data.pubDate.getUTCFullYear()))];
+---
+<Base title="Blog" description="Notes on numerical solvers, game level design and offline-first apps.">
+	<header class="page-head">
+		<p class="eyebrow">Blog</p>
+		<h1>Notes from the workbench.</h1>
+		<p class="lede">What I learn while fixing solvers, designing levels and building apps that work offline. <a href="/rss.xml">RSS</a></p>
+	</header>
+	{years.map((y) => (
+		<>
+			<p class="year">{y}</p>
+			<ul class="post-list">
+				{posts.filter((p) => p.data.pubDate.getUTCFullYear() === y).map((post) => (
+					<li>
+						<span class="meta">{fmtDate(post.data.pubDate)} · {readingTime(post.body ?? '')} min read</span>
+						<h3><a href={`/blog/${post.id}/`}>{post.data.title}</a></h3>
+						<p>{post.data.description}</p>
+					</li>
+				))}
+			</ul>
+		</>
+	))}
+</Base>
