@@ -63,7 +63,6 @@ export const games: Project[] = [
 	{ name: 'Single Shot', year: '2026', status: 'Google Play closed testing', blurb: 'A quiet ricochet puzzle: bank one orb off the walls to pop every target. 360 rooms in 9 chapters, each room checked by a solver.', tags: ['Godot 4', 'Android', 'Web'], links: [gh('single-shot'), hub] },
 	{ name: 'Ringburst', year: '2026', blurb: 'A one-touch hold-and-release arcade. Grow a ring, burst it, land PERFECTs. 320 levels across 8 worlds with a boss each.', tags: ['Godot 4', 'Arcade'], links: [gh('ringburst'), hub] },
 	{ name: 'Word Glow', year: '2026', blurb: 'Trace hidden themed words to light up a grid. Every level has exactly one valid answer, enforced by a level checker.', tags: ['Godot 4', 'Word puzzle'], links: [gh('word-glow'), hub] },
-	{ name: 'Few Turns', year: '2026', blurb: 'Lay a few arrows, press Go, and roll one orb through every dot and home. 360 rooms, 9 chapters.', tags: ['Godot 4', 'Puzzle'], links: [gh('few-turns'), hub] },
 	{ name: 'Snug Fit', year: '2026', blurb: 'Fill a silhouette with pieces. 210 levels in 7 chapters, each built from its answer and verified by a solver.', tags: ['Godot 4', 'Puzzle'], links: [gh('snug-fit'), hub] },
 	{ name: 'Mirrorlock', year: '2026', blurb: 'Every piece has a mirrored twin; tap one and both slide away, unless something is in the way. 360 levels, 9 chapters.', tags: ['Godot 4', 'Puzzle'], links: [gh('mirrorlock'), hub] },
 	{ name: 'Corral', year: '2026', blurb: 'An endless enclosure puzzle. Close off a pen to score its area squared. Includes a daily board and 120 bot-verified challenges.', tags: ['Godot 4', 'Puzzle'], links: [gh('corral'), hub] },
@@ -72,7 +71,6 @@ export const games: Project[] = [
 export const webApps: Project[] = [
 	{ name: 'Bill Studio', year: '2026', blurb: 'Free, offline, multi-country billing. GST, VAT and sales-tax rules for 50+ countries, a drag-and-drop bill designer, ledgers, reports, payment QR codes and encrypted backups. Installable PWA, no server.', tags: ['JavaScript', 'PWA', 'IndexedDB'], links: [{ label: 'Live', href: '/projects/bill-studio/' }, gh('bill-studio')] },
 	{ name: 'Brainnova Studio', year: '2026', blurb: 'The games site: one JSON file drives every card, page and button, built with a small Python generator and published through GitHub Actions.', tags: ['Python', 'GitHub Actions'], links: [{ label: 'Live', href: '/BrainnovaStudio/games/' }, gh('BrainnovaStudio')] },
-	{ name: 'Magic Prompt Generator', year: '2025', blurb: 'A small TypeScript app built in Google AI Studio on the Gemini API.', tags: ['TypeScript', 'Gemini API'], links: [gh('magic-prompt-generator')] },
 ];
 
 export const security: Project[] = [

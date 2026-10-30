@@ -1,11 +1,11 @@
 ---
-title: 'Designing 360 levels you can trust'
+title: 'How the levels in my games are verified'
 description: 'How my Godot puzzle games use solvers and tests so that every level is solvable, fair and harder than the last.'
 pubDate: 2026-10-24
 tags: ['Games', 'Godot', 'Testing']
 ---
 
-I've been building a small family of puzzle games under [Brainnova Studio](/BrainnovaStudio/games/): Single Shot, Few Turns, Mirrorlock, Snug Fit, Word Glow, Corral and Ringburst. Each has hundreds of levels, and I can't play them all before shipping. So the rule is simple: **a level isn't allowed to exist unless a program has proved it fair.**
+I've been building a small family of puzzle games under [Brainnova Studio](/BrainnovaStudio/games/): Single Shot, Mirrorlock, Snug Fit, Word Glow, Corral and Ringburst. Each has hundreds of levels, and I can't play them all before shipping. So the rule is simple: **a level isn't allowed to exist unless a program has proved it fair.**
 
 ## One answer, checked by a solver
 

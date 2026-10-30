@@ -11,7 +11,7 @@ const { post } = Astro.props;
 const { Content } = await render(post);
 ---
 <Base title={post.data.title} description={post.data.description} type="article">
-	<article>
+	<article class="narrow">
 		<header class="post-head">
 			<p class="meta">
 				{fmtDate(post.data.pubDate)} · {readingTime(post.body ?? '')} min read

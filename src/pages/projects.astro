@@ -4,7 +4,7 @@ import { openSource, games, webApps, security, research, pullRequests, issues } 
 import type { Project } from '../data/projects';
 
 const groups: { id: string; title: string; desc: string; items: Project[] }[] = [
-	{ id: 'games', title: 'Games', desc: 'Puzzle and arcade games made with Godot 4 for Android and the web, published under Brainnova Studio. Levels are generated and verified by solvers and tests rather than checked by hand.', items: games },
+	{ id: 'games', title: 'Games', desc: 'Puzzle and arcade games made with Godot 4 for Android and the web, published under Brainnova Studio. Levels are generated and verified by solvers and tests.', items: games },
 	{ id: 'web', title: 'Web apps & tools', desc: 'Offline-first apps and the sites that run them.', items: webApps },
 	{ id: 'security', title: 'Security & systems', desc: 'Tooling built for compliance and hardening work.', items: security },
 	{ id: 'research', title: 'Research', desc: '', items: research },
@@ -14,8 +14,8 @@ const prs = (repo: string) => pullRequests.filter((p) => p.repo === repo);
 <Base title="Projects" description="Open-source contributions, games, web apps, security tooling and research by Ramlakhan Madheshiya.">
 	<header class="page-head">
 		<p class="eyebrow">Projects</p>
-		<h1>Things I've built and fixed.</h1>
-		<p class="lede">Open-source work comes first. The rest is grouped by kind.</p>
+		<h1>Projects</h1>
+		<p class="lede">Open-source contributions, games, web apps, security tooling and research.</p>
 		<nav class="toc" aria-label="On this page">
 			<a href="#open-source">Open source</a>
 			{groups.map((g) => <a href={`#${g.id}`}>{g.title}</a>)}
@@ -56,7 +56,7 @@ const prs = (repo: string) => pullRequests.filter((p) => p.repo === repo);
 		<section class="group" id={g.id}>
 			<h2>{g.title}</h2>
 			{g.desc && <p class="group-desc">{g.desc}</p>}
-			<ul class="rows">
+			<ul class="rows grid">
 				{g.items.map((p) => (
 					<li class="row">
 						<div class="row-top">

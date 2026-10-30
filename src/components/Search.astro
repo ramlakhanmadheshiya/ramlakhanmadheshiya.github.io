@@ -1,0 +1,79 @@
+---
+import '@pagefind/default-ui/css/ui.css';
+---
+<div id="search-overlay" class="search-overlay" hidden>
+	<div id="search-backdrop" class="search-backdrop"></div>
+	<div class="search-wrap">
+		<div class="search-panel" role="dialog" aria-modal="true" aria-label="Search">
+			<div class="search-head">
+				<span class="eyebrow">Search</span>
+				<button id="search-close" type="button" class="search-esc">Esc</button>
+			</div>
+			{import.meta.env.DEV
+				? <p class="search-dev">Search is built with the production build. Run <code>npm run build &amp;&amp; npm run preview</code>.</p>
+				: <div id="pagefind-search"></div>}
+		</div>
+	</div>
+</div>
+
+<script>
+	const overlay = document.getElementById('search-overlay')!;
+	let ready = false;
+
+	async function open() {
+		overlay.hidden = false;
+		document.body.style.overflow = 'hidden';
+		if (!ready && !import.meta.env.DEV) {
+			ready = true;
+			const { PagefindUI } = await import('@pagefind/default-ui');
+			new PagefindUI({
+				element: '#pagefind-search',
+				bundlePath: '/pagefind/',
+				showImages: false,
+				showSubResults: true,
+				resetStyles: false,
+			});
+		}
+		requestAnimationFrame(() => overlay.querySelector<HTMLInputElement>('.pagefind-ui__search-input')?.focus());
+	}
+	function close() {
+		overlay.hidden = true;
+		document.body.style.overflow = '';
+	}
+
+	document.querySelectorAll('.search-toggle').forEach((b) => b.addEventListener('click', open));
+	document.getElementById('search-backdrop')!.addEventListener('click', close);
+	document.getElementById('search-close')!.addEventListener('click', close);
+	window.addEventListener('keydown', (e) => {
+		if (e.key === 'Escape' && !overlay.hidden) { close(); e.preventDefault(); }
+		const t = document.activeElement;
+		const typing = t instanceof HTMLInputElement || t instanceof HTMLTextAreaElement;
+		if (e.key === '/' && overlay.hidden && !typing) { open(); e.preventDefault(); }
+	});
+</script>
+
+<style is:global>
+	.search-overlay[hidden] { display: none; }
+	.search-overlay { position: fixed; inset: 0; z-index: 100; }
+	.search-backdrop { position: absolute; inset: 0; background: rgb(0 0 0 / 0.45); backdrop-filter: blur(3px); }
+	.search-wrap { position: relative; display: flex; justify-content: center; padding: 8vh 1rem 1rem; pointer-events: none; height: 100%; }
+	.search-panel { pointer-events: auto; width: 100%; max-width: 44rem; max-height: 82vh; overflow-y: auto; background: var(--bg); border: 1px solid var(--line); border-radius: 12px; padding: 1rem 1.25rem 1.25rem; box-shadow: 0 24px 48px -12px rgb(0 0 0 / 0.3); align-self: flex-start; }
+	.search-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.7rem; }
+	.search-esc { font: 0.75rem var(--mono); color: var(--muted); background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 0.2rem 0.6rem; cursor: pointer; }
+	.search-dev { color: var(--muted); font-size: 0.95rem; }
+	#pagefind-search {
+		--pagefind-ui-primary: var(--accent);
+		--pagefind-ui-text: var(--ink);
+		--pagefind-ui-background: var(--surface);
+		--pagefind-ui-border: var(--line);
+		--pagefind-ui-border-width: 1px;
+		--pagefind-ui-border-radius: 8px;
+		--pagefind-ui-font: var(--sans);
+		--pagefind-ui-tag: var(--surface);
+	}
+	#pagefind-search .pagefind-ui__result { border-top-color: var(--line); }
+	#pagefind-search .pagefind-ui__result-link { color: var(--ink); }
+	#pagefind-search .pagefind-ui__result-link:hover { color: var(--accent); }
+	#pagefind-search mark { background: var(--accent-soft); color: var(--ink); }
+	#pagefind-search .pagefind-ui__button { background: var(--surface); color: var(--ink); border-color: var(--line); }
+</style>

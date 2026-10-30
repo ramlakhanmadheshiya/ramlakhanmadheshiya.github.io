@@ -1,5 +1,5 @@
 ---
-title: 'Seven small fixes in a delay-equation solver'
+title: 'Fixes to the delay-equation solver in OrdinaryDiffEq.jl'
 description: 'What I learned from my first month of pull requests to OrdinaryDiffEq.jl: lags, constrained mode, composite algorithms and units.'
 pubDate: 2026-10-27
 tags: ['Julia', 'SciML', 'Open source']

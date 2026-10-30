@@ -1,5 +1,5 @@
 ---
-title: 'A billing app with no server'
+title: 'Bill Studio: an offline billing app'
 description: 'Notes on Bill Studio: a free, offline, multi-country billing PWA where all data stays on your device.'
 pubDate: 2026-10-20
 tags: ['PWA', 'JavaScript', 'Privacy']
