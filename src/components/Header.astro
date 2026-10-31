@@ -12,10 +12,10 @@ const active = (href: string) => path === href || path.startsWith(href);
 			))}
 			<form class="search" role="search" action="/" onsubmit="return false">
 				<label for="site-search" class="visually-hidden">Search the site</label>
+				<svg class="field-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
 				<input id="site-search" type="search" placeholder="Search projects, posts, CV" autocomplete="off" spellcheck="false" tabindex="-1" />
 				<button class="theme-toggle search-btn" type="button" aria-label="Search (press /)" aria-expanded="false" aria-controls="site-search">
-					<svg class="i-search" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
-					<svg class="i-close" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>
+					<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
 				</button>
 			</form>
 			<button class="theme-toggle theme-btn" type="button" aria-label="Toggle colour theme">
@@ -55,7 +55,6 @@ const active = (href: string) => path === href || path.startsWith(href);
 	function open() {
 		form.classList.add('is-open');
 		btn.setAttribute('aria-expanded', 'true');
-		btn.setAttribute('aria-label', 'Close search');
 		input.tabIndex = 0;
 		input.focus();
 		load().catch(() => {});
@@ -63,7 +62,6 @@ const active = (href: string) => path === href || path.startsWith(href);
 	function close() {
 		form.classList.remove('is-open');
 		btn.setAttribute('aria-expanded', 'false');
-		btn.setAttribute('aria-label', 'Search (press /)');
 		input.tabIndex = -1;
 		input.value = '';
 		show('');
@@ -98,7 +96,12 @@ const active = (href: string) => path === href || path.startsWith(href);
 		}).join('');
 	}
 
-	btn.addEventListener('click', () => (form.classList.contains('is-open') ? close() : open()));
+	btn.addEventListener('click', open);
+	// An empty field closes itself when focus or a click goes elsewhere.
+	input.addEventListener('blur', () => setTimeout(() => { if (!input.value.trim() && !form.contains(document.activeElement)) close(); }, 120));
+	document.addEventListener('pointerdown', (e) => {
+		if (form.classList.contains('is-open') && !input.value.trim() && !form.contains(e.target as Node)) close();
+	});
 	input.addEventListener('input', () => show(input.value));
 	input.addEventListener('keydown', (e) => { if (e.key === 'Escape') { e.preventDefault(); close(); } });
 	window.addEventListener('keydown', (e) => {

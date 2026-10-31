@@ -1,6 +1,6 @@
 export const SITE_TITLE = 'Ramlakhan Madheshiya';
 export const SITE_DESCRIPTION =
-	'Software engineer. Open-source contributor to SciML, builder of puzzle games and offline-first web apps.';
+	'Software engineer and open-source contributor building dependable tools, offline-first web applications and security tooling.';
 
 export const EMAIL = 'ramlakhanmadheshiya7@gmail.com';
 export const CV_PDF = '/ramlakhan-madheshiya-cv.pdf';
