@@ -9,14 +9,15 @@ const groups: { id: string; title: string; desc: string; items: Project[] }[] = 
 	{ id: 'security', title: 'Security & systems', desc: 'Tooling built for compliance and hardening work.', items: security },
 	{ id: 'research', title: 'Research', desc: '', items: research },
 ];
+const slug = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 const prs = (repo: string) => pullRequests.filter((p) => p.repo === repo);
 ---
 <Base title="Projects" description="Open-source contributions, games, web apps, security tooling and research by Ramlakhan Madheshiya.">
 	<header class="page-head">
-		<p class="eyebrow">Projects</p>
+		<p class="eyebrow" data-pagefind-ignore>Projects</p>
 		<h1>Projects</h1>
 		<p class="lede">Open-source contributions, games, web apps, security tooling and research.</p>
-		<nav class="toc" aria-label="On this page">
+		<nav class="toc" data-pagefind-ignore aria-label="On this page">
 			<a href="#open-source">Open source</a>
 			{groups.map((g) => <a href={`#${g.id}`}>{g.title}</a>)}
 		</nav>
@@ -29,7 +30,7 @@ const prs = (repo: string) => pullRequests.filter((p) => p.repo === repo);
 			{openSource.map((p) => (
 				<li class="row">
 					<div class="row-top">
-						<h3>{p.name}</h3>
+						<h3 id={slug(p.name)}>{p.name}</h3>
 						<span class="badge">{p.status}</span>
 					</div>
 					<p>{p.blurb}</p>
@@ -60,7 +61,7 @@ const prs = (repo: string) => pullRequests.filter((p) => p.repo === repo);
 				{g.items.map((p) => (
 					<li class="row">
 						<div class="row-top">
-							<h3>{p.name}</h3>
+							<h3 id={slug(p.name)}>{p.name}</h3>
 							<span class="meta">{p.status ? `${p.status} · ` : ''}{p.year}</span>
 						</div>
 						<p>{p.blurb}</p>

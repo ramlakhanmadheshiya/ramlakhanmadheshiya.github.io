@@ -1,12 +1,38 @@
 ---
 import Base from '../layouts/Base.astro';
 import { getPosts, fmtDate } from '../utils';
-import { openSource, games, webApps } from '../data/projects';
+import { EMAIL, SOCIAL } from '../consts';
 
 const posts = (await getPosts()).slice(0, 3);
-const featured = [openSource[0], games[0], webApps[0]];
+
+const highlights = [
+	{
+		title: 'Security tool for NTRO',
+		meta: 'SDE Intern · National Technical Research Organisation · 2025',
+		blurb: 'Designed and built a security tool, onsite, that supports internal compliance and operations. Details are confidential under NDA.',
+		links: [{ label: 'Experience', href: '/cv/' }],
+	},
+	{
+		title: 'Group Policy Object Manager',
+		meta: 'Smart India Hackathon 2024 finalist · C#, .NET, WPF',
+		blurb: 'A Windows application that generates and manages Group Policy Objects aligned with CIS security benchmarks, built for the NTRO problem statement.',
+		links: [{ label: 'GitHub', href: 'https://github.com/ramlakhanmadheshiya/Project-Techolics_' }],
+	},
+	{
+		title: 'Bill Studio',
+		meta: 'Web app · JavaScript, PWA, IndexedDB · 2026',
+		blurb: 'Free, offline billing for 50+ countries: tax rules, a drag-and-drop bill designer, ledgers, reports and encrypted backups. All data stays on the device.',
+		links: [{ label: 'Live', href: '/projects/bill-studio/' }, { label: 'GitHub', href: 'https://github.com/ramlakhanmadheshiya/bill-studio' }],
+	},
+];
+
+const oss = [
+	{ name: 'SciML / OrdinaryDiffEq.jl', note: 'Fixes to the delay differential equation solvers · 2 accepted, 5 under review', href: '/projects/#open-source' },
+	{ name: 'ibis-project / ibis', note: 'Scrollable navigation menus in the documentation · accepted', href: 'https://github.com/ibis-project/ibis/pull/10090' },
+];
+const ext = (href: string) => /^https?:/.test(href);
 ---
-<Base>
+<Base index={false}>
 	<section class="hero">
 		<p class="eyebrow">Software engineer · India</p>
 		<h1>Ramlakhan Madheshiya</h1>
@@ -18,37 +44,123 @@ const featured = [openSource[0], games[0], webApps[0]];
 			<a class="btn primary" href="/projects/">See projects</a>
 			<a class="btn" href="/cv/">Read my CV</a>
 		</div>
+		<div class="social">
+			{SOCIAL.map((s) => <a href={s.href} rel="me noopener">{s.label}{s.label !== 'Email' && ' ↗'}</a>)}
+		</div>
 	</section>
 
+	<div class="home-search" id="search">
+		<label for="site-search" class="visually-hidden">Search the site</label>
+		<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+		<input id="site-search" type="search" placeholder="Search projects, posts and CV" autocomplete="off" spellcheck="false" />
+		<kbd>/</kbd>
+	</div>
 
-	<section class="section">
-		<div class="section-head"><h2>Selected work</h2><a href="/projects/">All projects →</a></div>
-		<ul class="rows grid">
-			{featured.map((p) => (
-				<li class="row">
-					<div class="row-top">
-						<h3>{p.name}</h3>
-						{p.status && <span class="badge">{p.status}</span>}
-					</div>
-					<p>{p.blurb}</p>
-					<div class="links">{p.links.map((l) => <a href={l.href}>{l.label} ↗</a>)}</div>
-				</li>
-			))}
-		</ul>
+	<section id="search-results" class="search-results" hidden aria-live="polite">
+		<p class="eyebrow" id="search-status"></p>
+		<ul class="post-list" id="search-list"></ul>
 	</section>
 
-	{posts.length > 0 && (
+	<div id="home-sections">
 		<section class="section">
-			<div class="section-head"><h2>Writing</h2><a href="/blog/">All posts →</a></div>
-			<ul class="post-list">
-				{posts.map((post) => (
+			<div class="section-head"><h2>Highlights</h2><a href="/projects/">All projects →</a></div>
+			<ol class="highlights">
+				{highlights.map((h, i) => (
 					<li>
-						<span class="meta">{fmtDate(post.data.pubDate)}</span>
-						<h3><a href={`/blog/${post.id}/`}>{post.data.title}</a></h3>
-						<p>{post.data.description}</p>
+						<span class="hl-num">{String(i + 1).padStart(2, '0')}</span>
+						<div>
+							<p class="meta">{h.meta}</p>
+							<h3>{h.title}</h3>
+							<p>{h.blurb}</p>
+							<div class="links">{h.links.map((l) => <a href={l.href}>{l.label} {ext(l.href) ? '↗' : '→'}</a>)}</div>
+						</div>
+					</li>
+				))}
+			</ol>
+		</section>
+
+		<section class="section">
+			<div class="section-head"><h2>Open source</h2><a href="/projects/#open-source">All contributions →</a></div>
+			<ul class="post-list">
+				{oss.map((o) => (
+					<li>
+						<h3><a href={o.href}>{o.name}</a></h3>
+						<p>{o.note}</p>
 					</li>
 				))}
 			</ul>
 		</section>
-	)}
+
+		{posts.length > 0 && (
+			<section class="section">
+				<div class="section-head"><h2>Writing</h2><a href="/blog/">All posts →</a></div>
+				<ul class="post-list">
+					{posts.map((post) => (
+						<li>
+							<span class="meta">{fmtDate(post.data.pubDate)}</span>
+							<h3><a href={`/blog/${post.id}/`}>{post.data.title}</a></h3>
+							<p>{post.data.description}</p>
+						</li>
+					))}
+				</ul>
+			</section>
+		)}
+
+		<section class="section contact">
+			<h2>Get in touch</h2>
+			<p>For work, collaboration or questions about my projects, email me at <a href={`mailto:${EMAIL}`}>{EMAIL}</a>.</p>
+		</section>
+	</div>
 </Base>
+
+<script>
+	type Result = { url: string; excerpt: string; meta: { title?: string }; sub_results?: { title: string; url: string; excerpt: string }[] };
+	type Pagefind = { debouncedSearch: (q: string, o?: object, ms?: number) => Promise<{ results: { data: () => Promise<Result> }[] } | null> };
+
+	const input = document.getElementById('site-search') as HTMLInputElement;
+	const results = document.getElementById('search-results')!;
+	const home = document.getElementById('home-sections')!;
+	const list = document.getElementById('search-list')!;
+	const status = document.getElementById('search-status')!;
+	let pagefind: Promise<Pagefind> | null = null;
+
+	const PAGEFIND = ['', 'pagefind', 'pagefind.js'].join('/'); // built after Astro, so keep it out of the bundle
+	const load = () => (pagefind ??= import(/* @vite-ignore */ PAGEFIND) as Promise<Pagefind>);
+	const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
+
+	async function run(q: string) {
+		const query = q.trim();
+		const url = new URL(location.href);
+		if (query) url.searchParams.set('q', query); else url.searchParams.delete('q');
+		history.replaceState(null, '', url);
+
+		if (!query) { results.hidden = true; home.hidden = false; return; }
+		results.hidden = false;
+		home.hidden = true;
+		status.textContent = 'Searching…';
+
+		let pf: Pagefind;
+		try { pf = await load(); } catch { status.textContent = 'Search is available on the published site.'; list.innerHTML = ''; return; }
+		const search = await pf.debouncedSearch(query, {}, 150);
+		if (search === null || input.value.trim() !== query) return; // a newer query is running
+
+		const data = await Promise.all(search.results.slice(0, 10).map((r) => r.data()));
+		status.textContent = data.length ? `${data.length} result${data.length > 1 ? 's' : ''} for “${query}”` : `No results for “${query}”`;
+		list.innerHTML = data.map((d) => {
+			const subs = (d.sub_results ?? []).filter((s) => s.url !== d.url).slice(0, 3);
+			return `<li>
+				<h3><a href="${esc(d.url)}">${esc(d.meta.title ?? d.url)}</a></h3>
+				<p>${d.excerpt}</p>
+				${subs.length ? `<ul class="sub-results">${subs.map((s) => `<li><a href="${esc(s.url)}">${esc(s.title)}</a><p>${s.excerpt}</p></li>`).join('')}</ul>` : ''}
+			</li>`;
+		}).join('');
+	}
+
+	input.addEventListener('input', () => run(input.value));
+	input.addEventListener('focus', () => { load(); }, { once: true });
+	input.addEventListener('keydown', (e) => { if (e.key === 'Escape') { input.value = ''; run(''); input.blur(); } });
+
+	const initial = new URLSearchParams(location.search).get('q');
+	if (initial) { input.value = initial; run(initial); }
+	if (location.hash === '#search') requestAnimationFrame(() => input.focus());
+</script>
