@@ -277,19 +277,12 @@ html::-webkit-scrollbar, body::-webkit-scrollbar { display: none; }
 .social a { color: var(--muted); text-decoration: none; }
 .social a:hover { color: var(--accent); }
 
-.home-search { position: relative; margin-top: 4.5rem; max-width: 46rem; scroll-margin-top: 7rem; }
-.home-search svg { position: absolute; left: 1.15rem; top: 50%; width: 1.15rem; height: 1.15rem; transform: translateY(-50%); color: var(--muted); pointer-events: none; }
-.home-search input { width: 100%; height: 3.4rem; padding: 0 3.2rem 0 3.1rem; font: inherit; font-size: 1rem; color: var(--ink); background: var(--surface); border: 1px solid var(--line); border-radius: 12px; outline: none; transition: border-color .15s, box-shadow .15s, background .15s; -webkit-appearance: none; appearance: none; }
-.home-search input::placeholder { color: var(--muted); }
-.home-search input:focus { background: var(--bg); border-color: var(--accent); box-shadow: 0 0 0 4px var(--accent-soft); }
-.home-search input::-webkit-search-cancel-button { -webkit-appearance: none; }
-.home-search kbd { position: absolute; right: 1rem; top: 50%; transform: translateY(-50%); font: 0.75rem var(--mono); color: var(--muted); border: 1px solid var(--line); border-radius: 5px; padding: 0.1rem 0.45rem; background: var(--bg); }
-.home-search input:focus ~ kbd, .home-search input:not(:placeholder-shown) ~ kbd { display: none; }
 
-.search-results { margin-top: 2.5rem; max-width: 46rem; }
+.search-results { max-width: 46rem; min-height: 40vh; }
 .search-results .eyebrow { margin-bottom: 0.6rem; text-transform: none; letter-spacing: 0; }
 .search-results mark { background: var(--accent-soft); color: var(--accent); border-radius: 3px; padding: 0 2px; }
 .sub-results { list-style: none; margin: 0.9rem 0 0; padding: 0 0 0 1rem; border-left: 2px solid var(--line); display: grid; gap: 0.7rem; }
+.post-list .sub-results li { padding: 0; border: 0; }
 .sub-results a { font-weight: 600; font-size: 0.95rem; text-decoration: none; }
 .sub-results a:hover { text-decoration: underline; }
 .sub-results p { font-size: 0.9rem; margin-top: 0.15rem; }
@@ -301,13 +294,33 @@ html::-webkit-scrollbar, body::-webkit-scrollbar { display: none; }
 .highlights p:not(.meta) { color: var(--muted); max-width: 44rem; margin: 0 0 0.9rem; line-height: 1.7; }
 .highlights .links { display: flex; gap: 1.2rem; font-size: 0.9rem; }
 .highlights .links a { color: var(--accent); }
-.contact p { color: var(--muted); max-width: 40rem; margin-top: 0.8rem; }
-.contact a { color: var(--accent); }
 
 @media (max-width: 40rem) {
-	.home-search { margin-top: 3rem; }
-	.home-search kbd { display: none; }
-	.highlights > li { grid-template-columns: 1fr; gap: 0.4rem; padding: 1.8rem 0; }
+			.highlights > li { grid-template-columns: 1fr; gap: 0.4rem; padding: 1.8rem 0; }
 	.hl-num { font-size: 1.1rem; }
 	.social { gap: 0.4rem 1.2rem; }
 }
+
+/* ---- header search: icon expands into a field ---- */
+.site-header .wrap { position: relative; }
+.search { display: flex; align-items: center; margin: 0; }
+.search input {
+	width: 0; height: 2.3rem; padding: 0; opacity: 0; border: 1px solid transparent; border-radius: 99px;
+	background: var(--surface); color: var(--ink); font: inherit; font-size: 0.92rem; outline: none;
+	transition: width .25s ease, opacity .2s ease, padding .25s ease, border-color .15s, box-shadow .15s;
+	-webkit-appearance: none; appearance: none;
+}
+.search input::-webkit-search-cancel-button { -webkit-appearance: none; }
+.search input::placeholder { color: var(--muted); }
+.search.is-open input { width: 16rem; padding: 0 0.95rem; opacity: 1; border-color: var(--line); }
+.search.is-open input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.search .i-close { display: none; }
+.search.is-open .i-search { display: none; }
+.search.is-open .i-close { display: block; }
+.search-btn { margin-left: 0.25rem; }
+
+@media (max-width: 40rem) {
+	.search.is-open { position: absolute; inset: 0 1.25rem; z-index: 2; background: var(--bg); }
+	.search.is-open input { flex: 1; width: auto; }
+}
+@media (prefers-reduced-motion: reduce) { .search input { transition: none; } }

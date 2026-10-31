@@ -48,7 +48,13 @@ const canonical = new URL(Astro.url.pathname, Astro.site);
 	</head>
 	<body>
 		<Header />
-		<main data-pagefind-body={index ? '' : undefined}><slot /></main>
+		<main>
+			<section id="search-results" class="search-results" hidden aria-live="polite">
+				<p class="eyebrow" id="search-status"></p>
+				<ul class="post-list" id="search-list"></ul>
+			</section>
+			<div id="page" data-pagefind-body={index ? '' : undefined}><span hidden data-pagefind-meta={`title:${title ?? SITE_TITLE}`}></span><slot /></div>
+		</main>
 		<Footer />
 	</body>
 </html>
