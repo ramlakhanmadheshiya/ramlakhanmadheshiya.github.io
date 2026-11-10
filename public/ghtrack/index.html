@@ -18,15 +18,20 @@
       <div class="header-left">
         <a href="./" class="brand">
           <svg class="brand-icon" viewBox="0 0 128 128" fill="none">
-            <rect width="128" height="128" rx="28" fill="#090c12"/>
-            <rect x="2" y="2" width="124" height="124" rx="26" stroke="#1f293d" stroke-width="2"/>
-            <circle cx="64" cy="64" r="42" stroke="#1c2536" stroke-width="1.5" stroke-dasharray="4 3"/>
-            <circle cx="64" cy="64" r="24" stroke="#25334a" stroke-width="1.5"/>
-            <path d="M64 16 L64 112 M16 64 L112 64" stroke="#182233" stroke-width="1.5"/>
-            <circle cx="44" cy="48" r="6.5" fill="#238636"/>
-            <circle cx="84" cy="52" r="6" fill="#8957e5"/>
-            <circle cx="56" cy="82" r="5.5" fill="#38bdf8"/>
-            <circle cx="64" cy="64" r="3.5" fill="#f8fafc"/>
+            <rect width="128" height="128" rx="28" class="logo-bg"/>
+            <rect x="2" y="2" width="124" height="124" rx="26" stroke-width="2" class="logo-border"/>
+            <!-- Telemetry orbit grid -->
+            <circle cx="64" cy="64" r="44" stroke-width="1.5" stroke-dasharray="4 3" class="logo-grid"/>
+            <circle cx="64" cy="64" r="26" stroke-width="1.5" class="logo-grid"/>
+            <path d="M64 14 L64 114 M14 64 L114 64" stroke-width="1.2" class="logo-grid" stroke-dasharray="3 3"/>
+            <!-- Git branch stem & fork -->
+            <path d="M38 90 V42" stroke-width="3" stroke-linecap="round" class="logo-stem"/>
+            <path d="M38 66 C38 48, 90 56, 90 38" stroke-width="3" stroke-linecap="round" class="logo-stem"/>
+            <!-- Pulsing activity nodes -->
+            <circle cx="38" cy="90" r="6" class="logo-blue"/>
+            <circle cx="38" cy="42" r="6.5" class="logo-green"/>
+            <circle cx="90" cy="38" r="6.5" class="logo-purple"/>
+            <circle cx="64" cy="64" r="4" class="logo-center"/>
           </svg>
           <span class="brand-name">ghtrack</span>
           <span class="brand-tag">Lifetime</span>
@@ -389,7 +394,7 @@
     <!-- Footer -->
     <footer class="site-footer">
       <div>
-        <span>ghtrack</span> · Built for lifetime developer telemetry. 100% cost-free.
+        <span>ghtrack</span>
       </div>
       <div>
         <a href="https://theramlakhan.com" target="_blank" rel="noopener">theramlakhan.com</a>

@@ -615,87 +615,107 @@
     }
   }
 
-  // Background stream processor: fetches in 50-item batches with windowing beyond 1,000 items
-  async function streamRemainingBatches(login, searchId, initialCursor, totalEst) {
+  // Background stream processor: Dual-Stream Harvester (involves + user repos with deep windowing)
+  async function streamRemainingBatches(login, searchId, initialCursor, initialInvolvesEst) {
     state.isStreamingBackground = true;
-    let cursor = initialCursor;
-    let currentQuery = `involves:${login} sort:updated-desc`;
-    let windowBatch = 0;
 
-    while (!state.cancelStreaming && searchId === activeSearchId) {
-      const currentCount = state.itemsMap.size;
-      const progressPercent = totalEst > 0 ? Math.min(99, Math.round((currentCount / totalEst) * 100)) : 50;
+    // Both dimensions of GitHub activity:
+    // 1. involves:username (authored, commented, reviewed, assigned across all GitHub)
+    // 2. user:username (all issues and PRs in repositories owned by the user, catching community work)
+    const streams = [
+      { base: `involves:${login}`, cursor: initialCursor, totalEst: initialInvolvesEst },
+      { base: `user:${login}`, cursor: null, totalEst: 0 },
+    ];
 
-      dom.streamText.textContent = `⚡ Buffering lifetime history: ${currentCount} loaded (${progressPercent}%)...`;
-      dom.streamProgressFill.style.width = `${progressPercent}%`;
+    for (let sIdx = 0; sIdx < streams.length; sIdx++) {
+      if (state.cancelStreaming || searchId !== activeSearchId) break;
 
-      try {
-        const data = await fetchGraphQL(SEARCH_QUERY, {
-          q: currentQuery,
-          n: PAGE_SIZE,
-          cursor,
-        });
+      const stream = streams[sIdx];
+      let cursor = stream.cursor;
+      let currentQuery = `${stream.base} sort:updated-desc`;
+      let windowBatch = 0;
+      let streamCount = 0;
 
-        if (searchId !== activeSearchId) return;
+      while (!state.cancelStreaming && searchId === activeSearchId) {
+        const currentCount = state.itemsMap.size;
+        const progressPercent = Math.min(99, Math.round(((sIdx * 50) + (streamCount > 0 ? 40 : 10)) / 100 * 100));
 
-        const nodes = data.search?.nodes || [];
-        if (!nodes.length) {
-          // If no nodes returned on current cursor/query, check if we need windowing
-          if (totalEst > state.itemsMap.size) {
-            let oldestDate = null;
-            for (const it of state.itemsMap.values()) {
-              if (!oldestDate || new Date(it.updatedAt) < new Date(oldestDate)) {
-                oldestDate = it.updatedAt;
+        dom.streamText.textContent = `⚡ Buffering lifetime history: ${currentCount} loaded (${sIdx === 0 ? "involves" : "user repos"})...`;
+        dom.streamProgressFill.style.width = `${Math.min(98, Math.max(10, Math.round((currentCount / 1250) * 100)))}%`;
+
+        try {
+          const data = await fetchGraphQL(SEARCH_QUERY, {
+            q: currentQuery,
+            n: PAGE_SIZE,
+            cursor,
+          });
+
+          if (searchId !== activeSearchId) return;
+
+          const nodes = data.search?.nodes || [];
+          const queryTotal = data.search?.issueCount || 0;
+          if (sIdx === 1 && !stream.totalEst) stream.totalEst = queryTotal;
+
+          if (!nodes.length) {
+            // Check if windowing needed
+            if (queryTotal > streamCount && windowBatch < 6) {
+              let oldestDate = null;
+              for (const it of state.itemsMap.values()) {
+                if (!oldestDate || new Date(it.updatedAt) < new Date(oldestDate)) {
+                  oldestDate = it.updatedAt;
+                }
+              }
+              if (oldestDate) {
+                windowBatch++;
+                currentQuery = `${stream.base} updated:<${oldestDate} sort:updated-desc`;
+                cursor = null;
+                continue;
               }
             }
-            if (oldestDate && windowBatch < 10) {
-              windowBatch++;
-              currentQuery = `involves:${login} updated:<${oldestDate} sort:updated-desc`;
-              cursor = null;
-              continue;
+            break;
+          }
+
+          for (const node of nodes) {
+            const item = normalizeNode(node, login);
+            if (item) {
+              state.itemsMap.set(item.id, item);
+              streamCount++;
             }
           }
-          break;
-        }
 
-        for (const node of nodes) {
-          const item = normalizeNode(node, login);
-          if (item) state.itemsMap.set(item.id, item);
-        }
+          const hasNextPage = Boolean(data.search?.pageInfo?.hasNextPage);
+          cursor = data.search?.pageInfo?.endCursor || null;
 
-        const hasNextPage = Boolean(data.search?.pageInfo?.hasNextPage);
-        cursor = data.search?.pageInfo?.endCursor || null;
+          updateTelemetry();
+          populateRepoFilter();
+          updatePagerUI();
+          renderAnalytics();
 
-        updateTelemetry();
-        populateRepoFilter();
-        updatePagerUI();
-        renderAnalytics();
-
-        // Check if single-query search ceiling reached (GitHub caps single queries at 1,000 items)
-        if (!hasNextPage || cursor === "Y3Vyc29yOjEwMDA=") {
-          if (totalEst > state.itemsMap.size) {
-            let oldestDate = null;
-            for (const it of state.itemsMap.values()) {
-              if (!oldestDate || new Date(it.updatedAt) < new Date(oldestDate)) {
-                oldestDate = it.updatedAt;
+          // Check if single-query search ceiling reached (GitHub caps single queries at 1,000 items)
+          if (!hasNextPage || cursor === "Y3Vyc29yOjEwMDA=") {
+            if (queryTotal > streamCount && windowBatch < 6) {
+              let oldestDate = null;
+              for (const it of state.itemsMap.values()) {
+                if (!oldestDate || new Date(it.updatedAt) < new Date(oldestDate)) {
+                  oldestDate = it.updatedAt;
+                }
+              }
+              if (oldestDate) {
+                windowBatch++;
+                currentQuery = `${stream.base} updated:<${oldestDate} sort:updated-desc`;
+                cursor = null;
+                await new Promise((r) => setTimeout(r, 60));
+                continue;
               }
             }
-            if (oldestDate && windowBatch < 10) {
-              windowBatch++;
-              currentQuery = `involves:${login} updated:<${oldestDate} sort:updated-desc`;
-              cursor = null;
-              await new Promise((r) => setTimeout(r, 60));
-              continue;
-            }
+            break;
           }
+
+          await new Promise((r) => setTimeout(r, 60));
+        } catch (err) {
+          console.warn("Background stream pause/error:", err.message);
           break;
         }
-
-        // Delay between batches to respect rate limits
-        await new Promise((r) => setTimeout(r, 60));
-      } catch (err) {
-        console.warn("Background stream pause/error:", err.message);
-        break;
       }
     }
 
@@ -1583,6 +1603,21 @@
     applyTheme(theme);
   }
 
+  function updateFavicon(theme) {
+    const faviconLink = document.querySelector("link[rel='icon']");
+    if (!faviconLink) return;
+    const isLight = theme === "light";
+    const bg = isLight ? "%23ffffff" : "%230d1117";
+    const border = isLight ? "%23d0d7de" : "%2330363d";
+    const stem = isLight ? "%230969da" : "%23388bfd";
+    const purple = isLight ? "%238250df" : "%23a371f7";
+    const green = isLight ? "%231a7f37" : "%233fb950";
+    const blue = isLight ? "%230969da" : "%2338bdf8";
+    const center = isLight ? "%231f2328" : "%23f0f6fc";
+
+    faviconLink.href = `data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 128 128'%3E%3Crect width='128' height='128' rx='28' fill='${bg}'/%3E%3Crect x='2' y='2' width='124' height='124' rx='26' stroke='${border}' stroke-width='2' fill='none'/%3E%3Cpath d='M38 90 V42' stroke='${stem}' stroke-width='3.5' stroke-linecap='round'/%3E%3Cpath d='M38 66 C38 48, 90 56, 90 38' stroke='${stem}' stroke-width='3.5' stroke-linecap='round' fill='none'/%3E%3Ccircle cx='38' cy='90' r='7' fill='${blue}'/%3E%3Ccircle cx='38' cy='42' r='7.5' fill='${green}'/%3E%3Ccircle cx='90' cy='38' r='7.5' fill='${purple}'/%3E%3Ccircle cx='64' cy='64' r='4.5' fill='${center}'/%3E%3C/svg%3E`;
+  }
+
   function applyTheme(theme) {
     document.documentElement.dataset.theme = theme;
     localStorage.setItem("ghtrack_theme", theme);
@@ -1593,6 +1628,7 @@
       dom.iconSun.style.display = "block";
       dom.iconMoon.style.display = "none";
     }
+    updateFavicon(theme);
   }
 
   dom.btnTheme.addEventListener("click", () => {

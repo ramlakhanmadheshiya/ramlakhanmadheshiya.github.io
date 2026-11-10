@@ -1,15 +1,33 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
-  <rect width="128" height="128" rx="28" fill="#090c12"/>
-  <rect x="2" y="2" width="124" height="124" rx="26" fill="none" stroke="#1f293d" stroke-width="2"/>
-  <!-- radar tracking grid -->
-  <circle cx="64" cy="64" r="42" fill="none" stroke="#1c2536" stroke-width="1.5" stroke-dasharray="4 3"/>
-  <circle cx="64" cy="64" r="24" fill="none" stroke="#25334a" stroke-width="1.5"/>
-  <path d="M64 16 L64 112 M16 64 L112 64" stroke="#182233" stroke-width="1.5"/>
-  <!-- telemetry pulse dots -->
-  <circle cx="44" cy="48" r="6.5" fill="#00e575"/>
-  <circle cx="84" cy="52" r="6" fill="#8b5cf6"/>
-  <circle cx="56" cy="82" r="5.5" fill="#38bdf8"/>
-  <!-- center crosshair -->
-  <circle cx="64" cy="64" r="3.5" fill="#f8fafc"/>
+  <style>
+    .bg { fill: #0d1117; }
+    .border { stroke: #30363d; fill: none; }
+    .grid { stroke: #21262d; fill: none; }
+    .stem { stroke: #388bfd; }
+    .purple { fill: #a371f7; }
+    .green { fill: #3fb950; }
+    .blue { fill: #38bdf8; }
+    .center { fill: #f0f6fc; }
+    @media (prefers-color-scheme: light) {
+      .bg { fill: #ffffff; }
+      .border { stroke: #d0d7de; }
+      .grid { stroke: #eaeef2; }
+      .stem { stroke: #0969da; }
+      .purple { fill: #8250df; }
+      .green { fill: #1a7f37; }
+      .blue { fill: #0969da; }
+      .center { fill: #1f2328; }
+    }
+  </style>
+  <rect width="128" height="128" rx="28" class="bg"/>
+  <rect x="2" y="2" width="124" height="124" rx="26" stroke-width="2" class="border"/>
+  <circle cx="64" cy="64" r="44" stroke-width="1.5" stroke-dasharray="4 3" class="grid"/>
+  <circle cx="64" cy="64" r="26" stroke-width="1.5" class="grid"/>
+  <path d="M64 14 L64 114 M14 64 L114 64" stroke-width="1.2" stroke-dasharray="3 3" class="grid"/>
+  <path d="M38 90 V42" stroke-width="3.5" stroke-linecap="round" class="stem"/>
+  <path d="M38 66 C38 48, 90 56, 90 38" stroke-width="3.5" stroke-linecap="round" class="stem"/>
+  <circle cx="38" cy="90" r="7" class="blue"/>
+  <circle cx="38" cy="42" r="7.5" class="green"/>
+  <circle cx="90" cy="38" r="7.5" class="purple"/>
+  <circle cx="64" cy="64" r="4.5" class="center"/>
 </svg>
-

@@ -118,6 +118,34 @@
   box-sizing: border-box;
   margin: 0;
   padding: 0;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
+
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--border-hover);
+}
+
+/* Seamless no-scrollbar zones */
+.heatmap-scroll-wrap, .year-pills, .export-tabs {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.heatmap-scroll-wrap::-webkit-scrollbar,
+.year-pills::-webkit-scrollbar,
+.export-tabs::-webkit-scrollbar {
+  display: none;
 }
 
 body {
@@ -182,7 +210,30 @@ body {
   width: 28px;
   height: 28px;
   flex: none;
+  transition: transform 0.2s ease;
 }
+
+.brand:hover .brand-icon {
+  transform: rotate(12deg) scale(1.04);
+}
+
+.logo-bg { fill: #0d1117; transition: fill 0.2s ease; }
+.logo-border { stroke: #30363d; fill: none; transition: stroke 0.2s ease; }
+.logo-grid { stroke: #21262d; fill: none; transition: stroke 0.2s ease; }
+.logo-stem { stroke: #388bfd; fill: none; transition: stroke 0.2s ease; }
+.logo-purple { fill: #a371f7; }
+.logo-green { fill: #3fb950; }
+.logo-blue { fill: #38bdf8; }
+.logo-center { fill: #f0f6fc; transition: fill 0.2s ease; }
+
+:root[data-theme="light"] .logo-bg { fill: #ffffff; }
+:root[data-theme="light"] .logo-border { stroke: #d0d7de; }
+:root[data-theme="light"] .logo-grid { stroke: #eaeef2; }
+:root[data-theme="light"] .logo-stem { stroke: #0969da; }
+:root[data-theme="light"] .logo-purple { fill: #8250df; }
+:root[data-theme="light"] .logo-green { fill: #1a7f37; }
+:root[data-theme="light"] .logo-blue { fill: #0969da; }
+:root[data-theme="light"] .logo-center { fill: #1f2328; }
 
 .brand-tag {
   font-size: 0.7rem;
@@ -537,73 +588,107 @@ body {
 /* ── Controls & Gmail Paging Bar ───────────────────────────────────── */
 .controls-bar {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
+  gap: 10px;
   margin-top: 24px;
-  padding: 10px 14px;
+  padding: 8px 12px;
   border: 1px solid var(--border);
   border-radius: 6px 6px 0 0;
   background: var(--canvas-subtle);
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.controls-bar::-webkit-scrollbar {
+  display: none;
 }
 
 .filters-group {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
+  flex: 1 1 auto;
+  min-width: 0;
 }
 
 .select-wrap {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 5px;
+  flex-shrink: 0;
 }
 
 .filter-label {
   font-family: var(--font-mono);
-  font-size: 0.74rem;
+  font-size: 0.72rem;
   text-transform: uppercase;
   color: var(--text-faint);
+  white-space: nowrap;
 }
 
 .custom-select {
-  height: 32px;
-  padding: 0 24px 0 8px;
+  height: 30px;
+  padding: 0 22px 0 8px;
   border: 1px solid var(--border);
   border-radius: 5px;
   background: var(--panel);
   color: var(--text-white);
   font-family: var(--font-mono);
-  font-size: 0.78rem;
+  font-size: 0.76rem;
   cursor: pointer;
   outline: none;
   appearance: none;
   background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%238b949e' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e");
   background-repeat: no-repeat;
   background-position: right 6px center;
-  background-size: 14px;
+  background-size: 13px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  max-width: 170px;
+}
+
+.custom-select option {
+  background: var(--panel);
+  color: var(--text-white);
+  padding: 6px 8px;
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+}
+
+:root[data-theme="light"] .custom-select option {
+  background: #ffffff;
+  color: #1f2328;
 }
 
 .custom-select:hover, .custom-select:focus {
   border-color: var(--border-hover);
 }
 
+#filter-repo {
+  max-width: 160px;
+}
+
 .search-box-wrap {
   position: relative;
+  flex: 1 1 auto;
+  min-width: 90px;
+  max-width: 200px;
 }
 
 .filter-text-input {
-  height: 32px;
-  padding: 0 10px;
+  height: 30px;
+  padding: 0 8px;
   border: 1px solid var(--border);
   border-radius: 5px;
   background: var(--panel);
   color: var(--text-white);
   font-family: var(--font-mono);
-  font-size: 0.78rem;
-  width: 14rem;
+  font-size: 0.76rem;
+  width: 100%;
+  min-width: 90px;
+  max-width: 200px;
   transition: all 0.15s;
 }
 
@@ -615,6 +700,14 @@ body {
 /* Gmail-style Pagination Nav */
 .pager-group {
   display: flex;
+  align-items: center;
+  gap: 10px;
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  flex-shrink: 0;
+  white-space: nowrap;
+  margin-left: auto;
+}
   align-items: center;
   gap: 12px;
   font-family: var(--font-mono);
