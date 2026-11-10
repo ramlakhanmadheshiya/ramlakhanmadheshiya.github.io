@@ -284,6 +284,25 @@
     throw new Error("GRAPHQL_UNAVAILABLE");
   }
 
+  // GitHub signals rate limits with 403 or 429 (primary or secondary limit)
+  function isRateLimited(res, data) {
+    if (res.status === 429) return true;
+    if (res.status !== 403) return false;
+    return res.headers.get("x-ratelimit-remaining") === "0" || /rate limit/i.test(data?.message || "");
+  }
+
+  // Seconds until GitHub's rate-limit window resets (falls back to 60s)
+  function rateLimitWaitSeconds(res) {
+    const retryAfter = Number(res.headers.get("retry-after"));
+    if (retryAfter > 0) return Math.min(retryAfter + 1, 120);
+    const reset = Number(res.headers.get("x-ratelimit-reset"));
+    if (reset > 0) {
+      const secs = Math.ceil(reset - Date.now() / 1000) + 1;
+      if (secs > 0) return Math.min(secs, 120);
+    }
+    return 60;
+  }
+
   // REST search fallback for unauthenticated public browsing
   async function fetchRestSearch(login, page = 1) {
     const headers = {
@@ -300,8 +319,14 @@
 
     if (!res.ok) {
       const msg = data?.message || `GitHub error: ${res.status}`;
-      if (res.status === 403) {
-        throw new Error("GitHub rate limit reached for unauthenticated browsing.");
+      if (res.status === 422) {
+        const err = new Error(`No GitHub user named @${login} was found. Check the spelling`);
+        err.notFound = true;
+        throw err;
+      }
+      if (isRateLimited(res, data)) {
+        const wait = rateLimitWaitSeconds(res);
+        throw new Error(`GitHub public rate limit reached (10 searches/min). Try again in ${wait}s, or add a free token for 5,000 req/hr`);
       }
       throw new Error(msg);
     }
@@ -622,7 +647,9 @@
       } catch (restErr) {
         if (searchId !== activeSearchId) return;
         dom.listLoading.style.display = "none";
-        dom.streamText.innerHTML = `⚠ Could not load GitHub data: ${escapeHtml(restErr.message)}. <a href="javascript:void(0)" id="btn-stream-settings" style="color:var(--gh-open);text-decoration:underline;">Configure token in Settings</a>.`;
+        dom.streamText.innerHTML = restErr.notFound
+          ? `⚠ ${escapeHtml(restErr.message)}.`
+          : `⚠ Could not load GitHub data: ${escapeHtml(restErr.message)}. <a href="javascript:void(0)" id="btn-stream-settings" style="color:var(--gh-open);text-decoration:underline;">Configure token in Settings</a>.`;
         const btn = document.getElementById("btn-stream-settings");
         if (btn) btn.onclick = () => dom.modalToken?.classList.add("open");
         if (!state.itemsMap.size) {
@@ -785,26 +812,29 @@
         const data = await res.json().catch(() => null);
 
         if (!res.ok) {
-          if (res.status === 403 && !state.token) {
-            // Respect GitHub unauthenticated rate limit (10 req/min) with auto-resuming countdown
+          if (isRateLimited(res, data)) {
+            // Search API limit (10 req/min without token, 30 req/min with one):
+            // wait exactly until GitHub says the window resets, then retry this page.
+            const hadToken = Boolean(state.token);
             let aborted = false;
-            for (let waitSec = 60; waitSec > 0; waitSec--) {
+            for (let waitSec = rateLimitWaitSeconds(res); waitSec > 0; waitSec--) {
               if (state.cancelStreaming || searchId !== activeSearchId) {
                 aborted = true;
                 break;
               }
-              if (state.token) {
+              if (state.token && !hadToken) {
                 // Token was configured while waiting! Restart with 5,000 req/hr
                 startTracking(login, true);
                 return;
               }
-              dom.streamText.innerHTML = `⏳ Paused at ${state.itemsMap.size} items (public rate limit: 10 req/min). Resuming in ${waitSec}s, or <a href="javascript:void(0)" id="btn-stream-settings" style="color:var(--gh-open);text-decoration:underline;">add a free token</a> for 5,000 req/hr.`;
+              dom.streamText.innerHTML = state.token
+                ? `⏳ Paused at ${state.itemsMap.size} items (GitHub search limit). Resuming in ${waitSec}s...`
+                : `⏳ Paused at ${state.itemsMap.size} items (public rate limit: 10 req/min). Resuming in ${waitSec}s, or <a href="javascript:void(0)" id="btn-stream-settings" style="color:var(--gh-open);text-decoration:underline;">add a free token</a> for 5,000 req/hr.`;
               const btn = document.getElementById("btn-stream-settings");
               if (btn) btn.onclick = () => dom.modalToken?.classList.add("open");
               await new Promise((r) => setTimeout(r, 1000));
             }
             if (aborted) break;
-            // After rate limit window resets, retry fetching this page
             continue;
           } else {
             hasError = true;
