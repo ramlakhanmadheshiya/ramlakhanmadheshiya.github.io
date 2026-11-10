@@ -547,6 +547,7 @@
 
     // Always start fresh on new live search to ensure authentic real-time data
     state.itemsMap.clear();
+    renderAnalytics();
 
     try {
       // 1. High-Speed Initial GraphQL Request (Pulls first 50 items instantly)
@@ -662,10 +663,10 @@
         const currentCount = state.itemsMap.size;
         const targetEst = Math.max(initialInvolvesEst, currentCount);
         const progressPct = Math.min(98, Math.max(8, Math.round((currentCount / (targetEst + 25)) * 100)));
-        const currentPageNum = Math.ceil(currentCount / API_PAGE_SIZE);
-        const totalPagesEst = Math.ceil(targetEst / API_PAGE_SIZE);
+        const loadingPageNum = Math.floor(currentCount / API_PAGE_SIZE) + 1;
+        const totalPagesEst = Math.max(loadingPageNum, Math.ceil(targetEst / API_PAGE_SIZE));
 
-        dom.streamText.textContent = `⚡ Loading page ${currentPageNum} of ${totalPagesEst} (${currentCount} items · ${stream.name})...`;
+        dom.streamText.textContent = `⚡ Loading page ${loadingPageNum} of ${totalPagesEst} (${currentCount} items · ${stream.name})...`;
         dom.streamProgressFill.style.width = `${progressPct}%`;
 
         try {
