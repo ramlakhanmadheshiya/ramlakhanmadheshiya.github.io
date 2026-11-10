@@ -1115,14 +1115,14 @@
           ` : `
             <div class="preview-summary-card">
               <div class="psc-top">
-                <span class="badge ${badgeClass}">${badgeText}</span>
+                <span class="gh-badge ${badgeClass}">${item.statusLabel}</span>
                 <span class="psc-repo-num">${escapeHtml(item.repo)}#${item.number}</span>
                 <span class="psc-time">${timeAgo(item.createdAt)}</span>
               </div>
               <h4 class="psc-title"><a href="${item.url}" target="_blank" rel="noopener">${escapeHtml(item.title)}</a></h4>
               <div class="psc-author-row">
-                <img class="avatar" src="${item.author.avatarUrl || "https://github.com/ghost.png"}" alt="${escapeHtml(item.author.login)}" width="22" height="22" />
-                <span>Opened by <strong>@${escapeHtml(item.author.login)}</strong></span>
+                <img class="avatar" src="${item.authorAvatar || "https://github.com/ghost.png"}" alt="${escapeHtml(item.author)}" width="22" height="22" />
+                <span>Opened by <strong>@${escapeHtml(item.author)}</strong></span>
                 ${item.commentsCount > 0 ? `<span class="psc-comments">💬 ${item.commentsCount} comments</span>` : ""}
               </div>
               ${item.kind === "pr" ? `
