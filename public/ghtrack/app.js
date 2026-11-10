@@ -785,13 +785,32 @@
         const data = await res.json().catch(() => null);
 
         if (!res.ok) {
-          hasError = true;
-          if (res.status === 403) {
-            errorMessage = "GitHub unauthenticated rate limit reached (10 req/min)";
+          if (res.status === 403 && !state.token) {
+            // Respect GitHub unauthenticated rate limit (10 req/min) with auto-resuming countdown
+            let aborted = false;
+            for (let waitSec = 60; waitSec > 0; waitSec--) {
+              if (state.cancelStreaming || searchId !== activeSearchId) {
+                aborted = true;
+                break;
+              }
+              if (state.token) {
+                // Token was configured while waiting! Restart with 5,000 req/hr
+                startTracking(login, true);
+                return;
+              }
+              dom.streamText.innerHTML = `⏳ Paused at ${state.itemsMap.size} items (public rate limit: 10 req/min). Resuming in ${waitSec}s, or <a href="javascript:void(0)" id="btn-stream-settings" style="color:var(--gh-open);text-decoration:underline;">add a free token</a> for 5,000 req/hr.`;
+              const btn = document.getElementById("btn-stream-settings");
+              if (btn) btn.onclick = () => dom.modalToken?.classList.add("open");
+              await new Promise((r) => setTimeout(r, 1000));
+            }
+            if (aborted) break;
+            // After rate limit window resets, retry fetching this page
+            continue;
           } else {
+            hasError = true;
             errorMessage = data?.message || `HTTP ${res.status}`;
+            break;
           }
-          break;
         }
 
         const items = data.items || [];
