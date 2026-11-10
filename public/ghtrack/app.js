@@ -6,6 +6,7 @@
   const GITHUB_REST_ENDPOINT = "https://api.github.com";
   const API_PAGE_SIZE = 50; // 50 items per search query as requested
   const FEED_PAGE_SIZE = 50; // Items per view page in the list feed for smooth DOM rendering
+  const IS_LOCAL = window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1";
 
   // ── IndexedDB Cache Setup (Unlimited Cost-Free Client Storage) ───────
   const DB_NAME = "ghtrack_cache_db";
@@ -242,21 +243,23 @@
 
   // ── GitHub API Fetcher (Dual Engine: GraphQL Proxy + REST Fallback) ─
   async function fetchGraphQL(query, variables) {
-    try {
-      const proxyRes = await fetch("/api/graphql", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ query, variables }),
-      });
-      if (proxyRes.ok) {
-        const proxyData = await proxyRes.json();
-        if (proxyData.data) return proxyData.data;
-        if (proxyData.errors) {
-          console.warn("GraphQL Proxy errors:", proxyData.errors);
+    if (IS_LOCAL) {
+      try {
+        const proxyRes = await fetch("/api/graphql", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ query, variables }),
+        });
+        if (proxyRes.ok) {
+          const proxyData = await proxyRes.json();
+          if (proxyData.data) return proxyData.data;
+          if (proxyData.errors) {
+            console.warn("GraphQL Proxy errors:", proxyData.errors);
+          }
         }
+      } catch {
+        // Proxy not reached, fall through to client token
       }
-    } catch {
-      // Proxy not reached, fall through to client token
     }
 
     if (state.token) {
@@ -1106,8 +1109,42 @@
           </div>
         </div>
 
-        <div class="iframe-container">
-          <iframe class="preview-iframe" data-src="/view?url=${encodeURIComponent(item.url)}" title="GitHub Page Preview"></iframe>
+        <div class="iframe-container ${IS_LOCAL ? "" : "preview-card-wrap"}">
+          ${IS_LOCAL ? `
+            <iframe class="preview-iframe" data-src="/view?url=${encodeURIComponent(item.url)}" title="GitHub Page Preview"></iframe>
+          ` : `
+            <div class="preview-summary-card">
+              <div class="psc-top">
+                <span class="badge ${badgeClass}">${badgeText}</span>
+                <span class="psc-repo-num">${escapeHtml(item.repo)}#${item.number}</span>
+                <span class="psc-time">${timeAgo(item.createdAt)}</span>
+              </div>
+              <h4 class="psc-title"><a href="${item.url}" target="_blank" rel="noopener">${escapeHtml(item.title)}</a></h4>
+              <div class="psc-author-row">
+                <img class="avatar" src="${item.author.avatarUrl || "https://github.com/ghost.png"}" alt="${escapeHtml(item.author.login)}" width="22" height="22" />
+                <span>Opened by <strong>@${escapeHtml(item.author.login)}</strong></span>
+                ${item.commentsCount > 0 ? `<span class="psc-comments">💬 ${item.commentsCount} comments</span>` : ""}
+              </div>
+              ${item.kind === "pr" ? `
+                <div class="psc-diff-row">
+                  <span class="diff-add">+${item.additions}</span>
+                  <span class="diff-del">-${item.deletions}</span>
+                  <span class="diff-files">in ${item.changedFiles} changed files</span>
+                  ${item.ciState ? `<span class="ci-pill ${item.ciState.toLowerCase()}">CI: ${item.ciState}</span>` : ""}
+                </div>
+              ` : ""}
+              ${item.labels && item.labels.length > 0 ? `
+                <div class="psc-labels-row">
+                  ${item.labels.map(l => `<span class="label-pill" style="--l-color: #${l.color || '888'}">${escapeHtml(l.name)}</span>`).join("")}
+                </div>
+              ` : ""}
+              <div class="psc-actions">
+                <a href="${item.url}" target="_blank" rel="noopener" class="btn-primary-gh">
+                  Open #${item.number} on GitHub ↗
+                </a>
+              </div>
+            </div>
+          `}
         </div>
       </div>
     `;
