@@ -9,7 +9,7 @@
 
   // ── IndexedDB Cache Setup (Unlimited Cost-Free Client Storage) ───────
   const DB_NAME = "ghtrack_cache_db";
-  const DB_VERSION = 2; // Bumped to v2 to automatically purge old/stale cached counts
+  const DB_VERSION = 3; // Bumped to v3 to automatically purge any stale or corrupted caches
   const STORE_NAME = "profiles";
 
   function openDB() {
@@ -175,7 +175,7 @@
     btnDownloadExport: document.getElementById("btn-download-export"),
   };
 
-  // ── GraphQL Queries (100 items per request, lightweight with comment authors) ──
+  // ── GraphQL Queries (100 items per request, lightweight with scalar comments) ──
   const ROW_FRAGMENT = `
     fragment RowDetails on SearchResultItem {
       ... on Issue {
@@ -189,12 +189,7 @@
         updatedAt
         author { login avatarUrl }
         repository { nameWithOwner }
-        comments(first: 25) {
-          totalCount
-          nodes {
-            author { login }
-          }
-        }
+        comments { totalCount }
         labels(first: 5) { nodes { name color } }
       }
       ... on PullRequest {
@@ -212,12 +207,7 @@
         changedFiles
         author { login avatarUrl }
         repository { nameWithOwner }
-        comments(first: 25) {
-          totalCount
-          nodes {
-            author { login }
-          }
-        }
+        comments { totalCount }
         commits(last: 1) {
           nodes {
             commit {
@@ -252,6 +242,9 @@
       if (proxyRes.ok) {
         const proxyData = await proxyRes.json();
         if (proxyData.data) return proxyData.data;
+        if (proxyData.errors) {
+          console.warn("GraphQL Proxy errors:", proxyData.errors);
+        }
       }
     } catch {
       // Proxy not reached, fall through to client token
@@ -373,7 +366,7 @@
   }
 
   // ── Normalization & Chips ───────────────────────────────────────────
-  function normalizeNode(node, currentLogin) {
+  function normalizeNode(node, currentLogin, isCommenterStream = false) {
     if (!node || !node.repository?.nameWithOwner) return null;
 
     const isPR = node.__typename === "PullRequest";
@@ -381,18 +374,12 @@
     const cleanLogin = currentLogin.toLowerCase();
     const isAuthor = authorLogin.toLowerCase() === cleanLogin;
 
-    // Check if user actually commented on this issue/PR (regardless of whether they are the author!)
-    let userCommented = false;
-    if (node._isCommenterStream) {
-      userCommented = true;
-    } else if (node.comments?.nodes) {
-      for (const c of node.comments.nodes) {
-        if (c?.author?.login?.toLowerCase() === cleanLogin) {
-          userCommented = true;
-          break;
-        }
-      }
-    }
+    // Check if user commented: direct flag from commenter stream or inherited property
+    const userCommented = Boolean(
+      isCommenterStream ||
+      node._isCommenterStream ||
+      node.userCommented
+    );
 
     // Determine status badge
     let status = "open";
@@ -560,7 +547,7 @@
         populateRepoFilter();
         renderList();
         renderAnalytics();
-        dom.streamText.textContent = `⚡ Cached data loaded (${state.itemsMap.size} items) · Verifying live updates...`;
+        dom.streamText.textContent = `⚡ Displaying cached data (${state.itemsMap.size} items) · Syncing live...`;
       } else {
         state.itemsMap.clear();
       }
@@ -581,19 +568,13 @@
       const totalEstimated = data.search?.issueCount || 0;
       state.totalEstimated = totalEstimated;
 
-      if (forceLive || !state.itemsMap.size) {
-        state.itemsMap.clear();
-      }
+      // Always clear itemsMap on live data arrival to prevent stale cache contamination
+      state.itemsMap.clear();
 
       for (const node of data.search?.nodes || []) {
         const item = normalizeNode(node, cleanUser);
         if (item) {
-          const existing = state.itemsMap.get(item.id);
-          if (existing) {
-            if (item.userCommented) existing.userCommented = true;
-          } else {
-            state.itemsMap.set(item.id, item);
-          }
+          state.itemsMap.set(item.id, item);
         }
       }
 
@@ -620,7 +601,7 @@
 
         const totalEstimated = restData.total_count || 0;
         state.totalEstimated = totalEstimated;
-        if (forceLive || !state.itemsMap.size) state.itemsMap.clear();
+        state.itemsMap.clear();
 
         for (const raw of restData.items || []) {
           const item = normalizeRestNode(raw, cleanUser);
@@ -659,15 +640,16 @@
     }
   }
 
-  // Background stream processor: Dual-Stream Multi-Source Harvester (100 items per batch)
+  // Background stream processor: Tri-Stream Multi-Source Harvester (100 items per batch)
+  // Stream 1: involves:username (authored, assigned, mentioned across GitHub)
+  // Stream 2: commenter:username (native GitHub index for all commented threads)
+  // Stream 3: user:username (all issues/PRs in user-owned repositories)
   async function streamRemainingBatches(login, searchId, initialCursor, initialInvolvesEst) {
     state.isStreamingBackground = true;
 
-    // Both dimensions of complete GitHub activity:
-    // 1. involves:username (authored, commented, reviewed, assigned work across all GitHub)
-    // 2. user:username (all issues and PRs in repositories owned by the user, catching community work)
     const streams = [
       { name: "involves", base: `involves:${login}`, cursor: initialCursor, totalEst: initialInvolvesEst },
+      { name: "comments", base: `commenter:${login}`, cursor: null, totalEst: 0 },
       { name: "user repos", base: `user:${login}`, cursor: null, totalEst: 0 },
     ];
 
@@ -678,12 +660,13 @@
       let cursor = stream.cursor;
       let currentQuery = `${stream.base} sort:updated-desc`;
       let windowBatch = 0;
-      let streamNodes = [];
 
       while (!state.cancelStreaming && searchId === activeSearchId) {
         const currentCount = state.itemsMap.size;
+        const targetEst = Math.max(initialInvolvesEst, currentCount);
+        const progressPct = Math.min(98, Math.max(10, Math.round((currentCount / (targetEst + 25)) * 100)));
         dom.streamText.textContent = `⚡ Buffering lifetime history: ${currentCount} loaded (${stream.name})...`;
-        dom.streamProgressFill.style.width = `${Math.min(98, Math.max(8, Math.round((currentCount / 1255) * 100)))}%`;
+        dom.streamProgressFill.style.width = `${progressPct}%`;
 
         try {
           const data = await fetchGraphQL(SEARCH_QUERY, {
@@ -694,36 +677,17 @@
 
           if (searchId !== activeSearchId) return;
 
-          const nodes = data.search?.nodes || [];
-          const queryTotal = data.search?.issueCount || 0;
-          if (sIdx === 1 && !stream.totalEst) stream.totalEst = queryTotal;
+          const nodes = data?.search?.nodes || [];
+          if (!nodes.length) break;
 
-          if (!nodes.length) {
-            // Check if windowing needed for this stream
-            if (queryTotal > streamNodes.length && windowBatch < 6) {
-              let oldestDate = null;
-              for (const n of streamNodes) {
-                if (!oldestDate || new Date(n.updatedAt) < new Date(oldestDate)) {
-                  oldestDate = n.updatedAt;
-                }
-              }
-              if (oldestDate) {
-                windowBatch++;
-                currentQuery = `${stream.base} updated:<${oldestDate} sort:updated-desc`;
-                cursor = null;
-                continue;
-              }
-            }
-            break;
-          }
-
+          const isCommenterStream = stream.name === "comments";
           for (const node of nodes) {
-            streamNodes.push(node);
-            const item = normalizeNode(node, login);
+            if (!node?.url) continue;
+            const item = normalizeNode(node, login, isCommenterStream);
             if (item) {
               const existing = state.itemsMap.get(item.id);
               if (existing) {
-                if (item.userCommented) existing.userCommented = true;
+                if (isCommenterStream) existing.userCommented = true;
               } else {
                 state.itemsMap.set(item.id, item);
               }
@@ -735,18 +699,13 @@
 
           updateTelemetry();
           populateRepoFilter();
-          updatePagerUI();
+          renderList();
           renderAnalytics();
 
-          // Check single query search ceiling (GitHub 1,000 items)
+          // Check single-query search ceiling (GitHub 1,000 items)
           if (!hasNextPage || cursor === "Y3Vyc29yOjEwMDA=") {
-            if (queryTotal > streamNodes.length && windowBatch < 6) {
-              let oldestDate = null;
-              for (const n of streamNodes) {
-                if (!oldestDate || new Date(n.updatedAt) < new Date(oldestDate)) {
-                  oldestDate = n.updatedAt;
-                }
-              }
+            if (cursor === "Y3Vyc29yOjEwMDA=" && windowBatch < 6) {
+              const oldestDate = nodes[nodes.length - 1]?.updatedAt;
               if (oldestDate) {
                 windowBatch++;
                 currentQuery = `${stream.base} updated:<${oldestDate} sort:updated-desc`;
@@ -760,7 +719,7 @@
 
           await new Promise((r) => setTimeout(r, 40));
         } catch (err) {
-          console.warn(`Background stream (${stream.name}) error:`, err.message);
+          console.warn(`Background stream (${stream.name}) paused:`, err.message);
           break;
         }
       }
@@ -773,15 +732,21 @@
     dom.streamProgressFill.style.width = "100%";
 
     saveCachedProfile(login, { login: login.toLowerCase(), items: Array.from(state.itemsMap.values()) });
-    updatePagerUI();
+    updateTelemetry();
+    populateRepoFilter();
+    renderList();
     renderAnalytics();
   }
 
-  // Background stream processor for public REST mode
+  // Background stream processor for public REST mode (supports windowing beyond 1,000 items)
   async function streamRestPages(login, searchId, totalPages, totalEst) {
     state.isStreamingBackground = true;
+    let windowBatch = 0;
+    let baseQuery = `involves:${encodeURIComponent(login)}`;
+    let currentQuery = `${baseQuery}&sort=updated&order=desc`;
+    let page = 2;
 
-    for (let page = 2; page <= totalPages && !state.cancelStreaming && searchId === activeSearchId; page++) {
+    while (page <= 10 && !state.cancelStreaming && searchId === activeSearchId) {
       const currentCount = state.itemsMap.size;
       const progressPercent = totalEst > 0 ? Math.min(99, Math.round((currentCount / totalEst) * 100)) : 50;
 
@@ -789,19 +754,43 @@
       dom.streamProgressFill.style.width = `${progressPercent}%`;
 
       try {
-        const data = await fetchRestSearch(login, page);
-        if (searchId !== activeSearchId) return;
+        const url = `${GITHUB_REST_ENDPOINT}/search/issues?q=${currentQuery}&per_page=100&page=${page}`;
+        const headers = { "User-Agent": "ghtrack-web/1.0", Accept: "application/vnd.github.v3+json" };
+        if (state.token) headers["Authorization"] = `Bearer ${state.token}`;
 
-        for (const raw of data.items || []) {
+        const res = await fetch(url, { headers });
+        const data = await res.json().catch(() => null);
+
+        if (!res.ok) {
+          console.warn("Background REST stream paused:", data?.message);
+          break;
+        }
+
+        const items = data.items || [];
+        if (!items.length) break;
+
+        for (const raw of items) {
           const item = normalizeRestNode(raw, login);
           if (item) state.itemsMap.set(item.id, item);
         }
 
         updateTelemetry();
         populateRepoFilter();
-        updatePagerUI();
+        renderList();
         renderAnalytics();
 
+        if (page === 10 && totalEst > 1000 && windowBatch < 6) {
+          const oldestDate = items[items.length - 1]?.updated_at;
+          if (oldestDate) {
+            windowBatch++;
+            currentQuery = `${baseQuery}+updated:<${oldestDate}&sort=updated&order=desc`;
+            page = 1;
+            await new Promise((r) => setTimeout(r, 200));
+            continue;
+          }
+        }
+
+        page++;
         await new Promise((r) => setTimeout(r, 200));
       } catch (err) {
         console.warn("Background REST stream paused:", err.message);
@@ -815,7 +804,9 @@
     dom.streamText.textContent = `✓ 100% lifetime history loaded (${state.itemsMap.size} items buffered in memory & IndexedDB)`;
     dom.streamProgressFill.style.width = "100%";
     saveCachedProfile(login, { login: login.toLowerCase(), items: Array.from(state.itemsMap.values()) });
-    updatePagerUI();
+    updateTelemetry();
+    populateRepoFilter();
+    renderList();
     renderAnalytics();
   }
 
