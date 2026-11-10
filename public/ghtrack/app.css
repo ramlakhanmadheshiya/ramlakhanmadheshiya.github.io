@@ -569,6 +569,12 @@ body {
   transition: all 0.12s;
 }
 
+.stream-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .btn-secondary-sm:hover {
   color: var(--text-white);
   border-color: var(--border-hover);

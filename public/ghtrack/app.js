@@ -4,11 +4,12 @@
 
   const GITHUB_GRAPHQL_ENDPOINT = "https://api.github.com/graphql";
   const GITHUB_REST_ENDPOINT = "https://api.github.com";
-  const PAGE_SIZE = 50;
+  const API_PAGE_SIZE = 100; // GitHub GraphQL maximum per search query (2x faster than 50)
+  const FEED_PAGE_SIZE = 50; // Items per view page in the list feed for smooth DOM rendering
 
   // ── IndexedDB Cache Setup (Unlimited Cost-Free Client Storage) ───────
   const DB_NAME = "ghtrack_cache_db";
-  const DB_VERSION = 1;
+  const DB_VERSION = 2; // Bumped to v2 to automatically purge old/stale cached counts
   const STORE_NAME = "profiles";
 
   function openDB() {
@@ -16,9 +17,10 @@
       const req = indexedDB.open(DB_NAME, DB_VERSION);
       req.onupgradeneeded = (e) => {
         const db = e.target.result;
-        if (!db.objectStoreNames.contains(STORE_NAME)) {
-          db.createObjectStore(STORE_NAME, { keyPath: "login" });
+        if (db.objectStoreNames.contains(STORE_NAME)) {
+          db.deleteObjectStore(STORE_NAME);
         }
+        db.createObjectStore(STORE_NAME, { keyPath: "login" });
       };
       req.onsuccess = () => resolve(req.result);
       req.onerror = () => reject(req.error);
@@ -51,6 +53,16 @@
     }
   }
 
+  async function clearAllCache() {
+    try {
+      const db = await openDB();
+      const tx = db.transaction(STORE_NAME, "readwrite");
+      tx.objectStore(STORE_NAME).clear();
+    } catch (err) {
+      console.warn("Cache clear error:", err);
+    }
+  }
+
   // ── State ───────────────────────────────────────────────────────────
   const state = {
     login: "",
@@ -60,7 +72,7 @@
     isStreamingBackground: false,
     cancelStreaming: false,
     currentPage: 1,
-    pageSize: PAGE_SIZE,
+    pageSize: FEED_PAGE_SIZE,
     totalEstimated: 0,
     viewMode: "feed",       // 'feed' | 'analytics'
     dateRange: "all",       // 'all' | '2026' | '2025' | '2024' | '90d' | '30d'
@@ -95,6 +107,8 @@
     streamBanner: document.getElementById("stream-banner"),
     streamText: document.getElementById("stream-text"),
     streamProgressFill: document.getElementById("stream-progress-fill"),
+    btnClearCache: document.getElementById("btn-clear-cache"),
+    btnExport: document.getElementById("btn-export"),
 
     mainContent: document.getElementById("main-content"),
     tabBtnFeed: document.getElementById("tab-btn-feed"),
@@ -152,7 +166,6 @@
     iconSun: document.getElementById("theme-icon-sun"),
     iconMoon: document.getElementById("theme-icon-moon"),
 
-    btnExport: document.getElementById("btn-export"),
     modalExport: document.getElementById("modal-export"),
     modalExportClose: document.getElementById("modal-export-close"),
     tabExportMd: document.getElementById("tab-export-md"),
@@ -162,7 +175,7 @@
     btnDownloadExport: document.getElementById("btn-download-export"),
   };
 
-  // ── GraphQL Queries (Optimized, Lightweight & Timeout-Proof) ────────
+  // ── GraphQL Queries (100 items per request, lightweight with comment authors) ──
   const ROW_FRAGMENT = `
     fragment RowDetails on SearchResultItem {
       ... on Issue {
@@ -176,7 +189,12 @@
         updatedAt
         author { login avatarUrl }
         repository { nameWithOwner }
-        comments { totalCount }
+        comments(first: 25) {
+          totalCount
+          nodes {
+            author { login }
+          }
+        }
         labels(first: 5) { nodes { name color } }
       }
       ... on PullRequest {
@@ -194,7 +212,12 @@
         changedFiles
         author { login avatarUrl }
         repository { nameWithOwner }
-        comments { totalCount }
+        comments(first: 25) {
+          totalCount
+          nodes {
+            author { login }
+          }
+        }
         commits(last: 1) {
           nodes {
             commit {
@@ -220,7 +243,6 @@
 
   // ── GitHub API Fetcher (Dual Engine: GraphQL Proxy + REST Fallback) ─
   async function fetchGraphQL(query, variables) {
-    // 1. Try server proxy endpoint first (automatic 5,000 req/hr token)
     try {
       const proxyRes = await fetch("/api/graphql", {
         method: "POST",
@@ -232,10 +254,9 @@
         if (proxyData.data) return proxyData.data;
       }
     } catch {
-      // Local proxy not reached, proceed to direct client
+      // Proxy not reached, fall through to client token
     }
 
-    // 2. Direct client token if saved in localStorage
     if (state.token) {
       const headers = {
         "Content-Type": "application/json",
@@ -250,7 +271,6 @@
       });
 
       const data = await res.json().catch(() => null);
-
       if (res.ok && data?.data) {
         return data.data;
       }
@@ -269,7 +289,7 @@
       headers["Authorization"] = `Bearer ${state.token}`;
     }
 
-    const url = `${GITHUB_REST_ENDPOINT}/search/issues?q=involves:${encodeURIComponent(login)}&sort=updated&order=desc&per_page=${PAGE_SIZE}&page=${page}`;
+    const url = `${GITHUB_REST_ENDPOINT}/search/issues?q=involves:${encodeURIComponent(login)}&sort=updated&order=desc&per_page=100&page=${page}`;
     const res = await fetch(url, { headers });
     const data = await res.json().catch(() => null);
 
@@ -289,7 +309,8 @@
     const isPR = Boolean(raw.pull_request);
     const isMerged = Boolean(raw.pull_request?.merged_at);
     const authorLogin = raw.user?.login || "ghost";
-    const isAuthor = authorLogin.toLowerCase() === currentLogin.toLowerCase();
+    const cleanLogin = currentLogin.toLowerCase();
+    const isAuthor = authorLogin.toLowerCase() === cleanLogin;
 
     const repoMatch = raw.html_url.match(/github\.com\/([^/]+\/[^/]+)\/(?:pull|issues)/);
     const repo = repoMatch ? repoMatch[1] : "unknown/repo";
@@ -331,7 +352,7 @@
       author: authorLogin,
       authorAvatar: raw.user?.avatar_url || "",
       isAuthor,
-      userCommented: !isAuthor,
+      userCommented: raw.comments > 0, // Fallback flag
       createdAt: raw.created_at,
       updatedAt: raw.updated_at,
       status,
@@ -357,9 +378,21 @@
 
     const isPR = node.__typename === "PullRequest";
     const authorLogin = node.author?.login || "ghost";
-    const isAuthor = authorLogin.toLowerCase() === currentLogin.toLowerCase();
+    const cleanLogin = currentLogin.toLowerCase();
+    const isAuthor = authorLogin.toLowerCase() === cleanLogin;
 
-    let userCommented = !isAuthor;
+    // Check if user actually commented on this issue/PR (regardless of whether they are the author!)
+    let userCommented = false;
+    if (node._isCommenterStream) {
+      userCommented = true;
+    } else if (node.comments?.nodes) {
+      for (const c of node.comments.nodes) {
+        if (c?.author?.login?.toLowerCase() === cleanLogin) {
+          userCommented = true;
+          break;
+        }
+      }
+    }
 
     // Determine status badge
     let status = "open";
@@ -479,7 +512,7 @@
   // ── Fetch & Background Stream Engine ────────────────────────────────
   let activeSearchId = 0;
 
-  async function startTracking(username) {
+  async function startTracking(username, forceLive = false) {
     const cleanUser = username.trim().replace(/^@/, "");
     if (!cleanUser) return;
 
@@ -488,13 +521,12 @@
 
     state.login = cleanUser;
     state.currentPage = 1;
-    state.itemsMap.clear(); // WIPE master store immediately!
-    state.cancelStreaming = true; // Signals previous background loop to exit immediately
+    state.cancelStreaming = true; // Signal previous stream loops to terminate
 
     dom.searchInput.value = cleanUser;
     history.replaceState(null, "", `?name=${encodeURIComponent(cleanUser)}`);
 
-    // Reset all UI elements immediately to guarantee no previous user data remains
+    // Reset all UI elements
     dom.listContainer.innerHTML = "";
     dom.pageButtons.innerHTML = "";
     dom.filterRepo.innerHTML = `<option value="all">All Repositories</option>`;
@@ -507,7 +539,6 @@
     dom.statRepos.textContent = "0";
     dom.pagerCount.textContent = "0 of 0";
 
-    // UI Loading state
     dom.btnSearch.disabled = true;
     dom.btnSearch.innerHTML = `<span class="loading-dots">Tracking<i></i><i></i><i></i></span>`;
     dom.mainContent.style.display = "block";
@@ -515,25 +546,33 @@
     dom.listEmpty.style.display = "none";
     dom.telemetryBar.style.display = "grid";
     dom.streamBanner.style.display = "flex";
-    dom.streamText.textContent = `Fetching lifetime history for @${cleanUser}...`;
+    dom.streamText.textContent = `Fetching live GitHub history for @${cleanUser}...`;
     dom.streamProgressFill.style.width = "5%";
 
-    // Check IndexedDB cache ONLY for this exact user
-    const cached = await getCachedProfile(cleanUser);
-    if (searchId !== activeSearchId) return;
-    if (cached && cached.items?.length && cached.login === cleanUser.toLowerCase()) {
-      cached.items.forEach((item) => state.itemsMap.set(item.id, item));
-      updateTelemetry();
-      populateRepoFilter();
-      renderList();
-      renderAnalytics();
+    // If NOT forceLive, check IndexedDB cache for instant display
+    if (!forceLive) {
+      const cached = await getCachedProfile(cleanUser);
+      if (searchId !== activeSearchId) return;
+      if (cached && cached.items?.length && cached.login === cleanUser.toLowerCase()) {
+        state.itemsMap.clear();
+        cached.items.forEach((item) => state.itemsMap.set(item.id, item));
+        updateTelemetry();
+        populateRepoFilter();
+        renderList();
+        renderAnalytics();
+        dom.streamText.textContent = `⚡ Cached data loaded (${state.itemsMap.size} items) · Verifying live updates...`;
+      } else {
+        state.itemsMap.clear();
+      }
+    } else {
+      state.itemsMap.clear();
     }
 
     try {
-      // 1. High-Speed GraphQL (50 items per batch, timeout-proof, 5,000 req/hr enabled)
+      // 1. High-Speed Initial GraphQL Request (Pulls first 100 items instantly)
       const data = await fetchGraphQL(SEARCH_QUERY, {
         q: `involves:${cleanUser} sort:updated-desc`,
-        n: PAGE_SIZE,
+        n: API_PAGE_SIZE,
         cursor: null,
       });
 
@@ -542,9 +581,20 @@
       const totalEstimated = data.search?.issueCount || 0;
       state.totalEstimated = totalEstimated;
 
+      if (forceLive || !state.itemsMap.size) {
+        state.itemsMap.clear();
+      }
+
       for (const node of data.search?.nodes || []) {
         const item = normalizeNode(node, cleanUser);
-        if (item) state.itemsMap.set(item.id, item);
+        if (item) {
+          const existing = state.itemsMap.get(item.id);
+          if (existing) {
+            if (item.userCommented) existing.userCommented = true;
+          } else {
+            state.itemsMap.set(item.id, item);
+          }
+        }
       }
 
       dom.listLoading.style.display = "none";
@@ -553,21 +603,14 @@
       renderList();
       renderAnalytics();
 
-      const hasMore = Boolean(data.search?.pageInfo?.hasNextPage);
-      if (hasMore || totalEstimated > state.itemsMap.size) {
-        state.cancelStreaming = false;
-        streamRemainingBatches(
-          cleanUser,
-          searchId,
-          data.search?.pageInfo?.endCursor,
-          totalEstimated
-        );
-      } else {
-        dom.streamText.textContent = `✓ All ${state.itemsMap.size} lifetime items loaded`;
-        dom.streamProgressFill.style.width = "100%";
-        saveCachedProfile(cleanUser, { login: cleanUser.toLowerCase(), items: Array.from(state.itemsMap.values()) });
-      }
-    } catch {
+      state.cancelStreaming = false;
+      streamRemainingBatches(
+        cleanUser,
+        searchId,
+        data.search?.pageInfo?.endCursor,
+        totalEstimated
+      );
+    } catch (err) {
       if (searchId !== activeSearchId) return;
 
       // Fallback: If GraphQL proxy unavailable, try REST Search
@@ -577,6 +620,7 @@
 
         const totalEstimated = restData.total_count || 0;
         state.totalEstimated = totalEstimated;
+        if (forceLive || !state.itemsMap.size) state.itemsMap.clear();
 
         for (const raw of restData.items || []) {
           const item = normalizeRestNode(raw, cleanUser);
@@ -589,7 +633,7 @@
         renderList();
         renderAnalytics();
 
-        const totalPages = Math.ceil(totalEstimated / PAGE_SIZE);
+        const totalPages = Math.ceil(totalEstimated / 100);
         if (totalPages > 1) {
           state.cancelStreaming = false;
           streamRestPages(cleanUser, searchId, totalPages, totalEstimated);
@@ -615,16 +659,16 @@
     }
   }
 
-  // Background stream processor: Dual-Stream Harvester (involves + user repos with deep windowing)
+  // Background stream processor: Dual-Stream Multi-Source Harvester (100 items per batch)
   async function streamRemainingBatches(login, searchId, initialCursor, initialInvolvesEst) {
     state.isStreamingBackground = true;
 
-    // Both dimensions of GitHub activity:
-    // 1. involves:username (authored, commented, reviewed, assigned across all GitHub)
+    // Both dimensions of complete GitHub activity:
+    // 1. involves:username (authored, commented, reviewed, assigned work across all GitHub)
     // 2. user:username (all issues and PRs in repositories owned by the user, catching community work)
     const streams = [
-      { base: `involves:${login}`, cursor: initialCursor, totalEst: initialInvolvesEst },
-      { base: `user:${login}`, cursor: null, totalEst: 0 },
+      { name: "involves", base: `involves:${login}`, cursor: initialCursor, totalEst: initialInvolvesEst },
+      { name: "user repos", base: `user:${login}`, cursor: null, totalEst: 0 },
     ];
 
     for (let sIdx = 0; sIdx < streams.length; sIdx++) {
@@ -634,19 +678,17 @@
       let cursor = stream.cursor;
       let currentQuery = `${stream.base} sort:updated-desc`;
       let windowBatch = 0;
-      let streamCount = 0;
+      let streamNodes = [];
 
       while (!state.cancelStreaming && searchId === activeSearchId) {
         const currentCount = state.itemsMap.size;
-        const progressPercent = Math.min(99, Math.round(((sIdx * 50) + (streamCount > 0 ? 40 : 10)) / 100 * 100));
-
-        dom.streamText.textContent = `⚡ Buffering lifetime history: ${currentCount} loaded (${sIdx === 0 ? "involves" : "user repos"})...`;
-        dom.streamProgressFill.style.width = `${Math.min(98, Math.max(10, Math.round((currentCount / 1250) * 100)))}%`;
+        dom.streamText.textContent = `⚡ Buffering lifetime history: ${currentCount} loaded (${stream.name})...`;
+        dom.streamProgressFill.style.width = `${Math.min(98, Math.max(8, Math.round((currentCount / 1255) * 100)))}%`;
 
         try {
           const data = await fetchGraphQL(SEARCH_QUERY, {
             q: currentQuery,
-            n: PAGE_SIZE,
+            n: API_PAGE_SIZE,
             cursor,
           });
 
@@ -657,12 +699,12 @@
           if (sIdx === 1 && !stream.totalEst) stream.totalEst = queryTotal;
 
           if (!nodes.length) {
-            // Check if windowing needed
-            if (queryTotal > streamCount && windowBatch < 6) {
+            // Check if windowing needed for this stream
+            if (queryTotal > streamNodes.length && windowBatch < 6) {
               let oldestDate = null;
-              for (const it of state.itemsMap.values()) {
-                if (!oldestDate || new Date(it.updatedAt) < new Date(oldestDate)) {
-                  oldestDate = it.updatedAt;
+              for (const n of streamNodes) {
+                if (!oldestDate || new Date(n.updatedAt) < new Date(oldestDate)) {
+                  oldestDate = n.updatedAt;
                 }
               }
               if (oldestDate) {
@@ -676,10 +718,15 @@
           }
 
           for (const node of nodes) {
+            streamNodes.push(node);
             const item = normalizeNode(node, login);
             if (item) {
-              state.itemsMap.set(item.id, item);
-              streamCount++;
+              const existing = state.itemsMap.get(item.id);
+              if (existing) {
+                if (item.userCommented) existing.userCommented = true;
+              } else {
+                state.itemsMap.set(item.id, item);
+              }
             }
           }
 
@@ -691,29 +738,29 @@
           updatePagerUI();
           renderAnalytics();
 
-          // Check if single-query search ceiling reached (GitHub caps single queries at 1,000 items)
+          // Check single query search ceiling (GitHub 1,000 items)
           if (!hasNextPage || cursor === "Y3Vyc29yOjEwMDA=") {
-            if (queryTotal > streamCount && windowBatch < 6) {
+            if (queryTotal > streamNodes.length && windowBatch < 6) {
               let oldestDate = null;
-              for (const it of state.itemsMap.values()) {
-                if (!oldestDate || new Date(it.updatedAt) < new Date(oldestDate)) {
-                  oldestDate = it.updatedAt;
+              for (const n of streamNodes) {
+                if (!oldestDate || new Date(n.updatedAt) < new Date(oldestDate)) {
+                  oldestDate = n.updatedAt;
                 }
               }
               if (oldestDate) {
                 windowBatch++;
                 currentQuery = `${stream.base} updated:<${oldestDate} sort:updated-desc`;
                 cursor = null;
-                await new Promise((r) => setTimeout(r, 60));
+                await new Promise((r) => setTimeout(r, 40));
                 continue;
               }
             }
             break;
           }
 
-          await new Promise((r) => setTimeout(r, 60));
+          await new Promise((r) => setTimeout(r, 40));
         } catch (err) {
-          console.warn("Background stream pause/error:", err.message);
+          console.warn(`Background stream (${stream.name}) error:`, err.message);
           break;
         }
       }
@@ -902,7 +949,7 @@
     const start = (state.currentPage - 1) * state.pageSize + 1;
     const end = Math.min(state.currentPage * state.pageSize, total);
 
-    // Gmail-style pager text: "1–50 of 1000"
+    // Gmail-style pager text: "1–50 of 1255"
     dom.pagerCount.textContent = `${start}–${end} of ${total}`;
     dom.pagerPrev.disabled = state.currentPage <= 1;
     dom.pagerNext.disabled = state.currentPage >= totalPages;
@@ -1037,7 +1084,6 @@
       </div>
     `;
 
-    // Toggle Preview listener
     const previewBtn = row.querySelector(".btn-preview-toggle");
     const drawer = row.querySelector(".preview-drawer");
     const closeBtn = row.querySelector(".btn-close-drawer");
@@ -1086,7 +1132,6 @@
     const closedIssues = issues.filter((i) => i.status === "closed" || i.status === "not-planned");
     const repos = new Set(items.map((i) => i.repo));
 
-    // Dynamic PR Milestone Target
     let prMilestone = 50;
     if (prs.length >= 50 && prs.length < 100) prMilestone = 100;
     else if (prs.length >= 100 && prs.length < 250) prMilestone = 250;
@@ -1106,7 +1151,6 @@
       dom.targetPrStatus.className = "target-badge";
     }
 
-    // Dynamic Merge Velocity Goal
     const mergeRate = prs.length ? Math.round((mergedPrs.length / prs.length) * 100) : 0;
     const mergeGoal = 80;
     const mergeBarPct = Math.min(100, Math.round((mergeRate / mergeGoal) * 100));
@@ -1121,7 +1165,6 @@
       dom.targetMergeStatus.className = "target-badge";
     }
 
-    // Dynamic Issue Resolution
     const resRate = issues.length ? Math.round((closedIssues.length / issues.length) * 100) : 0;
     const resGoal = 85;
     const resBarPct = Math.min(100, Math.round((resRate / resGoal) * 100));
@@ -1136,11 +1179,11 @@
       dom.targetIssueStatus.className = "target-badge";
     }
 
-    // Dynamic Ecosystem Reach
     let repoGoal = 10;
     if (repos.size >= 10 && repos.size < 25) repoGoal = 25;
     else if (repos.size >= 25 && repos.size < 50) repoGoal = 50;
-    else if (repos.size >= 50) repoGoal = Math.ceil(repos.size / 25) * 25;
+    else if (repos.size >= 50 && repos.size < 100) repoGoal = 100;
+    else if (repos.size >= 100) repoGoal = Math.ceil(repos.size / 25) * 25;
 
     const repoBarPct = Math.min(100, Math.round((repos.size / repoGoal) * 100));
     dom.targetRepoVal.textContent = repos.size;
@@ -1159,7 +1202,6 @@
   function renderHeatmap(items) {
     if (!dom.heatmapCalendar) return;
 
-    // Daily contribution count map
     const dayCounts = new Map();
     const yearsFound = new Set();
 
@@ -1172,7 +1214,6 @@
       }
     }
 
-    // Populate Year Pills
     const sortedYears = Array.from(yearsFound).sort((a, b) => b - a);
     dom.heatmapYearPills.innerHTML = "";
 
@@ -1193,14 +1234,11 @@
       addPill(y, String(y));
     }
 
-    // Determine calendar date bounds
     const now = new Date();
     let startDate = new Date();
-    let totalDays = 371; // 53 weeks * 7 days
 
     if (state.heatmapYear === "all") {
       startDate.setDate(now.getDate() - 364);
-      // Align to Sunday
       const dayOfWeek = startDate.getDay();
       startDate.setDate(startDate.getDate() - dayOfWeek);
     } else {
@@ -1210,7 +1248,6 @@
       startDate.setDate(startDate.getDate() - dayOfWeek);
     }
 
-    // Build SVG Calendar
     const cols = 53;
     const rows = 7;
     const cellSize = 10;
@@ -1242,7 +1279,6 @@
         const x = offsetX + c * stride;
         const y = offsetY + r * stride;
 
-        // Month label at week transition
         if (r === 0 && curr.getMonth() !== lastMonth) {
           lastMonth = curr.getMonth();
           monthLabelsSvg += `<text x="${x}" y="12" class="heatmap-month-label">${monthNames[lastMonth]}</text>`;
@@ -1301,7 +1337,6 @@
     let pathsSvg = "";
 
     if (totalPrs === 0) {
-      // Empty placeholder ring
       pathsSvg = `<circle cx="80" cy="80" r="${radius}" fill="none" stroke="var(--canvas-subtle)" stroke-width="18" />`;
     } else {
       for (const slice of slices) {
@@ -1336,7 +1371,6 @@
       </svg>
     `;
 
-    // Legend items
     dom.donutLegend.innerHTML = slices
       .map((s) => {
         const pct = totalPrs ? Math.round((s.count / totalPrs) * 100) : 0;
@@ -1389,7 +1423,6 @@
       })
       .join("");
 
-    // Clicking a repo row filters the list and switches to Work Feed
     dom.topReposList.querySelectorAll(".top-repo-row").forEach((row) => {
       row.addEventListener("click", () => {
         const repo = row.dataset.repo;
@@ -1410,7 +1443,6 @@
   function renderYearlyChart(items) {
     if (!dom.yearlyChartContainer) return;
 
-    // Use all items from state.itemsMap for year comparison
     const allItems = Array.from(state.itemsMap.values());
     const yearCounts = new Map();
 
@@ -1575,7 +1607,7 @@
   // ── Search & Form Handlers ──────────────────────────────────────────
   dom.searchForm.addEventListener("submit", (e) => {
     e.preventDefault();
-    startTracking(dom.searchInput.value);
+    startTracking(dom.searchInput.value, true);
   });
 
   dom.inputClear.addEventListener("click", () => {
@@ -1592,9 +1624,19 @@
     pill.addEventListener("click", () => {
       const user = pill.dataset.user;
       dom.searchInput.value = user;
-      startTracking(user);
+      startTracking(user, true);
     });
   });
+
+  // Clear Cache Button
+  if (dom.btnClearCache) {
+    dom.btnClearCache.addEventListener("click", async () => {
+      await clearAllCache();
+      if (state.login) {
+        startTracking(state.login, true);
+      }
+    });
+  }
 
   // ── Theme Switcher ──────────────────────────────────────────────────
   function initTheme() {
