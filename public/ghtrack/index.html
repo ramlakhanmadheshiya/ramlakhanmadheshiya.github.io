@@ -1,0 +1,450 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ghtrack — Lifetime GitHub Work & Telemetry</title>
+  <meta name="description" content="Ultra-fast, zero-cost lifetime tracker for your GitHub PRs, issues, comments, CI status, and reviews with instant background pagination." />
+  <link rel="icon" type="image/svg+xml" href="./favicon.svg" />
+  <link rel="stylesheet" href="./app.css" />
+</head>
+<body>
+  <div class="noise-overlay" aria-hidden="true"></div>
+  <div class="grid-bg" aria-hidden="true"></div>
+
+  <div class="site-wrap">
+    <!-- Header -->
+    <header class="site-header">
+      <div class="header-left">
+        <a href="./" class="brand">
+          <svg class="brand-icon" viewBox="0 0 128 128" fill="none">
+            <rect width="128" height="128" rx="28" fill="#090c12"/>
+            <rect x="2" y="2" width="124" height="124" rx="26" stroke="#1f293d" stroke-width="2"/>
+            <circle cx="64" cy="64" r="42" stroke="#1c2536" stroke-width="1.5" stroke-dasharray="4 3"/>
+            <circle cx="64" cy="64" r="24" stroke="#25334a" stroke-width="1.5"/>
+            <path d="M64 16 L64 112 M16 64 L112 64" stroke="#182233" stroke-width="1.5"/>
+            <circle cx="44" cy="48" r="6.5" fill="#238636"/>
+            <circle cx="84" cy="52" r="6" fill="#8957e5"/>
+            <circle cx="56" cy="82" r="5.5" fill="#38bdf8"/>
+            <circle cx="64" cy="64" r="3.5" fill="#f8fafc"/>
+          </svg>
+          <span class="brand-name">ghtrack</span>
+          <span class="brand-tag">Lifetime</span>
+        </a>
+      </div>
+
+      <div class="header-actions">
+        <button id="btn-theme" class="btn-icon" type="button" aria-label="Toggle theme" title="Toggle dark/light mode">
+          <svg id="theme-icon-sun" class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="5"></circle>
+            <path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"></path>
+          </svg>
+          <svg id="theme-icon-moon" class="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:none;">
+            <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
+          </svg>
+        </button>
+      </div>
+    </header>
+
+    <!-- Hero / Search Section -->
+    <section class="hero">
+      <h1>Track your entire GitHub lifetime</h1>
+      <p class="lead">Pull requests, issues, comments, CI checks, and review states in one unified view. Loads the first 50 instantly and streams all lifetime history in the background.</p>
+
+      <form id="search-form" class="search-form" autocomplete="off">
+        <div class="input-wrap">
+          <span class="input-prefix">@</span>
+          <input
+            id="search-input"
+            class="search-input"
+            type="text"
+            placeholder="github username"
+            spellcheck="false"
+            autocapitalize="off"
+            required
+          />
+          <button type="button" id="input-clear" class="input-clear" aria-label="Clear input">✕</button>
+        </div>
+        <button type="submit" id="btn-search" class="btn-primary">
+          <span class="btn-text">Track</span>
+        </button>
+      </form>
+
+      <div class="quick-pills">
+        <span>Suggested:</span>
+        <button type="button" class="quick-pill" data-user="ramlakhanmadheshiya">@ramlakhanmadheshiya</button>
+        <button type="button" class="quick-pill" data-user="shravanngoswamii">@shravanngoswamii</button>
+      </div>
+
+      <!-- Telemetry Dashboard Bar (Lifetime stats) -->
+      <div id="telemetry-bar" class="telemetry-bar" style="display:none;">
+        <div class="telemetry-card highlight-total">
+          <div class="telemetry-label">Lifetime Total</div>
+          <div id="stat-total" class="telemetry-value">0</div>
+          <div id="stat-total-sub" class="telemetry-sub">PRs + Issues + Comments</div>
+        </div>
+        <div class="telemetry-card highlight-pr">
+          <div class="telemetry-label">Pull Requests</div>
+          <div id="stat-prs" class="telemetry-value">0</div>
+          <div id="stat-prs-sub" class="telemetry-sub">0% merged</div>
+        </div>
+        <div class="telemetry-card highlight-issue">
+          <div class="telemetry-label">Issues</div>
+          <div id="stat-issues" class="telemetry-value">0</div>
+          <div id="stat-issues-sub" class="telemetry-sub">0 open · 0 closed</div>
+        </div>
+        <div class="telemetry-card highlight-comments">
+          <div class="telemetry-label">Comments</div>
+          <div id="stat-comments" class="telemetry-value">0</div>
+          <div id="stat-comments-sub" class="telemetry-sub">discussion contributions</div>
+        </div>
+        <div class="telemetry-card highlight-repo">
+          <div class="telemetry-label">Repositories</div>
+          <div id="stat-repos" class="telemetry-value">0</div>
+          <div id="stat-repos-sub" class="telemetry-sub">distinct projects</div>
+        </div>
+      </div>
+
+      <!-- Background Streaming Status Bar -->
+      <div id="stream-banner" class="stream-banner" style="display:none;">
+        <div class="stream-info">
+          <span id="stream-pulse" class="stream-pulse"></span>
+          <span id="stream-text">Buffering lifetime items in background...</span>
+        </div>
+        <div class="stream-progress-bar">
+          <div id="stream-progress-fill" class="stream-progress-fill" style="width: 5%;"></div>
+        </div>
+        <button id="btn-export" class="btn-secondary-sm" type="button" title="Export data">Export</button>
+      </div>
+    </section>
+
+    <!-- Main Content / Views & Controls -->
+    <main id="main-content" style="display:none;">
+      <!-- Dashboard Mode & Date Range Bar -->
+      <div class="view-header-bar">
+        <div class="view-tabs" role="tablist">
+          <button type="button" id="tab-btn-feed" class="view-tab active" role="tab" aria-selected="true">
+            <svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor">
+              <path fill-rule="evenodd" d="M2 3.75C2 2.784 2.784 2 3.75 2h8.5c.966 0 1.75.784 1.75 1.75v8.5A1.75 1.75 0 0112.25 14h-8.5A1.75 1.75 0 012 12.25v-8.5zm1.75-.25a.25.25 0 00-.25.25v8.5c0 .138.112.25.25.25h8.5a.25.25 0 00.25-.25v-8.5a.25.25 0 00-.25-.25h-8.5zM4 5.5a.75.75 0 01.75-.75h6.5a.75.75 0 010 1.5h-6.5A.75.75 0 014 5.5zm0 3a.75.75 0 01.75-.75h6.5a.75.75 0 010 1.5h-6.5A.75.75 0 014 8.5zm0 3a.75.75 0 01.75-.75h4a.75.75 0 010 1.5h-4A.75.75 0 014 11.5z"></path>
+            </svg>
+            <span>Work Feed</span>
+          </button>
+          <button type="button" id="tab-btn-analytics" class="view-tab" role="tab" aria-selected="false">
+            <svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor">
+              <path d="M1.5 1.75a.75.75 0 00-1.5 0v12.5c0 .414.336.75.75.75h14.5a.75.75 0 000-1.5H1.5V1.75z"></path>
+              <path d="M4.25 6.5a.75.75 0 01.75.75v5a.75.75 0 01-1.5 0v-5a.75.75 0 01.75-.75zm4-3a.75.75 0 01.75.75v8a.75.75 0 01-1.5 0v-8a.75.75 0 01.75-.75zm4 4.5a.75.75 0 01.75.75v3.5a.75.75 0 01-1.5 0v-3.5a.75.75 0 01.75-.75z"></path>
+            </svg>
+            <span>Visual Analytics</span>
+            <span class="badge-new">PRO</span>
+          </button>
+        </div>
+
+        <!-- Global Date Range Filter -->
+        <div class="date-filter-wrap">
+          <label for="date-range-select" class="filter-label">Timeframe:</label>
+          <select id="date-range-select" class="custom-select">
+            <option value="all">Lifetime (All Time)</option>
+            <option value="2026">Year 2026</option>
+            <option value="2025">Year 2025</option>
+            <option value="2024">Year 2024</option>
+            <option value="90d">Last 90 Days</option>
+            <option value="30d">Last 30 Days</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- ── SECTION: VISUAL ANALYTICS VIEW ────────────────────── -->
+      <section id="analytics-view" class="analytics-view" style="display:none;">
+        <!-- Target Tracking Cards (Dynamic Milestones) -->
+        <div class="targets-grid">
+          <div class="target-card">
+            <div class="target-header">
+              <span class="target-title">PR Milestone</span>
+              <span id="target-pr-status" class="target-badge">On Track</span>
+            </div>
+            <div class="target-value"><span id="target-pr-val">0</span> <span class="target-goal">/ 100 PRs</span></div>
+            <div class="target-bar-wrap">
+              <div id="target-pr-bar" class="target-bar-fill" style="width: 0%;"></div>
+            </div>
+            <div id="target-pr-sub" class="target-sub">0% of target completed</div>
+          </div>
+
+          <div class="target-card">
+            <div class="target-header">
+              <span class="target-title">Merge Velocity Goal</span>
+              <span id="target-merge-status" class="target-badge">Goal: 80%</span>
+            </div>
+            <div class="target-value"><span id="target-merge-val">0%</span> <span class="target-goal">Merge Rate</span></div>
+            <div class="target-bar-wrap">
+              <div id="target-merge-bar" class="target-bar-fill fill-purple" style="width: 0%;"></div>
+            </div>
+            <div id="target-merge-sub" class="target-sub">0 merged of 0 total PRs</div>
+          </div>
+
+          <div class="target-card">
+            <div class="target-header">
+              <span class="target-title">Issue Resolution</span>
+              <span id="target-issue-status" class="target-badge">Goal: 85%</span>
+            </div>
+            <div class="target-value"><span id="target-issue-val">0%</span> <span class="target-goal">Resolved</span></div>
+            <div class="target-bar-wrap">
+              <div id="target-issue-bar" class="target-bar-fill fill-green" style="width: 0%;"></div>
+            </div>
+            <div id="target-issue-sub" class="target-sub">0 closed of 0 total issues</div>
+          </div>
+
+          <div class="target-card">
+            <div class="target-header">
+              <span class="target-title">Ecosystem Reach</span>
+              <span id="target-repo-status" class="target-badge">Goal: 10 Repos</span>
+            </div>
+            <div class="target-value"><span id="target-repo-val">0</span> <span class="target-goal">/ 10 Repos</span></div>
+            <div class="target-bar-wrap">
+              <div id="target-repo-bar" class="target-bar-fill fill-blue" style="width: 0%;"></div>
+            </div>
+            <div id="target-repo-sub" class="target-sub">0 distinct repositories</div>
+          </div>
+        </div>
+
+        <!-- GitHub-style Contribution Heatmap Calendar -->
+        <div class="analytics-card heatmap-card">
+          <div class="card-header-flex">
+            <div>
+              <h3 class="card-title">Contribution Activity Calendar</h3>
+              <p id="heatmap-sub" class="card-sub">Daily contributions across pull requests, issues, and discussions</p>
+            </div>
+            <div id="heatmap-year-pills" class="year-pills">
+              <!-- Dynamically populated year pills -->
+            </div>
+          </div>
+
+          <div class="heatmap-scroll-wrap">
+            <div class="heatmap-calendar" id="heatmap-calendar">
+              <!-- SVG heatmap will be dynamically rendered here -->
+            </div>
+          </div>
+
+          <div class="heatmap-footer">
+            <div class="heatmap-count-label" id="heatmap-count-label">0 contributions in selected period</div>
+            <div class="heatmap-legend">
+              <span>Less</span>
+              <span class="legend-cell lvl-0"></span>
+              <span class="legend-cell lvl-1"></span>
+              <span class="legend-cell lvl-2"></span>
+              <span class="legend-cell lvl-3"></span>
+              <span class="legend-cell lvl-4"></span>
+              <span>More</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Charts Grid -->
+        <div class="charts-grid">
+          <!-- Chart 1: PR Health & Status Donut -->
+          <div class="analytics-card">
+            <div class="card-header">
+              <h3 class="card-title">Pull Request Health & Distribution</h3>
+              <p class="card-sub">Ratio of merged, open, closed, and draft pull requests</p>
+            </div>
+            <div class="donut-chart-wrap">
+              <div id="donut-svg-container" class="donut-svg-container">
+                <!-- SVG Donut Chart rendered here -->
+              </div>
+              <div id="donut-legend" class="donut-legend">
+                <!-- Legend items with exact counts & % -->
+              </div>
+            </div>
+          </div>
+
+          <!-- Chart 2: Top Repositories Breakdown -->
+          <div class="analytics-card">
+            <div class="card-header">
+              <h3 class="card-title">Top Repositories by Contribution</h3>
+              <p class="card-sub">Projects with the highest volume of activity</p>
+            </div>
+            <div id="top-repos-list" class="top-repos-list">
+              <!-- Dynamic horizontal progress bars -->
+            </div>
+          </div>
+
+          <!-- Chart 3: Year-over-Year Output Comparison -->
+          <div class="analytics-card">
+            <div class="card-header">
+              <h3 class="card-title">Year-over-Year Performance</h3>
+              <p class="card-sub">Annual contribution velocity and output volume</p>
+            </div>
+            <div id="yearly-chart-container" class="bar-chart-container">
+              <!-- Yearly SVG bar chart -->
+            </div>
+          </div>
+
+          <!-- Chart 4: Monthly Activity Breakdown -->
+          <div class="analytics-card">
+            <div class="card-header">
+              <h3 class="card-title">Monthly Trajectory</h3>
+              <p class="card-sub">Seasonal activity distribution (Jan – Dec)</p>
+            </div>
+            <div id="monthly-chart-container" class="bar-chart-container">
+              <!-- Monthly SVG bar chart -->
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ── SECTION: WORK FEED VIEW (Paging & List) ─────────────── -->
+      <section id="feed-view" class="feed-view">
+        <!-- Controls Bar -->
+        <div class="controls-bar">
+        <!-- Filters Row -->
+        <div class="filters-group">
+          <!-- Filter 1: Item Kind -->
+          <div class="select-wrap">
+            <label for="filter-kind" class="filter-label">Kind:</label>
+            <select id="filter-kind" class="custom-select">
+              <option value="all">All Items</option>
+              <option value="pr">Pull Requests</option>
+              <option value="issue">Issues</option>
+              <option value="comment">Comments (by user)</option>
+            </select>
+          </div>
+
+          <!-- Filter 2: PR Sub-status (Dynamically shown when PR is selected) -->
+          <div id="wrap-pr-state" class="select-wrap" style="display:none;">
+            <label for="filter-pr-state" class="filter-label">Status:</label>
+            <select id="filter-pr-state" class="custom-select">
+              <option value="all">All States</option>
+              <option value="open">Open</option>
+              <option value="draft">Draft</option>
+              <option value="merged">Merged</option>
+              <option value="closed">Closed</option>
+            </select>
+          </div>
+
+          <!-- Filter 3: Repository -->
+          <div class="select-wrap">
+            <label for="filter-repo" class="filter-label">Repo:</label>
+            <select id="filter-repo" class="custom-select">
+              <option value="all">All Repositories</option>
+            </select>
+          </div>
+
+          <!-- Quick Text Search -->
+          <div class="search-box-wrap">
+            <input
+              id="filter-text"
+              type="search"
+              class="filter-text-input"
+              placeholder="Search in results (/)..."
+              autocomplete="off"
+            />
+          </div>
+        </div>
+
+        <!-- Gmail-style Pagination Control Bar -->
+        <div class="pager-group">
+          <span id="pager-count" class="pager-count">1–50 of 50</span>
+          <div class="pager-nav">
+            <button id="pager-prev" class="pager-btn" type="button" title="Previous page" disabled>
+              <svg viewBox="0 0 16 16" width="16" height="16" fill="currentColor">
+                <path fill-rule="evenodd" d="M9.78 12.78a.75.75 0 0 1-1.06 0L4.47 8.53a.75.75 0 0 1 0-1.06l4.25-4.25a.75.75 0 0 1 1.06 1.06L6.06 8l3.72 3.72a.75.75 0 0 1 0 1.06z"></path>
+              </svg>
+            </button>
+            <button id="pager-next" class="pager-btn" type="button" title="Next page" disabled>
+              <svg viewBox="0 0 16 16" width="16" height="16" fill="currentColor">
+                <path fill-rule="evenodd" d="M6.22 3.22a.75.75 0 0 1 1.06 0l4.25 4.25a.75.75 0 0 1 0 1.06l-4.25 4.25a.75.75 0 0 1-1.06-1.06L9.94 8 6.22 4.28a.75.75 0 0 1 0-1.06z"></path>
+              </svg>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Item List Container -->
+      <div class="list-card">
+        <div id="list-container" class="items-list">
+          <!-- Rows will be injected here -->
+        </div>
+
+        <!-- Empty & Loading States -->
+        <div id="list-empty" class="list-empty" style="display:none;">
+          <p>No matching GitHub work found under current filters.</p>
+        </div>
+
+        <div id="list-loading" class="list-loading" style="display:none;">
+          <div class="skel-row" style="width: 85%;"></div>
+          <div class="skel-row" style="width: 70%;"></div>
+          <div class="skel-row" style="width: 92%;"></div>
+          <div class="skel-row" style="width: 60%;"></div>
+          <div class="skel-row" style="width: 78%;"></div>
+        </div>
+      </div>
+
+      <!-- Bottom Pagination Bar -->
+      <div class="bottom-pager">
+        <div id="page-buttons" class="page-numbers"></div>
+        <div class="pager-summary" id="bottom-summary">Showing 50 items per page</div>
+      </div>
+    </section>
+  </main>
+
+    <!-- Footer -->
+    <footer class="site-footer">
+      <div>
+        <span>ghtrack</span> · Built for lifetime developer telemetry. 100% cost-free.
+      </div>
+      <div>
+        <a href="https://theramlakhan.com" target="_blank" rel="noopener">theramlakhan.com</a>
+      </div>
+    </footer>
+  </div>
+
+  <!-- Settings / Token Modal -->
+  <div id="modal-token" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="modal-token-title">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h2 id="modal-token-title" class="modal-title">GitHub Token Configuration</h2>
+        <button id="modal-token-close" class="modal-close" type="button" aria-label="Close dialog">✕</button>
+      </div>
+      <div class="modal-body">
+        <p>To query lifetime GitHub data with a dedicated <strong>5,000 requests/hour limit</strong> and zero timeouts, enter an optional read-only GitHub Personal Access Token (Classic or Fine-Grained).</p>
+        
+        <div class="note-box">
+          <strong>Security Notice:</strong> Your token is stored <em>only</em> inside your browser's private <code>localStorage</code>. It is never sent to any third-party server.
+        </div>
+
+        <label for="input-pat">Personal Access Token (PAT):</label>
+        <input id="input-pat" class="modal-input" type="password" placeholder="ghp_... or github_pat_..." autocomplete="off" />
+
+        <div id="token-test-result" class="token-test-result" style="display:none;"></div>
+      </div>
+      <div class="modal-footer">
+        <button id="btn-test-token" class="btn-secondary-sm" type="button">Test Token</button>
+        <button id="btn-clear-token" class="btn-danger-sm" type="button">Remove</button>
+        <button id="btn-save-token" class="btn-primary" type="button">Save Token</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Export Modal -->
+  <div id="modal-export" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="modal-export-title">
+    <div class="modal-card modal-card-lg">
+      <div class="modal-header">
+        <h2 id="modal-export-title" class="modal-title">Export Lifetime GitHub Data</h2>
+        <button id="modal-export-close" class="modal-close" type="button" aria-label="Close dialog">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="export-tabs">
+          <button id="tab-export-md" class="btn-tab active" type="button">Markdown Table</button>
+          <button id="tab-export-json" class="btn-tab" type="button">JSON</button>
+        </div>
+        <textarea id="export-content" class="export-textarea" readonly></textarea>
+      </div>
+      <div class="modal-footer">
+        <button id="btn-copy-export" class="btn-secondary-sm" type="button">Copy to Clipboard</button>
+        <button id="btn-download-export" class="btn-primary" type="button">Download File</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="./app.js"></script>
+</body>
+</html>
