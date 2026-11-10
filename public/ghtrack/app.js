@@ -4,12 +4,12 @@
 
   const GITHUB_GRAPHQL_ENDPOINT = "https://api.github.com/graphql";
   const GITHUB_REST_ENDPOINT = "https://api.github.com";
-  const API_PAGE_SIZE = 100; // GitHub GraphQL maximum per search query (2x faster than 50)
+  const API_PAGE_SIZE = 50; // 50 items per search query as requested
   const FEED_PAGE_SIZE = 50; // Items per view page in the list feed for smooth DOM rendering
 
   // ── IndexedDB Cache Setup (Unlimited Cost-Free Client Storage) ───────
   const DB_NAME = "ghtrack_cache_db";
-  const DB_VERSION = 3; // Bumped to v3 to automatically purge any stale or corrupted caches
+  const DB_VERSION = 4; // Bumped to v4 to automatically purge old/incomplete cached counts
   const STORE_NAME = "profiles";
 
   function openDB() {
@@ -166,6 +166,15 @@
     iconSun: document.getElementById("theme-icon-sun"),
     iconMoon: document.getElementById("theme-icon-moon"),
 
+    btnSettings: document.getElementById("btn-settings"),
+    modalToken: document.getElementById("modal-token"),
+    modalTokenClose: document.getElementById("modal-token-close"),
+    inputPat: document.getElementById("input-pat"),
+    btnTestToken: document.getElementById("btn-test-token"),
+    btnClearToken: document.getElementById("btn-clear-token"),
+    btnSaveToken: document.getElementById("btn-save-token"),
+    tokenTestResult: document.getElementById("token-test-result"),
+
     modalExport: document.getElementById("modal-export"),
     modalExportClose: document.getElementById("modal-export-close"),
     tabExportMd: document.getElementById("tab-export-md"),
@@ -282,7 +291,7 @@
       headers["Authorization"] = `Bearer ${state.token}`;
     }
 
-    const url = `${GITHUB_REST_ENDPOINT}/search/issues?q=involves:${encodeURIComponent(login)}&sort=updated&order=desc&per_page=100&page=${page}`;
+    const url = `${GITHUB_REST_ENDPOINT}/search/issues?q=involves:${encodeURIComponent(login)}&sort=updated&order=desc&per_page=${API_PAGE_SIZE}&page=${page}`;
     const res = await fetch(url, { headers });
     const data = await res.json().catch(() => null);
 
@@ -536,27 +545,11 @@
     dom.streamText.textContent = `Fetching live GitHub history for @${cleanUser}...`;
     dom.streamProgressFill.style.width = "5%";
 
-    // If NOT forceLive, check IndexedDB cache for instant display
-    if (!forceLive) {
-      const cached = await getCachedProfile(cleanUser);
-      if (searchId !== activeSearchId) return;
-      if (cached && cached.items?.length && cached.login === cleanUser.toLowerCase()) {
-        state.itemsMap.clear();
-        cached.items.forEach((item) => state.itemsMap.set(item.id, item));
-        updateTelemetry();
-        populateRepoFilter();
-        renderList();
-        renderAnalytics();
-        dom.streamText.textContent = `⚡ Displaying cached data (${state.itemsMap.size} items) · Syncing live...`;
-      } else {
-        state.itemsMap.clear();
-      }
-    } else {
-      state.itemsMap.clear();
-    }
+    // Always start fresh on new live search to ensure authentic real-time data
+    state.itemsMap.clear();
 
     try {
-      // 1. High-Speed Initial GraphQL Request (Pulls first 100 items instantly)
+      // 1. High-Speed Initial GraphQL Request (Pulls first 50 items instantly)
       const data = await fetchGraphQL(SEARCH_QUERY, {
         q: `involves:${cleanUser} sort:updated-desc`,
         n: API_PAGE_SIZE,
@@ -568,7 +561,6 @@
       const totalEstimated = data.search?.issueCount || 0;
       state.totalEstimated = totalEstimated;
 
-      // Always clear itemsMap on live data arrival to prevent stale cache contamination
       state.itemsMap.clear();
 
       for (const node of data.search?.nodes || []) {
@@ -614,7 +606,7 @@
         renderList();
         renderAnalytics();
 
-        const totalPages = Math.ceil(totalEstimated / 100);
+        const totalPages = Math.ceil(totalEstimated / API_PAGE_SIZE);
         if (totalPages > 1) {
           state.cancelStreaming = false;
           streamRestPages(cleanUser, searchId, totalPages, totalEstimated);
@@ -626,7 +618,9 @@
       } catch (restErr) {
         if (searchId !== activeSearchId) return;
         dom.listLoading.style.display = "none";
-        dom.streamText.textContent = `Error: ${restErr.message}`;
+        dom.streamText.innerHTML = `⚠ Could not load GitHub data: ${escapeHtml(restErr.message)}. <a href="javascript:void(0)" id="btn-stream-settings" style="color:var(--gh-open);text-decoration:underline;">Configure token in Settings</a>.`;
+        const btn = document.getElementById("btn-stream-settings");
+        if (btn) btn.onclick = () => dom.modalToken?.classList.add("open");
         if (!state.itemsMap.size) {
           dom.listEmpty.style.display = "block";
           dom.listEmpty.querySelector("p").textContent = restErr.message;
@@ -640,12 +634,14 @@
     }
   }
 
-  // Background stream processor: Tri-Stream Multi-Source Harvester (100 items per batch)
+  // Background stream processor: Tri-Stream Multi-Source Harvester (50 items per batch)
   // Stream 1: involves:username (authored, assigned, mentioned across GitHub)
   // Stream 2: commenter:username (native GitHub index for all commented threads)
   // Stream 3: user:username (all issues/PRs in user-owned repositories)
   async function streamRemainingBatches(login, searchId, initialCursor, initialInvolvesEst) {
     state.isStreamingBackground = true;
+    let hasError = false;
+    let errorMessage = "";
 
     const streams = [
       { name: "involves", base: `involves:${login}`, cursor: initialCursor, totalEst: initialInvolvesEst },
@@ -660,12 +656,16 @@
       let cursor = stream.cursor;
       let currentQuery = `${stream.base} sort:updated-desc`;
       let windowBatch = 0;
+      let streamCount = 0;
 
       while (!state.cancelStreaming && searchId === activeSearchId) {
         const currentCount = state.itemsMap.size;
         const targetEst = Math.max(initialInvolvesEst, currentCount);
-        const progressPct = Math.min(98, Math.max(10, Math.round((currentCount / (targetEst + 25)) * 100)));
-        dom.streamText.textContent = `⚡ Buffering lifetime history: ${currentCount} loaded (${stream.name})...`;
+        const progressPct = Math.min(98, Math.max(8, Math.round((currentCount / (targetEst + 25)) * 100)));
+        const currentPageNum = Math.ceil(currentCount / API_PAGE_SIZE);
+        const totalPagesEst = Math.ceil(targetEst / API_PAGE_SIZE);
+
+        dom.streamText.textContent = `⚡ Loading page ${currentPageNum} of ${totalPagesEst} (${currentCount} items · ${stream.name})...`;
         dom.streamProgressFill.style.width = `${progressPct}%`;
 
         try {
@@ -680,7 +680,9 @@
           const nodes = data?.search?.nodes || [];
           if (!nodes.length) break;
 
+          streamCount += nodes.length;
           const isCommenterStream = stream.name === "comments";
+
           for (const node of nodes) {
             if (!node?.url) continue;
             const item = normalizeNode(node, login, isCommenterStream);
@@ -696,6 +698,7 @@
 
           const hasNextPage = Boolean(data.search?.pageInfo?.hasNextPage);
           cursor = data.search?.pageInfo?.endCursor || null;
+          const issueCount = data.search?.issueCount || 0;
 
           updateTelemetry();
           populateRepoFilter();
@@ -703,22 +706,28 @@
           renderAnalytics();
 
           // Check single-query search ceiling (GitHub 1,000 items)
-          if (!hasNextPage || cursor === "Y3Vyc29yOjEwMDA=") {
-            if (cursor === "Y3Vyc29yOjEwMDA=" && windowBatch < 6) {
-              const oldestDate = nodes[nodes.length - 1]?.updatedAt;
-              if (oldestDate) {
-                windowBatch++;
-                currentQuery = `${stream.base} updated:<${oldestDate} sort:updated-desc`;
-                cursor = null;
-                await new Promise((r) => setTimeout(r, 40));
-                continue;
-              }
+          const hitCeiling =
+            cursor === "Y3Vyc29yOjEwMDA=" ||
+            streamCount % 1000 === 0 ||
+            (!hasNextPage && issueCount > streamCount && streamCount >= 1000);
+
+          if (hitCeiling && windowBatch < 6) {
+            const oldestDate = nodes[nodes.length - 1]?.updatedAt;
+            if (oldestDate) {
+              windowBatch++;
+              currentQuery = `${stream.base} updated:<${oldestDate} sort:updated-desc`;
+              cursor = null;
+              await new Promise((r) => setTimeout(r, 60));
+              continue;
             }
-            break;
           }
 
-          await new Promise((r) => setTimeout(r, 40));
+          if (!hasNextPage) break;
+
+          await new Promise((r) => setTimeout(r, 60));
         } catch (err) {
+          hasError = true;
+          errorMessage = err.message;
           console.warn(`Background stream (${stream.name}) paused:`, err.message);
           break;
         }
@@ -728,33 +737,43 @@
     if (searchId !== activeSearchId) return;
 
     state.isStreamingBackground = false;
-    dom.streamText.textContent = `✓ 100% lifetime history loaded (${state.itemsMap.size} items buffered in memory & IndexedDB)`;
-    dom.streamProgressFill.style.width = "100%";
 
-    saveCachedProfile(login, { login: login.toLowerCase(), items: Array.from(state.itemsMap.values()) });
+    if (hasError) {
+      dom.streamText.innerHTML = `⚠ Paused at ${state.itemsMap.size} items: ${escapeHtml(errorMessage)}. <a href="javascript:void(0)" id="btn-stream-settings" style="color:var(--gh-open);text-decoration:underline;">Configure token in Settings</a> for 5,000 req/hr.`;
+      const btn = document.getElementById("btn-stream-settings");
+      if (btn) btn.onclick = () => dom.modalToken?.classList.add("open");
+    } else {
+      dom.streamText.textContent = `✓ 100% lifetime history loaded (${state.itemsMap.size} items buffered in memory & IndexedDB)`;
+      dom.streamProgressFill.style.width = "100%";
+      saveCachedProfile(login, { login: login.toLowerCase(), items: Array.from(state.itemsMap.values()) });
+    }
+
     updateTelemetry();
     populateRepoFilter();
     renderList();
     renderAnalytics();
   }
 
-  // Background stream processor for public REST mode (supports windowing beyond 1,000 items)
+  // Background stream processor for public REST mode (50 items per batch)
   async function streamRestPages(login, searchId, totalPages, totalEst) {
     state.isStreamingBackground = true;
     let windowBatch = 0;
     let baseQuery = `involves:${encodeURIComponent(login)}`;
     let currentQuery = `${baseQuery}&sort=updated&order=desc`;
     let page = 2;
+    let hasError = false;
+    let errorMessage = "";
 
-    while (page <= 10 && !state.cancelStreaming && searchId === activeSearchId) {
+    while (page <= 20 && !state.cancelStreaming && searchId === activeSearchId) {
       const currentCount = state.itemsMap.size;
       const progressPercent = totalEst > 0 ? Math.min(99, Math.round((currentCount / totalEst) * 100)) : 50;
+      const totalPagesEst = Math.ceil((totalEst || currentCount) / API_PAGE_SIZE);
 
-      dom.streamText.textContent = `⚡ Buffering background history: ${currentCount} loaded (${progressPercent}%)...`;
+      dom.streamText.textContent = `⚡ Loading page ${page} of ${totalPagesEst} (${currentCount} items)...`;
       dom.streamProgressFill.style.width = `${progressPercent}%`;
 
       try {
-        const url = `${GITHUB_REST_ENDPOINT}/search/issues?q=${currentQuery}&per_page=100&page=${page}`;
+        const url = `${GITHUB_REST_ENDPOINT}/search/issues?q=${currentQuery}&per_page=${API_PAGE_SIZE}&page=${page}`;
         const headers = { "User-Agent": "ghtrack-web/1.0", Accept: "application/vnd.github.v3+json" };
         if (state.token) headers["Authorization"] = `Bearer ${state.token}`;
 
@@ -762,7 +781,12 @@
         const data = await res.json().catch(() => null);
 
         if (!res.ok) {
-          console.warn("Background REST stream paused:", data?.message);
+          hasError = true;
+          if (res.status === 403) {
+            errorMessage = "GitHub unauthenticated rate limit reached (10 req/min)";
+          } else {
+            errorMessage = data?.message || `HTTP ${res.status}`;
+          }
           break;
         }
 
@@ -779,20 +803,24 @@
         renderList();
         renderAnalytics();
 
-        if (page === 10 && totalEst > 1000 && windowBatch < 6) {
+        // If hitting 1,000 items in REST (page 20 with 50 items/page = 1,000 items)
+        if (page === 20 && totalEst > 1000 && windowBatch < 6) {
           const oldestDate = items[items.length - 1]?.updated_at;
           if (oldestDate) {
             windowBatch++;
             currentQuery = `${baseQuery}+updated:<${oldestDate}&sort=updated&order=desc`;
             page = 1;
-            await new Promise((r) => setTimeout(r, 200));
+            await new Promise((r) => setTimeout(r, 400));
             continue;
           }
         }
 
         page++;
-        await new Promise((r) => setTimeout(r, 200));
+        // If unauthenticated, pace requests by 400ms to respect rate limits
+        await new Promise((r) => setTimeout(r, state.token ? 80 : 400));
       } catch (err) {
+        hasError = true;
+        errorMessage = err.message;
         console.warn("Background REST stream paused:", err.message);
         break;
       }
@@ -801,9 +829,17 @@
     if (searchId !== activeSearchId) return;
 
     state.isStreamingBackground = false;
-    dom.streamText.textContent = `✓ 100% lifetime history loaded (${state.itemsMap.size} items buffered in memory & IndexedDB)`;
-    dom.streamProgressFill.style.width = "100%";
-    saveCachedProfile(login, { login: login.toLowerCase(), items: Array.from(state.itemsMap.values()) });
+
+    if (hasError) {
+      dom.streamText.innerHTML = `⚠ Paused at ${state.itemsMap.size} items: ${escapeHtml(errorMessage)}. <a href="javascript:void(0)" id="btn-stream-settings" style="color:var(--gh-open);text-decoration:underline;">Configure token in Settings</a> for 5,000 req/hr.`;
+      const btn = document.getElementById("btn-stream-settings");
+      if (btn) btn.onclick = () => dom.modalToken?.classList.add("open");
+    } else {
+      dom.streamText.textContent = `✓ 100% lifetime history loaded (${state.itemsMap.size} items buffered in memory & IndexedDB)`;
+      dom.streamProgressFill.style.width = "100%";
+      saveCachedProfile(login, { login: login.toLowerCase(), items: Array.from(state.itemsMap.values()) });
+    }
+
     updateTelemetry();
     populateRepoFilter();
     renderList();
@@ -1725,6 +1761,84 @@
     URL.revokeObjectURL(url);
   });
 
+  // ── Token Settings Modal ───────────────────────────────────────────
+  if (dom.btnSettings && dom.modalToken) {
+    dom.btnSettings.addEventListener("click", () => {
+      if (dom.inputPat) dom.inputPat.value = state.token || "";
+      if (dom.tokenTestResult) dom.tokenTestResult.style.display = "none";
+      dom.modalToken.classList.add("open");
+    });
+
+    dom.modalTokenClose?.addEventListener("click", () => {
+      dom.modalToken.classList.remove("open");
+    });
+
+    dom.btnSaveToken?.addEventListener("click", () => {
+      const val = dom.inputPat ? dom.inputPat.value.trim() : "";
+      state.token = val;
+      if (val) {
+        localStorage.setItem("ghtrack_token", val);
+      } else {
+        localStorage.removeItem("ghtrack_token");
+      }
+      dom.modalToken.classList.remove("open");
+      if (state.login) {
+        startTracking(state.login, true);
+      }
+    });
+
+    dom.btnClearToken?.addEventListener("click", () => {
+      state.token = "";
+      localStorage.removeItem("ghtrack_token");
+      if (dom.inputPat) dom.inputPat.value = "";
+      if (dom.tokenTestResult) {
+        dom.tokenTestResult.textContent = "Token removed.";
+        dom.tokenTestResult.style.display = "block";
+        dom.tokenTestResult.style.color = "var(--gh-closed)";
+      }
+    });
+
+    dom.btnTestToken?.addEventListener("click", async () => {
+      const testVal = dom.inputPat ? dom.inputPat.value.trim() : "";
+      if (!testVal) {
+        if (dom.tokenTestResult) {
+          dom.tokenTestResult.textContent = "Please enter a token first.";
+          dom.tokenTestResult.style.display = "block";
+          dom.tokenTestResult.style.color = "var(--gh-closed)";
+        }
+        return;
+      }
+      dom.btnTestToken.textContent = "Testing...";
+      try {
+        const res = await fetch("https://api.github.com/user", {
+          headers: { Authorization: `Bearer ${testVal}`, "User-Agent": "ghtrack-web/1.0" },
+        });
+        if (res.ok) {
+          const u = await res.json();
+          if (dom.tokenTestResult) {
+            dom.tokenTestResult.textContent = `✓ Authenticated as @${u.login} (5,000 req/hr active)`;
+            dom.tokenTestResult.style.display = "block";
+            dom.tokenTestResult.style.color = "var(--gh-open)";
+          }
+        } else {
+          if (dom.tokenTestResult) {
+            dom.tokenTestResult.textContent = `✕ Token invalid (HTTP ${res.status})`;
+            dom.tokenTestResult.style.display = "block";
+            dom.tokenTestResult.style.color = "var(--gh-closed)";
+          }
+        }
+      } catch (err) {
+        if (dom.tokenTestResult) {
+          dom.tokenTestResult.textContent = `✕ Connection error: ${err.message}`;
+          dom.tokenTestResult.style.display = "block";
+          dom.tokenTestResult.style.color = "var(--gh-closed)";
+        }
+      } finally {
+        dom.btnTestToken.textContent = "Test Token";
+      }
+    });
+  }
+
   // ── Keyboard Shortcuts ──────────────────────────────────────────────
   document.addEventListener("keydown", (e) => {
     if (e.key === "/" && !["INPUT", "TEXTAREA"].includes(document.activeElement?.tagName)) {
@@ -1733,6 +1847,7 @@
     }
     if (e.key === "Escape") {
       dom.modalExport.classList.remove("open");
+      dom.modalToken?.classList.remove("open");
     }
   });
 
