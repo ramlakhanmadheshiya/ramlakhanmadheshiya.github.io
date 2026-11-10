@@ -1,549 +1,281 @@
 <!DOCTYPE html>
-<html lang="en" data-theme="dark">
+<html lang="en">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>ghtrack — Lifetime GitHub Work & Telemetry</title>
-  <meta name="description" content="Ultra-fast, zero-cost lifetime tracker for your GitHub PRs, issues, comments, CI status, and reviews with instant background pagination." />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>ghtrack — Lifetime GitHub activity</title>
+  <meta name="description" content="Every pull request, issue, review and discussion of any GitHub user, with exact lifetime numbers in seconds. No login, no token." />
+  <meta name="theme-color" content="#fafafa" media="(prefers-color-scheme: light)" />
+  <meta name="theme-color" content="#0b0b0d" media="(prefers-color-scheme: dark)" />
   <link rel="icon" type="image/svg+xml" href="./favicon.svg" />
-  <link rel="stylesheet" href="./app.css?v=1211f5de78" />
+  <script>
+    // Apply the saved theme before first paint (no flash)
+    try { var t = localStorage.getItem("ghtrack_theme"); if (t === "light" || t === "dark") document.documentElement.dataset.theme = t; } catch (e) {}
+  </script>
+  <link rel="stylesheet" href="./app.css?v=d1d66051d1" />
 </head>
 <body>
-  <div class="noise-overlay" aria-hidden="true"></div>
-  <div class="grid-bg" aria-hidden="true"></div>
+  <header class="app-header">
+    <div class="wrap">
+      <a href="./" class="brand" aria-label="ghtrack home">
+        <svg class="brand-mark" viewBox="0 0 26 26" aria-hidden="true">
+          <rect class="bm-bg" width="26" height="26" rx="7"/>
+          <path class="bm-fg" d="M6 16.5l3.6-4 3.2 3 4.4-6.5" fill="none" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"/>
+          <circle class="bm-dot" cx="19.6" cy="7.4" r="2.3"/>
+        </svg>
+        <span>ghtrack</span>
+      </a>
 
-  <div class="site-wrap">
-    <!-- Header -->
-    <header class="site-header">
-      <div class="header-left">
-        <a href="./" class="brand">
-          <svg class="brand-icon" viewBox="0 0 128 128" fill="none">
-            <rect width="128" height="128" rx="28" class="logo-bg"/>
-            <rect x="2" y="2" width="124" height="124" rx="26" stroke-width="2" class="logo-border"/>
-            <!-- Telemetry orbit grid -->
-            <circle cx="64" cy="64" r="44" stroke-width="1.5" stroke-dasharray="4 3" class="logo-grid"/>
-            <circle cx="64" cy="64" r="26" stroke-width="1.5" class="logo-grid"/>
-            <path d="M64 14 L64 114 M14 64 L114 64" stroke-width="1.2" class="logo-grid" stroke-dasharray="3 3"/>
-            <!-- Git branch stem & fork -->
-            <path d="M38 90 V42" stroke-width="3" stroke-linecap="round" class="logo-stem"/>
-            <path d="M38 66 C38 48, 90 56, 90 38" stroke-width="3" stroke-linecap="round" class="logo-stem"/>
-            <!-- Pulsing activity nodes -->
-            <circle cx="38" cy="90" r="6" class="logo-blue"/>
-            <circle cx="38" cy="42" r="6.5" class="logo-green"/>
-            <circle cx="90" cy="38" r="6.5" class="logo-purple"/>
-            <circle cx="64" cy="64" r="4" class="logo-center"/>
-          </svg>
-          <span class="brand-name">ghtrack</span>
-          <span class="brand-tag">Lifetime</span>
-        </a>
-      </div>
-
-      <div class="header-actions">
-        <button id="btn-theme" class="btn-icon" type="button" aria-label="Toggle theme" title="Toggle dark/light mode">
-          <svg id="theme-icon-sun" class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <circle cx="12" cy="12" r="5"></circle>
-            <path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"></path>
-          </svg>
-          <svg id="theme-icon-moon" class="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:none;">
-            <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
-          </svg>
-        </button>
-      </div>
-    </header>
-
-    <!-- Hero / Search Section -->
-    <section class="hero">
-      <h1>Track your entire GitHub lifetime</h1>
-      <p class="lead">Every pull request, issue, review and discussion for any GitHub user — exact lifetime numbers in seconds, full list streamed in the background. No login, no token.</p>
-
-      <form id="search-form" class="search-form" autocomplete="off">
-        <div class="input-wrap">
-          <span class="input-prefix">@</span>
-          <input
-            id="search-input"
-            class="search-input"
-            type="text"
-            placeholder="username or github.com/username link"
-            spellcheck="false"
-            autocapitalize="off"
-            required
-          />
-          <button type="button" id="input-clear" class="input-clear" aria-label="Clear input">✕</button>
+      <form class="header-search search compact" id="header-search-form" autocomplete="off" role="search">
+        <div class="search-field">
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="7" cy="7" r="4.75"/><path d="M10.6 10.6L14 14" stroke-linecap="round"/></svg>
+          <input id="header-search-input" class="search-input" type="text" placeholder="Track another user" spellcheck="false" autocapitalize="off" aria-label="GitHub username or profile link" />
         </div>
-        <button type="submit" id="btn-search" class="btn-primary">
-          <span class="btn-text">Track</span>
-        </button>
       </form>
 
-
-      <!-- Landing content (hidden once someone is tracked) -->
-      <div id="landing" class="landing">
-        <p class="landing-hint">Type a username or paste a profile link like <code>https://github.com/torvalds</code> — tracking starts automatically.</p>
-        <div class="landing-grid">
-          <div class="landing-card">
-            <div class="landing-icon">⚡</div>
-            <h3>Exact numbers in seconds</h3>
-            <p>Lifetime pull requests, issues, reviews and comments, counted straight from GitHub — even for accounts with 40,000+ items.</p>
-          </div>
-          <div class="landing-card">
-            <div class="landing-icon">🔎</div>
-            <h3>Instant filters</h3>
-            <p>Kind, status, role, repository, timeframe and text search, all answered in the browser with no waiting.</p>
-          </div>
-          <div class="landing-card">
-            <div class="landing-icon">🧭</div>
-            <h3>Clear involvement</h3>
-            <p>Every item is counted once, under how the person is linked: created, assigned, reviewed, commented or mentioned.</p>
-          </div>
-          <div class="landing-card">
-            <div class="landing-icon">💬</div>
-            <h3>Conversation preview</h3>
-            <p>Open any row to read the description, comments, reviews and commits without leaving the page.</p>
-          </div>
-          <div class="landing-card">
-            <div class="landing-icon">📊</div>
-            <h3>Visual analytics</h3>
-            <p>Heatmap, weekly, monthly and yearly activity, working hours, merge speed, streaks, top repos, labels and collaborators.</p>
-          </div>
-          <div class="landing-card">
-            <div class="landing-icon">🔒</div>
-            <h3>No login, nothing stored on a server</h3>
-            <p>Uses GitHub's public API from your browser. Results are saved only on your device, so the next visit is instant.</p>
-          </div>
-        </div>
-        <ol class="landing-steps">
-          <li><strong>1</strong> Enter a username or profile link</li>
-          <li><strong>2</strong> Numbers and newest work appear in seconds</li>
-          <li><strong>3</strong> The full history keeps loading in the background</li>
-        </ol>
+      <div class="theme-switch" role="group" aria-label="Theme">
+        <button type="button" data-theme-choice="system" title="System" aria-label="System theme"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1.75" y="2.75" width="12.5" height="8.5" rx="1.5"/><path d="M5.5 14h5M8 11.5V14" stroke-linecap="round"/></svg></button>
+        <button type="button" data-theme-choice="light" title="Light" aria-label="Light theme"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="8" cy="8" r="3"/><path d="M8 1.5v1.5M8 13v1.5M1.5 8H3M13 8h1.5M3.4 3.4l1.06 1.06M11.54 11.54l1.06 1.06M3.4 12.6l1.06-1.06M11.54 4.46l1.06-1.06"/></svg></button>
+        <button type="button" data-theme-choice="dark" title="Dark" aria-label="Dark theme"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M13.5 9.6A5.75 5.75 0 016.4 2.5a5.75 5.75 0 107.1 7.1z"/></svg></button>
       </div>
+    </div>
+  </header>
 
-      <div id="profile-line" class="profile-line" style="display:none;"></div>
-
-      <!-- Telemetry Dashboard Bar (exact lifetime numbers, straight from GitHub search counts) -->
-      <div id="telemetry-bar" class="telemetry-bar" style="display:none;">
-        <button type="button" class="telemetry-card highlight-total" data-card="total" title="Show everything this person was involved in">
-          <div class="telemetry-label">Total Involvement</div>
-          <div id="stat-total" class="telemetry-value">…</div>
-          <div id="stat-total-sub" class="telemetry-sub">PRs &amp; issues they touched</div>
-        </button>
-        <button type="button" class="telemetry-card highlight-pr" data-card="prs" title="Show pull requests they opened">
-          <div class="telemetry-label">PRs Created</div>
-          <div id="stat-prs" class="telemetry-value">…</div>
-          <div id="stat-prs-sub" class="telemetry-sub">&nbsp;</div>
-        </button>
-        <button type="button" class="telemetry-card highlight-issue" data-card="issues" title="Show issues they opened">
-          <div class="telemetry-label">Issues Created</div>
-          <div id="stat-issues" class="telemetry-value">…</div>
-          <div id="stat-issues-sub" class="telemetry-sub">&nbsp;</div>
-        </button>
-        <button type="button" class="telemetry-card highlight-repo" data-card="reviewed" title="Show other people's PRs they reviewed">
-          <div class="telemetry-label">Reviewed</div>
-          <div id="stat-reviews" class="telemetry-value">…</div>
-          <div id="stat-reviews-sub" class="telemetry-sub">others' PRs reviewed</div>
-        </button>
-        <button type="button" class="telemetry-card highlight-comments" data-card="commented" title="Show discussions they joined">
-          <div class="telemetry-label">Commented</div>
-          <div id="stat-comments" class="telemetry-value">…</div>
-          <div id="stat-comments-sub" class="telemetry-sub">others' threads joined</div>
-        </button>
-      </div>
-
-      <!-- Background Streaming Status Bar -->
-      <div id="stream-banner" class="stream-banner" style="display:none;">
-        <div class="stream-info">
-          <span id="stream-pulse" class="stream-pulse"></span>
-          <span id="stream-text">Loading…</span>
+  <main>
+    <!-- Landing -->
+    <section class="hero wrap">
+      <h1>Your entire GitHub history, in one place</h1>
+      <p class="lead">Every pull request, issue, review and discussion of any GitHub user — exact lifetime numbers in seconds. No login, no token.</p>
+      <form id="search-form" class="search" autocomplete="off" role="search">
+        <div class="search-field">
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="7" cy="7" r="4.75"/><path d="M10.6 10.6L14 14" stroke-linecap="round"/></svg>
+          <input id="search-input" class="search-input" type="text" placeholder="Username or github.com/username" spellcheck="false" autocapitalize="off" aria-label="GitHub username or profile link" required />
+          <button type="button" id="input-clear" class="search-clear" aria-label="Clear">✕</button>
         </div>
-        <div class="stream-progress-bar">
-          <div id="stream-progress-fill" class="stream-progress-fill" style="width: 5%;"></div>
-        </div>
-        <div class="stream-actions">
-          <button id="btn-clear-cache" class="btn-secondary-sm" type="button" title="Forget the saved copy and reload everything live from GitHub">Clear Cache</button>
-          <button id="btn-export" class="btn-secondary-sm" type="button" title="Export data">Export</button>
-        </div>
-      </div>
+        <button type="submit" id="btn-search" class="btn btn-primary">Track</button>
+      </form>
+      <p class="hero-hint">Tip: paste a profile link like <code>https://github.com/torvalds</code> and tracking starts on its own.</p>
     </section>
 
-    <!-- Main Content / Views & Controls -->
-    <main id="main-content" style="display:none;">
-      <!-- Dashboard Mode & Date Range Bar -->
-      <div class="view-header-bar">
-        <div class="view-tabs" role="tablist">
-          <button type="button" id="tab-btn-feed" class="view-tab active" role="tab" aria-selected="true">
-            <svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor">
-              <path fill-rule="evenodd" d="M2 3.75C2 2.784 2.784 2 3.75 2h8.5c.966 0 1.75.784 1.75 1.75v8.5A1.75 1.75 0 0112.25 14h-8.5A1.75 1.75 0 012 12.25v-8.5zm1.75-.25a.25.25 0 00-.25.25v8.5c0 .138.112.25.25.25h8.5a.25.25 0 00.25-.25v-8.5a.25.25 0 00-.25-.25h-8.5zM4 5.5a.75.75 0 01.75-.75h6.5a.75.75 0 010 1.5h-6.5A.75.75 0 014 5.5zm0 3a.75.75 0 01.75-.75h6.5a.75.75 0 010 1.5h-6.5A.75.75 0 014 8.5zm0 3a.75.75 0 01.75-.75h4a.75.75 0 010 1.5h-4A.75.75 0 014 11.5z"></path>
-            </svg>
-            <span>Work Feed</span>
-          </button>
-          <button type="button" id="tab-btn-analytics" class="view-tab" role="tab" aria-selected="false">
-            <svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor">
-              <path d="M1.5 1.75a.75.75 0 00-1.5 0v12.5c0 .414.336.75.75.75h14.5a.75.75 0 000-1.5H1.5V1.75z"></path>
-              <path d="M4.25 6.5a.75.75 0 01.75.75v5a.75.75 0 01-1.5 0v-5a.75.75 0 01.75-.75zm4-3a.75.75 0 01.75.75v8a.75.75 0 01-1.5 0v-8a.75.75 0 01.75-.75zm4 4.5a.75.75 0 01.75.75v3.5a.75.75 0 01-1.5 0v-3.5a.75.75 0 01.75-.75z"></path>
-            </svg>
-            <span>Visual Analytics</span>
-            <span class="badge-new">PRO</span>
-          </button>
+    <section class="landing wrap" id="landing">
+      <div class="features">
+        <div class="feature">
+          <div class="feature-icon"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M9 1.5L3 9h4.5L7 14.5 13 7H8.5z"/></svg></div>
+          <h3>Exact numbers in seconds</h3>
+          <p>Lifetime pull requests, issues, reviews and comments counted straight from GitHub, even for accounts with 40,000+ items.</p>
         </div>
+        <div class="feature">
+          <div class="feature-icon"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M2 4h12M4.5 8h7M7 12h2"/></svg></div>
+          <h3>Instant filters</h3>
+          <p>Type, status, role, repository, time range and text search — answered in your browser with no waiting.</p>
+        </div>
+        <div class="feature">
+          <div class="feature-icon"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><circle cx="8" cy="5" r="2.5"/><path d="M3 14c.6-2.6 2.6-4 5-4s4.4 1.4 5 4"/></svg></div>
+          <h3>Clear involvement</h3>
+          <p>Every item is counted once, under how the person is linked: created, assigned, reviewed, commented or mentioned.</p>
+        </div>
+        <div class="feature">
+          <div class="feature-icon"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><path d="M2.5 3.5h11v7h-6l-3 2.5v-2.5h-2z"/></svg></div>
+          <h3>Conversation preview</h3>
+          <p>Open any item to read its description, comments, reviews and commits without leaving the page.</p>
+        </div>
+        <div class="feature">
+          <div class="feature-icon"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M2.5 13.5V9M6.2 13.5V5M9.9 13.5V7.5M13.6 13.5V2.5"/></svg></div>
+          <h3>Analytics</h3>
+          <p>Calendar, daily, weekly, monthly and yearly activity, working hours, merge speed, streaks, repositories, labels and people.</p>
+        </div>
+        <div class="feature">
+          <div class="feature-icon"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><rect x="3" y="7" width="10" height="7" rx="1.5"/><path d="M5.5 7V5a2.5 2.5 0 015 0v2"/></svg></div>
+          <h3>Private by design</h3>
+          <p>Uses GitHub's public API from your browser. Results are saved only on your device, so the next visit is instant.</p>
+        </div>
+      </div>
+      <ol class="steps">
+        <li><b>1</b>Enter a username or profile link</li>
+        <li><b>2</b>Numbers and the newest work appear in seconds</li>
+        <li><b>3</b>The full history keeps loading in the background</li>
+      </ol>
+    </section>
 
-        <!-- Global Date Range Filter -->
-        <div class="date-filter-wrap">
-          <label for="date-range-select" class="filter-label">Timeframe:</label>
-          <select id="date-range-select" class="custom-select">
-            <option value="all">Lifetime (All Time)</option>
-          </select>
+    <!-- Dashboard -->
+    <section class="dash wrap" id="main-content">
+      <div class="profile" id="profile">
+        <img class="profile-avatar" id="profile-avatar" alt="" width="48" height="48" />
+        <div class="profile-main">
+          <div class="profile-name"><span id="profile-name">…</span> <a id="profile-login" href="#" target="_blank" rel="noopener"></a></div>
+          <div class="profile-meta" id="profile-meta"></div>
+        </div>
+        <div class="profile-actions">
+          <button id="btn-clear-cache" class="btn btn-sm" type="button" title="Forget the saved copy and reload everything from GitHub">
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M13.5 8A5.5 5.5 0 113 4.5"/><path d="M3 1.5v3h3"/></svg>Refresh
+          </button>
+          <button id="btn-export" class="btn btn-sm" type="button">
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2v8M4.5 6.5L8 10l3.5-3.5M2.5 13.5h11"/></svg>Export
+          </button>
         </div>
       </div>
 
-      <!-- ── SECTION: VISUAL ANALYTICS VIEW ────────────────────── -->
-      <section id="analytics-view" class="analytics-view" style="display:none;">
-        <!-- Target Tracking Cards (Dynamic Milestones) -->
-        <div class="targets-grid">
-          <div class="target-card">
-            <div class="target-header">
-              <span class="target-title">PR Milestone</span>
-              <span id="target-pr-status" class="target-badge">On Track</span>
-            </div>
-            <div class="target-value"><span id="target-pr-val">0</span> <span class="target-goal">/ 100 PRs</span></div>
-            <div class="target-bar-wrap">
-              <div id="target-pr-bar" class="target-bar-fill" style="width: 0%;"></div>
-            </div>
-            <div id="target-pr-sub" class="target-sub">0% of target completed</div>
-          </div>
+      <div class="sync" id="sync">
+        <span class="sync-dot"></span>
+        <span id="stream-text">Loading…</span>
+        <div class="sync-bar"><div class="sync-fill" id="stream-progress-fill"></div></div>
+      </div>
 
-          <div class="target-card">
-            <div class="target-header">
-              <span class="target-title">Merge Velocity Goal</span>
-              <span id="target-merge-status" class="target-badge">Goal: 80%</span>
-            </div>
-            <div class="target-value"><span id="target-merge-val">0%</span> <span class="target-goal">Merge Rate</span></div>
-            <div class="target-bar-wrap">
-              <div id="target-merge-bar" class="target-bar-fill fill-purple" style="width: 0%;"></div>
-            </div>
-            <div id="target-merge-sub" class="target-sub">0 merged of 0 total PRs</div>
-          </div>
+      <div class="kpis" id="telemetry-bar">
+        <button type="button" class="kpi" data-card="total" title="Show everything">
+          <div class="kpi-label">Total involvement</div>
+          <div class="kpi-value" id="stat-total">…</div>
+          <div class="kpi-sub" id="stat-total-sub">PRs &amp; issues touched</div>
+        </button>
+        <button type="button" class="kpi" data-card="prs" title="Pull requests they opened">
+          <div class="kpi-label"><i style="background:var(--merged)"></i>Pull requests</div>
+          <div class="kpi-value" id="stat-prs">…</div>
+          <div class="kpi-sub" id="stat-prs-sub">&nbsp;</div>
+        </button>
+        <button type="button" class="kpi" data-card="issues" title="Issues they opened">
+          <div class="kpi-label"><i style="background:var(--open)"></i>Issues</div>
+          <div class="kpi-value" id="stat-issues">…</div>
+          <div class="kpi-sub" id="stat-issues-sub">&nbsp;</div>
+        </button>
+        <button type="button" class="kpi" data-card="reviewed" title="Other people's PRs they reviewed">
+          <div class="kpi-label"><i style="background:var(--s7)"></i>Reviews</div>
+          <div class="kpi-value" id="stat-reviews">…</div>
+          <div class="kpi-sub">others' pull requests</div>
+        </button>
+        <button type="button" class="kpi" data-card="commented" title="Other people's threads they commented on">
+          <div class="kpi-label"><i style="background:var(--s1)"></i>Discussions</div>
+          <div class="kpi-value" id="stat-comments">…</div>
+          <div class="kpi-sub">others' threads joined</div>
+        </button>
+      </div>
 
-          <div class="target-card">
-            <div class="target-header">
-              <span class="target-title">Issue Resolution</span>
-              <span id="target-issue-status" class="target-badge">Goal: 85%</span>
-            </div>
-            <div class="target-value"><span id="target-issue-val">0%</span> <span class="target-goal">Resolved</span></div>
-            <div class="target-bar-wrap">
-              <div id="target-issue-bar" class="target-bar-fill fill-green" style="width: 0%;"></div>
-            </div>
-            <div id="target-issue-sub" class="target-sub">0 closed of 0 total issues</div>
-          </div>
+      <div class="tabs" role="tablist">
+        <button type="button" id="tab-btn-feed" class="tab" role="tab" aria-selected="true">
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M2.5 4h11M2.5 8h11M2.5 12h7"/></svg>Activity
+        </button>
+        <button type="button" id="tab-btn-analytics" class="tab" role="tab" aria-selected="false">
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M2.5 13.5V9M6.2 13.5V5M9.9 13.5V7.5M13.6 13.5V2.5"/></svg>Analytics
+        </button>
+      </div>
 
-          <div class="target-card">
-            <div class="target-header">
-              <span class="target-title">Ecosystem Reach</span>
-              <span id="target-repo-status" class="target-badge">Goal: 10 Repos</span>
+      <!-- Time range (shared by both tabs) -->
+      <div class="toolbar">
+        <div class="toolbar-row">
+          <div class="seg timeframe-seg" id="timeframe-seg" role="group" aria-label="Time range"></div>
+          <div class="timeframe-select" id="timeframe-select"></div>
+          <div id="year-select"></div>
+        </div>
+        <div class="toolbar-row muted" id="range-note"></div>
+      </div>
+
+      <!-- Activity -->
+      <section id="feed-view">
+        <div class="toolbar feed-toolbar">
+          <div class="toolbar-row">
+            <div id="dd-kind"></div>
+            <div id="dd-status"></div>
+            <div id="dd-role"></div>
+            <div id="dd-repo"></div>
+            <div class="filter-search">
+              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="7" cy="7" r="4.75"/><path d="M10.6 10.6L14 14" stroke-linecap="round"/></svg>
+              <input id="filter-text" type="search" placeholder="Search titles, repos or #number" autocomplete="off" aria-label="Search results" />
             </div>
-            <div class="target-value"><span id="target-repo-val">0</span> <span class="target-goal">/ 10 Repos</span></div>
-            <div class="target-bar-wrap">
-              <div id="target-repo-bar" class="target-bar-fill fill-blue" style="width: 0%;"></div>
-            </div>
-            <div id="target-repo-sub" class="target-sub">0 distinct repositories</div>
+            <button type="button" class="clear-filters" id="clear-filters" hidden>Clear filters</button>
           </div>
         </div>
 
-        <!-- GitHub-style Contribution Heatmap Calendar -->
-        <div class="analytics-card heatmap-card">
-          <div class="card-header-flex">
-            <div>
-              <h3 class="card-title">Contribution Activity Calendar</h3>
-              <p id="heatmap-sub" class="card-sub">Daily contributions across pull requests, issues, and discussions</p>
-            </div>
-            <div id="heatmap-year-pills" class="year-pills">
-              <!-- Dynamically populated year pills -->
-            </div>
-          </div>
-
-          <div class="heatmap-scroll-wrap">
-            <div class="heatmap-calendar" id="heatmap-calendar">
-              <!-- SVG heatmap will be dynamically rendered here -->
-            </div>
-          </div>
-
-          <div class="heatmap-footer">
-            <div class="heatmap-count-label" id="heatmap-count-label">0 contributions in selected period</div>
-            <div class="heatmap-legend">
-              <span>Less</span>
-              <span class="legend-cell lvl-0"></span>
-              <span class="legend-cell lvl-1"></span>
-              <span class="legend-cell lvl-2"></span>
-              <span class="legend-cell lvl-3"></span>
-              <span class="legend-cell lvl-4"></span>
-              <span>More</span>
-            </div>
+        <div class="list-head">
+          <span id="pager-count">0 items</span>
+          <div class="pager">
+            <button id="pager-prev" class="pager-btn" type="button" aria-label="Previous page" disabled><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M10 3.5L5.5 8l4.5 4.5"/></svg></button>
+            <button id="pager-next" class="pager-btn" type="button" aria-label="Next page" disabled><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3.5L10.5 8 6 12.5"/></svg></button>
           </div>
         </div>
 
-        <!-- Charts Grid -->
-        <div class="charts-grid">
-          <!-- Chart 1: PR Health & Status Donut -->
-          <div class="analytics-card">
-            <div class="card-header">
-              <h3 class="card-title">Pull Request Health & Distribution</h3>
-              <p class="card-sub">Ratio of merged, open, closed, and draft pull requests</p>
-            </div>
-            <div class="donut-chart-wrap">
-              <div id="donut-svg-container" class="donut-svg-container">
-                <!-- SVG Donut Chart rendered here -->
-              </div>
-              <div id="donut-legend" class="donut-legend">
-                <!-- Legend items with exact counts & % -->
-              </div>
-            </div>
-          </div>
-
-          <!-- Chart 2: Top Repositories Breakdown -->
-          <div class="analytics-card">
-            <div class="card-header">
-              <h3 class="card-title">Top Repositories by Contribution</h3>
-              <p class="card-sub">Projects with the highest volume of activity</p>
-            </div>
-            <div id="top-repos-list" class="top-repos-list">
-              <!-- Dynamic horizontal progress bars -->
-            </div>
-          </div>
-
-          <!-- Chart 3: Year-over-Year Output Comparison -->
-          <div class="analytics-card">
-            <div class="card-header">
-              <h3 class="card-title">Year-over-Year Performance</h3>
-              <p class="card-sub">Annual contribution velocity and output volume</p>
-            </div>
-            <div id="yearly-chart-container" class="bar-chart-container">
-              <!-- Yearly SVG bar chart -->
-            </div>
-          </div>
-
-          <!-- Chart 4: Monthly Activity Breakdown -->
-          <div class="analytics-card">
-            <div class="card-header">
-              <h3 class="card-title">Monthly Trajectory</h3>
-              <p class="card-sub">Seasonal activity distribution (Jan – Dec)</p>
-            </div>
-            <div id="monthly-chart-container" class="bar-chart-container">
-              <!-- Monthly SVG bar chart -->
-            </div>
+        <div class="list">
+          <div id="list-container"></div>
+          <div id="list-empty" class="list-empty" style="display:none;"><p>No matching work.</p></div>
+          <div id="list-loading" class="list-loading" style="display:none;">
+            <div class="skel"><i style="width:16px;height:16px;border-radius:50%"></i><i style="width:58%"></i></div>
+            <div class="skel"><i style="width:16px;height:16px;border-radius:50%"></i><i style="width:44%"></i></div>
+            <div class="skel"><i style="width:16px;height:16px;border-radius:50%"></i><i style="width:66%"></i></div>
+            <div class="skel"><i style="width:16px;height:16px;border-radius:50%"></i><i style="width:38%"></i></div>
+            <div class="skel"><i style="width:16px;height:16px;border-radius:50%"></i><i style="width:52%"></i></div>
           </div>
         </div>
-        <!-- More insights -->
-        <div class="insight-tiles" id="insight-tiles"></div>
 
-        <div class="analytics-card wide-card">
-          <div class="card-header">
-            <h3 class="card-title">Weekly Activity</h3>
-            <p class="card-sub" id="weekly-sub">PRs and issues opened per week, last 52 weeks</p>
-          </div>
-          <div id="weekly-chart" class="bar-chart-container dense-bars"></div>
-        </div>
-
-        <div class="analytics-card wide-card">
-          <div class="card-header">
-            <h3 class="card-title">Every Month</h3>
-            <p class="card-sub" id="timeline-sub">PRs and issues opened per month across the whole period</p>
-          </div>
-          <div id="timeline-chart" class="bar-chart-container dense-bars"></div>
-        </div>
-
-        <div class="analytics-card wide-card">
-          <div class="card-header">
-            <h3 class="card-title">Cumulative Growth</h3>
-            <p class="card-sub">Total PRs and issues over time</p>
-          </div>
-          <div id="growth-chart" class="growth-chart"></div>
-        </div>
-
-        <div class="charts-grid">
-          <div class="analytics-card">
-            <div class="card-header">
-              <h3 class="card-title">Day of the Week</h3>
-              <p class="card-sub">When they open PRs and issues (your local time)</p>
-            </div>
-            <div id="weekday-chart" class="bar-chart-container"></div>
-          </div>
-          <div class="analytics-card">
-            <div class="card-header">
-              <h3 class="card-title">Hour of the Day</h3>
-              <p class="card-sub">When they open PRs and issues (your local time)</p>
-            </div>
-            <div id="hour-chart" class="bar-chart-container dense-bars"></div>
-          </div>
-          <div class="analytics-card">
-            <div class="card-header">
-              <h3 class="card-title">How They're Involved</h3>
-              <p class="card-sub">Each item counted once, under its strongest link</p>
-            </div>
-            <div id="role-chart" class="top-repos-list"></div>
-          </div>
-          <div class="analytics-card">
-            <div class="card-header">
-              <h3 class="card-title">Time to Merge</h3>
-              <p class="card-sub">How long their merged PRs took, from opening to merge</p>
-            </div>
-            <div id="merge-time-chart" class="bar-chart-container"></div>
-          </div>
-          <div class="analytics-card">
-            <div class="card-header">
-              <h3 class="card-title">Issue Outcomes</h3>
-              <p class="card-sub">Issues they opened, by current state</p>
-            </div>
-            <div id="issue-chart" class="top-repos-list"></div>
-          </div>
-          <div class="analytics-card">
-            <div class="card-header">
-              <h3 class="card-title">Top Labels</h3>
-              <p class="card-sub">Most common labels on their work</p>
-            </div>
-            <div id="labels-chart" class="top-repos-list"></div>
-          </div>
-          <div class="analytics-card">
-            <div class="card-header">
-              <h3 class="card-title">People They Work With</h3>
-              <p class="card-sub">Authors of the PRs and issues they joined</p>
-            </div>
-            <div id="people-chart" class="top-repos-list"></div>
-          </div>
-          <div class="analytics-card">
-            <div class="card-header">
-              <h3 class="card-title">Discussion Size</h3>
-              <p class="card-sub">Comments per PR or issue they're involved in</p>
-            </div>
-            <div id="comments-chart" class="bar-chart-container"></div>
-          </div>
+        <div class="list-foot">
+          <div id="page-buttons" class="page-numbers"></div>
+          <div id="bottom-summary"></div>
         </div>
       </section>
 
-      <!-- ── SECTION: WORK FEED VIEW (Paging & List) ─────────────── -->
-      <section id="feed-view" class="feed-view">
-        <!-- Controls Bar -->
-        <div class="controls-bar">
-        <!-- Filters Row -->
-        <div class="filters-group">
-          <!-- Filter 1: Item Kind -->
-          <div class="select-wrap">
-            <label for="filter-kind" class="filter-label">Kind:</label>
-            <select id="filter-kind" class="custom-select">
-              <option value="all">All Items</option>
-              <option value="pr">Pull Requests</option>
-              <option value="issue">Issues</option>
-            </select>
-          </div>
+      <!-- Analytics -->
+      <section id="analytics-view" style="display:none;">
+        <p class="an-note" id="an-note"></p>
+        <div class="tiles" id="insight-tiles"></div>
 
-          <!-- Filter 2: Status -->
-          <div id="wrap-status" class="select-wrap">
-            <label for="filter-status" class="filter-label">Status:</label>
-            <select id="filter-status" class="custom-select"></select>
-          </div>
+        <div class="an-grid">
+          <article class="card span-12">
+            <div class="card-head">
+              <div><h3 class="card-title">Contribution calendar</h3><p class="card-sub" id="heatmap-sub">PRs and issues opened per day</p></div>
+              <div class="card-tools" id="heatmap-year"></div>
+            </div>
+            <div class="heat-scroll"><div id="heatmap-calendar"></div></div>
+            <div class="heat-foot">
+              <span id="heatmap-count-label"></span>
+              <span class="heat-legend">Less <i style="background:var(--hm0)"></i><i style="background:var(--hm1)"></i><i style="background:var(--hm2)"></i><i style="background:var(--hm3)"></i><i style="background:var(--hm4)"></i> More</span>
+            </div>
+          </article>
 
-          <!-- Filter 3: How the person is involved (each item counted once) -->
-          <div class="select-wrap">
-            <label for="filter-role" class="filter-label">Role:</label>
-            <select id="filter-role" class="custom-select" title="Each item is counted once, under its strongest link: created › assigned › reviewed › commented › mentioned"></select>
-          </div>
-
-          <!-- Filter 4: Repository -->
-          <div class="select-wrap">
-            <label for="filter-repo" class="filter-label">Repo:</label>
-            <select id="filter-repo" class="custom-select">
-              <option value="all">All Repositories</option>
-            </select>
-          </div>
-
-          <!-- Quick Text Search -->
-          <div class="search-box-wrap">
-            <input
-              id="filter-text"
-              type="search"
-              class="filter-text-input"
-              placeholder="Search in results (/)..."
-              autocomplete="off"
-            />
-          </div>
+          <article class="card span-8" data-chart="monthly"></article>
+          <article class="card span-4" data-chart="prStatus"></article>
+          <article class="card span-6" data-chart="weekly"></article>
+          <article class="card span-6" data-chart="daily"></article>
+          <article class="card span-8" data-chart="yearly"></article>
+          <article class="card span-4" data-chart="issueStatus"></article>
+          <article class="card span-6" data-chart="weekday"></article>
+          <article class="card span-6" data-chart="hour"></article>
+          <article class="card span-12" data-chart="growth"></article>
+          <article class="card span-4" data-chart="involvement"></article>
+          <article class="card span-4" data-chart="repos"></article>
+          <article class="card span-4" data-chart="labels"></article>
+          <article class="card span-4" data-chart="mergeTime"></article>
+          <article class="card span-4" data-chart="discussion"></article>
+          <article class="card span-4" data-chart="people"></article>
         </div>
-
-        <!-- Gmail-style Pagination Control Bar -->
-        <div class="pager-group">
-          <span id="pager-count" class="pager-count">1–50 of 50</span>
-          <div class="pager-nav">
-            <button id="pager-prev" class="pager-btn" type="button" title="Previous page" disabled>
-              <svg viewBox="0 0 16 16" width="16" height="16" fill="currentColor">
-                <path fill-rule="evenodd" d="M9.78 12.78a.75.75 0 0 1-1.06 0L4.47 8.53a.75.75 0 0 1 0-1.06l4.25-4.25a.75.75 0 0 1 1.06 1.06L6.06 8l3.72 3.72a.75.75 0 0 1 0 1.06z"></path>
-              </svg>
-            </button>
-            <button id="pager-next" class="pager-btn" type="button" title="Next page" disabled>
-              <svg viewBox="0 0 16 16" width="16" height="16" fill="currentColor">
-                <path fill-rule="evenodd" d="M6.22 3.22a.75.75 0 0 1 1.06 0l4.25 4.25a.75.75 0 0 1 0 1.06l-4.25 4.25a.75.75 0 0 1-1.06-1.06L9.94 8 6.22 4.28a.75.75 0 0 1 0-1.06z"></path>
-              </svg>
-            </button>
-          </div>
-        </div>
-      </div>
-
-      <!-- Item List Container -->
-      <div class="list-card">
-        <div id="list-container" class="items-list">
-          <!-- Rows will be injected here -->
-        </div>
-
-        <!-- Empty & Loading States -->
-        <div id="list-empty" class="list-empty" style="display:none;">
-          <p>No matching GitHub work found under current filters.</p>
-        </div>
-
-        <div id="list-loading" class="list-loading" style="display:none;">
-          <div class="skel-row" style="width: 85%;"></div>
-          <div class="skel-row" style="width: 70%;"></div>
-          <div class="skel-row" style="width: 92%;"></div>
-          <div class="skel-row" style="width: 60%;"></div>
-          <div class="skel-row" style="width: 78%;"></div>
-        </div>
-      </div>
-
-      <!-- Bottom Pagination Bar -->
-      <div class="bottom-pager">
-        <div id="page-buttons" class="page-numbers"></div>
-        <div class="pager-summary" id="bottom-summary">Showing 50 items per page</div>
-      </div>
+      </section>
     </section>
   </main>
 
-    <!-- Footer -->
-    <footer class="site-footer">
-      <div>
-        <span>ghtrack</span>
-      </div>
-      <div>
-        <a href="https://theramlakhan.com" target="_blank" rel="noopener">theramlakhan.com</a>
-      </div>
-    </footer>
-  </div>
+  <footer class="app-footer">
+    <div class="wrap">
+      <span>ghtrack</span>
+      <a href="https://theramlakhan.com" target="_blank" rel="noopener">theramlakhan.com</a>
+    </div>
+  </footer>
 
-  <!-- Export Modal -->
+  <!-- Export -->
   <div id="modal-export" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="modal-export-title">
-    <div class="modal-card modal-card-lg">
+    <div class="modal-card">
       <div class="modal-header">
-        <h2 id="modal-export-title" class="modal-title">Export Lifetime GitHub Data</h2>
-        <button id="modal-export-close" class="modal-close" type="button" aria-label="Close dialog">✕</button>
+        <h2 id="modal-export-title" class="modal-title">Export</h2>
+        <button id="modal-export-close" class="modal-close" type="button" aria-label="Close">✕</button>
       </div>
       <div class="modal-body">
-        <div class="export-tabs">
-          <button id="tab-export-md" class="btn-tab active" type="button">Markdown Table</button>
-          <button id="tab-export-json" class="btn-tab" type="button">JSON</button>
+        <div class="seg export-tabs" role="group">
+          <button id="tab-export-md" type="button" aria-pressed="true">Markdown</button>
+          <button id="tab-export-json" type="button" aria-pressed="false">JSON</button>
         </div>
         <textarea id="export-content" class="export-textarea" readonly></textarea>
       </div>
       <div class="modal-footer">
-        <button id="btn-copy-export" class="btn-secondary-sm" type="button">Copy to Clipboard</button>
-        <button id="btn-download-export" class="btn-primary" type="button">Download File</button>
+        <button id="btn-copy-export" class="btn btn-sm" type="button">Copy</button>
+        <button id="btn-download-export" class="btn btn-sm btn-primary" type="button">Download</button>
       </div>
     </div>
   </div>
 
-  <script src="./app.js?v=1211f5de78"></script>
+  <script src="./app.js?v=d1d66051d1"></script>
 </body>
 </html>
