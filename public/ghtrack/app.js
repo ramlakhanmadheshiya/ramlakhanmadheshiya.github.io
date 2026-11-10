@@ -1,7 +1,8 @@
 // ── ghtrack — Core Application Logic ────────────────────────────────────
-// Architecture: "ask GitHub the question, don't download everything".
-// Every number and every list page is one GitHub search request, so results
-// appear in about a second for any account size — no token, no login, no server.
+// Numbers: one GitHub count search each (exact, ~1-2s for any account size).
+// List: the person's whole history is loaded 100 items per request, split into
+// 5 non-overlapping relationship buckets, and saved in IndexedDB — so filters
+// and pages are instant and revisits only fetch what changed. No token, no login.
 (() => {
   "use strict";
 
@@ -19,8 +20,9 @@
 
   // ── Response cache (memory + IndexedDB, 10 minutes) ─────────────────
   const DB_NAME = "ghtrack_cache_db";
-  const DB_VERSION = 5;           // v5: query-response cache (replaces full-profile cache)
+  const DB_VERSION = 6;           // v6: response cache + saved lifetime list per person
   const STORE = "responses";
+  const SNAP_STORE = "snapshots";
   let dbPromise = null;
   const memCache = new Map();
 
@@ -33,6 +35,7 @@
             const db = req.result;
             for (const name of Array.from(db.objectStoreNames)) db.deleteObjectStore(name);
             db.createObjectStore(STORE, { keyPath: "key" });
+            db.createObjectStore(SNAP_STORE, { keyPath: "login" });
           };
           req.onsuccess = () => resolve(req.result);
           req.onerror = () => resolve(null);
@@ -85,6 +88,7 @@
     if (!db) return;
     try {
       db.transaction(STORE, "readwrite").objectStore(STORE).clear();
+      db.transaction(SNAP_STORE, "readwrite").objectStore(SNAP_STORE).clear();
     } catch {
       /* ignore */
     }
@@ -158,8 +162,7 @@
       // Unknown budget: let background work wait until a response tells us
       return job.priority >= 2 && L.active > 0;
     }
-    const reserve = job.priority >= 2 ? 2 : 0; // keep budget for the user's next clicks
-    return L.remaining <= reserve;
+    return L.remaining <= 0; // filters run in the browser, so the whole budget can load data
   }
 
   function pump(bucket) {
@@ -199,7 +202,6 @@
       L.active++;
       runJob(job);
     }
-    notifyWait();
   }
 
   function isRateLimitedResponse(res, data) {
@@ -417,62 +419,81 @@
     };
   }
 
-  // ── Paged result stream: walks past GitHub's 1,000-result cap ───────
-  class ResultStream {
-    constructor(q, order = "desc") {
+  // ── Saved lifetime list per person (IndexedDB) ──────────────────────
+  // Revisits show the saved list instantly; only new activity is fetched.
+  async function loadSnapshot(login) {
+    const db = await openDB();
+    if (!db) return null;
+    return new Promise((resolve) => {
+      try {
+        const req = db.transaction(SNAP_STORE, "readonly").objectStore(SNAP_STORE).get(login.toLowerCase());
+        req.onsuccess = () => resolve(req.result || null);
+        req.onerror = () => resolve(null);
+      } catch {
+        resolve(null);
+      }
+    });
+  }
+
+  async function saveSnapshot() {
+    if (!state.login || !state.itemsMap.size) return;
+    const db = await openDB();
+    if (!db) return;
+    const items = Array.from(state.itemsMap.values()).map(({ body, ...rest }) => rest);
+    const rec = { login: state.login.toLowerCase(), items, syncedAt: state.syncStartedAt, savedAt: Date.now() };
+    try {
+      db.transaction(SNAP_STORE, "readwrite").objectStore(SNAP_STORE).put(rec);
+    } catch {
+      /* storage full: the list still works for this visit */
+    }
+  }
+
+  let snapshotTimer = null;
+  function scheduleSnapshot() {
+    clearTimeout(snapshotTimer);
+    snapshotTimer = setTimeout(saveSnapshot, 2000);
+  }
+
+  // ── Bucket harvester: one GitHub search per 100 items ───────────────
+  // The 5 relationship buckets split a person's involvement with no overlap,
+  // so loading them gives every item exactly once, already labelled.
+  class BucketHarvester {
+    constructor(bucket, q) {
+      this.bucket = bucket;
       this.q = q;
-      this.order = order;
-      this.rows = [];
-      this.ids = new Set();
       this.extra = "";
       this.page = 0;
       this.total = null;
       this.done = false;
-      this.pending = null;
       this.lastBoundary = null;
     }
 
-    fetchNext(priority, isStale) {
-      if (this.done) return Promise.resolve();
-      if (this.pending) return this.pending;
-      this.pending = (async () => {
-        const page = this.page + 1;
-        const q = this.extra ? `${this.q} ${this.extra}` : this.q;
-        const data = await apiGet(searchPath(q, { page, order: this.order }), { priority, isStale });
-        const items = data.items || [];
-        if (this.total === null) this.total = data.total_count || 0;
-        let added = 0;
-        for (const raw of items) {
-          const item = normalize(raw);
-          if (item && !this.ids.has(item.id)) {
-            this.ids.add(item.id);
-            this.rows.push(item);
-            added++;
-          }
-        }
-        if (items.length < API_PER_PAGE || this.rows.length >= this.total) {
-          this.done = true;
-        } else if (page * API_PER_PAGE >= SEARCH_WINDOW) {
-          // Next window: continue from the oldest timestamp seen (duplicates skipped)
-          const boundary = items[items.length - 1].updated_at;
-          if (boundary === this.lastBoundary && added === 0) this.done = true;
-          this.lastBoundary = boundary;
-          this.extra = `updated:${this.order === "desc" ? "<=" : ">="}${boundary}`;
-          this.page = 0;
-        } else {
-          this.page = page;
-        }
-      })().finally(() => {
-        this.pending = null;
-      });
-      return this.pending;
+    async next(priority, isStale) {
+      const page = this.page + 1;
+      const q = this.extra ? `${this.q} ${this.extra}` : this.q;
+      const data = await apiGet(searchPath(q, { page }), { priority, isStale });
+      if (!this.extra && page === 1) this.total = data.total_count || 0;
+      const raw = data.items || [];
+      const items = raw.map(normalize).filter(Boolean);
+      if (raw.length < API_PER_PAGE) {
+        this.done = true;
+      } else if (page * API_PER_PAGE >= SEARCH_WINDOW) {
+        // GitHub stops at 1,000 results per query: continue from the oldest timestamp
+        const boundary = raw[raw.length - 1].updated_at;
+        if (boundary === this.lastBoundary) this.done = true;
+        this.lastBoundary = boundary;
+        this.extra = `updated:<=${boundary}`;
+        this.page = 0;
+      } else {
+        this.page = page;
+      }
+      return items;
     }
 
-    async ensure(n, priority, isStale, onProgress) {
-      while (!this.done && this.rows.length < n) {
-        await this.fetchNext(priority, isStale);
-        if (onProgress) onProgress(this.rows.length);
-      }
+    resumeBefore(updatedAt) {
+      this.extra = `updated:<=${updatedAt}`;
+      this.page = 0;
+      this.lastBoundary = updatedAt;
     }
   }
 
@@ -480,31 +501,23 @@
   const state = {
     login: "",
     profile: null,
-    gen: 0,                    // increments on every new person
-    analyticsGen: 0,
+    gen: 0,
     startedAt: 0,
-    readyAt: 0,
-    streams: new Map(),        // query -> { fwd, rev }
-    listQuery: "",
-    listTotal: null,
-    pageRows: [],
+    syncStartedAt: 0,
+    itemsMap: new Map(),       // id -> item (item.bucket = how the person is linked)
+    harvesters: [],
+    counts: {},                // exact numbers from GitHub
+    listReady: false,
+    harvestDone: false,
+    fromSnapshot: false,
     currentPage: 1,
-    overview: {},
-    roles: new Map(),          // item id -> Set of known links (created, commented, …)
-    primary: new Map(),        // item id -> bucket it is counted under
-    seenRepos: new Map(),      // repo -> count (for the repo dropdown)
-    harvest: null,             // { rows, total, label, done }
+    pageSize: FEED_PAGE_SIZE,
     viewMode: "feed",
-    filters: {
-      rel: new Set(WORK_SET),
-      type: "all",
-      state: "all",
-      time: "all",
-      repo: "all",
-      text: "",
-    },
+    dateRange: "all",
+    heatmapYear: "all",
+    filters: { kind: "all", status: "all", role: "all", repo: "all", text: "" },
     expandedPreviews: new Set(),
-    status: "",
+    linkCache: new Map(),      // id -> Set of links found in the preview conversation
   };
 
   // ── DOM References ──────────────────────────────────────────────────
@@ -540,11 +553,6 @@
     analyticsView: $("analytics-view"),
     dateRangeSelect: $("date-range-select"),
 
-    relChips: $("rel-chips"),
-    relPresets: document.querySelectorAll(".rel-preset"),
-    relHelp: $("rel-help"),
-    relHelpBox: $("rel-help-box"),
-
     targetPrVal: $("target-pr-val"),
     targetPrBar: $("target-pr-bar"),
     targetPrSub: $("target-pr-sub"),
@@ -572,8 +580,10 @@
     yearlyChartContainer: $("yearly-chart-container"),
     monthlyChartContainer: $("monthly-chart-container"),
 
-    filterType: $("filter-type"),
-    filterState: $("filter-state"),
+    filterKind: $("filter-kind"),
+    wrapStatus: $("wrap-status"),
+    filterStatus: $("filter-status"),
+    filterRole: $("filter-role"),
     filterRepo: $("filter-repo"),
     filterText: $("filter-text"),
 
@@ -583,7 +593,6 @@
     pageButtons: $("page-buttons"),
     bottomSummary: $("bottom-summary"),
 
-    paceNote: $("pace-note"),
     listContainer: $("list-container"),
     listEmpty: $("list-empty"),
     listLoading: $("list-loading"),
@@ -661,157 +670,237 @@
     return root.innerHTML;
   }
 
-  function isDefaultScope() {
-    const f = state.filters;
-    return f.type === "all" && f.state === "all" && f.time === "all" && f.repo === "all" && !cleanText(f.text);
+
+
+  function countBy(items, keyFn) {
+    const m = new Map();
+    for (const i of items) {
+      const k = keyFn(i);
+      m.set(k, (m.get(k) || 0) + 1);
+    }
+    return m;
   }
 
-  function noteRepo(repo, n = 1) {
-    state.seenRepos.set(repo, (state.seenRepos.get(repo) || 0) + n);
-  }
+  // ── Date Filtering Helper ───────────────────────────────────────────
+  function getItemsForCurrentDateRange() {
+    const all = Array.from(state.itemsMap.values());
+    if (state.dateRange === "all") return all;
 
-  // ── Wait / pacing feedback ──────────────────────────────────────────
-  let waitTicker = null;
-
-  function searchWaitInfo() {
-    const L = limits.search;
     const now = Date.now();
-    if (!L.queue.length || !L.queue.some((j) => isBlocked(L, j, now))) return null;
-    return {
-      secs: Math.max(1, Math.ceil((L.reset - now) / 1000)),
-      foreground: L.queue.some((j) => j.priority === 0),
-    };
+    if (state.dateRange === "30d") {
+      const cutoff = now - 30 * 24 * 60 * 60 * 1000;
+      return all.filter((i) => new Date(i.createdAt).getTime() >= cutoff || new Date(i.updatedAt).getTime() >= cutoff);
+    }
+    if (state.dateRange === "90d") {
+      const cutoff = now - 90 * 24 * 60 * 60 * 1000;
+      return all.filter((i) => new Date(i.createdAt).getTime() >= cutoff || new Date(i.updatedAt).getTime() >= cutoff);
+    }
+
+    const targetYear = parseInt(state.dateRange, 10);
+    if (!isNaN(targetYear)) {
+      return all.filter((i) => {
+        const cy = new Date(i.createdAt).getFullYear();
+        const uy = new Date(i.updatedAt).getFullYear();
+        return cy === targetYear || uy === targetYear;
+      });
+    }
+
+    return all;
   }
 
-  function notifyWait() {
-    const info = searchWaitInfo();
-    if (info && !waitTicker) waitTicker = setInterval(renderWait, 1000);
-    if (!info && waitTicker) {
-      clearInterval(waitTicker);
-      waitTicker = null;
-    }
-    renderWait();
-  }
+  // ── Fetch & Background Stream Engine ────────────────────────────────
+  let activeSearchId = 0;
 
-  function renderWait() {
-    const info = searchWaitInfo();
-    if (info && info.foreground) {
-      dom.paceNote.style.display = "flex";
-      dom.paceNote.innerHTML = `<span class="pace-dot"></span><span>GitHub allows 10 searches a minute without login — this loads automatically in <strong>${info.secs}s</strong>.</span>`;
-    } else {
-      dom.paceNote.style.display = "none";
-    }
-    renderBanner();
-  }
 
-  function renderBanner() {
-    if (!state.login) return;
-    const info = searchWaitInfo();
-    const h = state.harvest;
-    let text = state.status;
-    let pct = 100;
-    if (state.viewMode === "analytics" && h && !h.done) {
-      pct = h.total ? Math.min(99, Math.round((h.rows / Math.min(h.total, HARVEST_CAP)) * 100)) : 5;
-      text = h.total === null || h.total === undefined
-        ? `Building charts for ${h.label}…`
-        : `Building charts: ${fmt(h.rows)} of ${fmt(Math.min(h.total, HARVEST_CAP))} items (${h.label})`;
-      if (info && !info.foreground) text += ` · next batch in ${info.secs}s`;
-    } else if (info && !info.foreground) {
-      text = `${state.status} · finishing details in ${info.secs}s`;
-    }
-    dom.streamText.textContent = text;
-    dom.streamProgressFill.style.width = `${pct}%`;
-  }
 
   // ── Start tracking a person ─────────────────────────────────────────
   async function startTracking(username) {
     const login = username.trim().replace(/^@/, "").replace(/^https?:\/\/github\.com\//i, "").split(/[/?#\s]/)[0];
     if (!login) return;
     const gen = ++state.gen;
+    const isStale = () => gen !== state.gen;
 
-    // Drop everything queued for the previous person
     for (const L of Object.values(limits)) {
       for (const j of L.queue.splice(0)) j.reject(new ApiError("cancelled", 0, { cancelled: true }));
     }
+    flushSnapshotNow();
 
     Object.assign(state, {
       login,
       profile: null,
       startedAt: performance.now(),
-      readyAt: 0,
-      streams: new Map(),
-      listQuery: "",
-      listTotal: null,
-      pageRows: [],
+      syncStartedAt: new Date().toISOString(),
+      itemsMap: new Map(),
+      harvesters: REL_ORDER.map((b) => new BucketHarvester(b, bucketExpr(b, login))),
+      counts: {},
+      listReady: false,
+      harvestDone: false,
+      fromSnapshot: false,
       currentPage: 1,
-      overview: {},
-      overviewDone: false,
-      roles: new Map(),
-      primary: new Map(),
-      seenRepos: new Map(),
-      harvest: null,
-      status: `Asking GitHub about @${login}…`,
     });
     state.expandedPreviews.clear();
+    state.linkCache.clear();
 
     dom.searchInput.value = login;
     dom.inputClear.style.display = "block";
     history.replaceState(null, "", `?name=${encodeURIComponent(login)}`);
-
     dom.mainContent.style.display = "block";
     dom.telemetryBar.style.display = "grid";
     dom.streamBanner.style.display = "flex";
     dom.profileLine.style.display = "none";
     dom.listEmpty.style.display = "none";
+    dom.listContainer.innerHTML = "";
+    dom.listLoading.style.display = "flex";
     dom.btnSearch.disabled = true;
     dom.btnSearch.innerHTML = `<span class="loading-dots">Tracking<i></i><i></i><i></i></span>`;
+    setBanner(`Fetching @${login} from GitHub…`, 5);
     renderOverview();
-    renderRelChips();
-    populateTimeframe();
-    populateRepoFilter();
-    renderBanner();
+    populateRoleFilter();
+    populateYears();
+    renderAll();
+
+    // Saved copy from an earlier visit: show it instantly, then refresh
+    const snap = await loadSnapshot(login);
+    if (isStale()) return;
+    if (snap && Array.isArray(snap.items) && snap.items.length) {
+      for (const it of snap.items) state.itemsMap.set(it.id, it);
+      state.fromSnapshot = true;
+      state.listReady = true;
+      renderAll();
+    }
+
+    // Profile check runs alongside the searches (validates the name, gives join year)
+    apiGet(`/users/${encodeURIComponent(login)}`, { bucket: "core", priority: 0 })
+      .then((p) => {
+        if (isStale()) return;
+        if (p.type === "Organization") {
+          showFatal(`@${p.login} is an organization. ghtrack tracks people — try one of its members.`);
+          state.gen++;
+          return;
+        }
+        state.profile = p;
+        renderProfile();
+        populateYears();
+      })
+      .catch((err) => {
+        if (isStale() || err.cancelled) return;
+        if (err.status === 404) {
+          showFatal(`No GitHub user named @${login} was found. Check the spelling.`);
+          state.gen++;
+        }
+      });
 
     try {
-      // 1. Profile (validates the username, gives join date for year filters)
-      const profile = await apiGet(`/users/${encodeURIComponent(login)}`, { bucket: "core", priority: 0 }).catch((err) => {
-        if (err.status === 404) throw new ApiError(`No GitHub user named @${login} was found. Check the spelling.`, 404, { fatal: true });
-        return null; // core limit reached etc. — searches still work
-      });
-      if (gen !== state.gen) return;
-      if (profile && profile.type === "Organization") {
-        throw new ApiError(`@${profile.login} is an organization. ghtrack tracks people — try one of its members.`, 400, { fatal: true });
-      }
-      if (profile) {
-        state.profile = profile;
-        if (profile.login && profile.login !== login) state.login = profile.login;
-        renderProfile();
-        populateTimeframe();
-      }
+      // 1. First 100 of every bucket: the newest list + exact bucket totals
+      await Promise.all(state.harvesters.map((h) => firstPages(h, snap, isStale)));
+      if (isStale()) return;
+      state.listReady = true;
+      dom.btnSearch.disabled = false;
+      dom.btnSearch.textContent = "Track";
+      loadExtraCounts(gen);
+      renderAll();
 
-      // 2. List first (what you look at), exact lifetime numbers right behind it
-      const listDone = applyFilters();
-      loadOverview(gen);
-      await listDone;
+      // 2. Everything else, 100 at a time, strongest link first
+      for (const h of state.harvesters) {
+        while (!h.done && bucketLoaded(h.bucket) < (h.total || 0)) {
+          const items = await h.next(3, isStale);
+          if (isStale()) return;
+          mergeItems(items, h.bucket);
+        }
+      }
+      state.harvestDone = true;
+      flushSnapshotNow();
+      renderAll();
     } catch (err) {
-      if (gen !== state.gen || err.cancelled) return;
-      showFatal(err.fatal || err.status === 422 ? err.message : `Could not load GitHub data: ${err.message}`);
+      if (isStale() || err.cancelled) return;
+      if (err.status === 422 && !state.itemsMap.size) {
+        showFatal(`No GitHub user named @${login} was found. Check the spelling.`);
+      } else if (!state.itemsMap.size) {
+        showFatal(`Could not load GitHub data: ${err.message}`);
+      } else {
+        state.harvestError = err.message;
+        renderAll();
+      }
     } finally {
-      if (gen === state.gen) {
+      if (!isStale()) {
         dom.btnSearch.disabled = false;
         dom.btnSearch.textContent = "Track";
       }
     }
   }
 
+  async function firstPages(h, snap, isStale) {
+    let items = await h.next(0, isStale);
+    if (isStale()) return;
+    mergeItems(items, h.bucket);
+    state.counts[h.bucket] = h.total;
+    renderOverview();
+    populateRoleFilter();
+    if (!snap) return;
+    // Catch up on everything updated since the saved copy
+    while (!h.done && items.length && items[items.length - 1].updatedAt > snap.syncedAt) {
+      items = await h.next(1, isStale);
+      if (isStale()) return;
+      mergeItems(items, h.bucket);
+    }
+    // Continue the full load from the oldest saved item in this bucket
+    if (!h.done) {
+      let oldest = null;
+      for (const it of state.itemsMap.values()) if (it.bucket === h.bucket && (!oldest || it.updatedAt < oldest)) oldest = it.updatedAt;
+      if (oldest) h.resumeBefore(oldest);
+    }
+  }
+
+  function bucketLoaded(bucket) {
+    let n = 0;
+    for (const it of state.itemsMap.values()) if (it.bucket === bucket) n++;
+    return n;
+  }
+
+  function mergeItems(items, bucket) {
+    for (const it of items) {
+      it.bucket = bucket;
+      state.itemsMap.set(it.id, it);
+    }
+    scheduleSnapshot();
+    scheduleRender();
+  }
+
+  function flushSnapshotNow() {
+    if (snapshotTimer) {
+      clearTimeout(snapshotTimer);
+      snapshotTimer = null;
+      saveSnapshot();
+    }
+  }
+
+  // Background counts that need their own search
+  function loadExtraCounts(gen) {
+    const u = state.login;
+    const isStale = () => gen !== state.gen;
+    const jobs = { prs: [`author:${u} is:pr`, 1], merged: [`author:${u} is:pr is:merged`, 2], openIssues: [`author:${u} is:issue is:open`, 2] };
+    for (const [key, [q, priority]] of Object.entries(jobs)) {
+      countQuery(q, priority, isStale)
+        .then((n) => {
+          if (isStale()) return;
+          state.counts[key] = n;
+          renderOverview();
+          renderBanner();
+        })
+        .catch(() => {});
+    }
+  }
+
   function showFatal(message) {
-    state.status = `⚠ ${message}`;
+    setBanner(`⚠ ${message}`, 0);
     dom.listLoading.style.display = "none";
     dom.listContainer.innerHTML = "";
     dom.listEmpty.style.display = "block";
     dom.listEmpty.querySelector("p").textContent = message;
     dom.telemetryBar.style.display = "none";
+    dom.btnSearch.disabled = false;
+    dom.btnSearch.textContent = "Track";
     updatePagerUI(0);
-    renderBanner();
   }
 
   function renderProfile() {
@@ -825,126 +914,147 @@
     dom.profileLine.style.display = "flex";
   }
 
-  // ── Exact lifetime numbers (one count request each) ─────────────────
-  function loadOverview(gen) {
-    const u = state.login;
-    const isStale = () => gen !== state.gen;
-    const queries = {
-      total: [`involves:${u}`, 1],
-      prs: [`author:${u} is:pr`, 1],
-      issues: [`author:${u} is:issue`, 1],
-      reviewed: [bucketExpr("reviewed", u), 1],
-      commented: [bucketExpr("commented", u), 1],
-      merged: [`author:${u} is:pr is:merged`, 3],
-      openIssues: [`author:${u} is:issue is:open`, 3],
-    };
-    const jobs = Object.entries(queries).map(([key, [q, priority]]) =>
-      countQuery(q, priority, isStale).then((n) => {
-        if (gen !== state.gen) return;
-        state.overview[key] = n;
-        renderOverview();
-        renderRelChips();
-      })
-    );
-    Promise.allSettled(jobs.slice(0, 5)).then(() => {
-      if (gen !== state.gen) return;
-      state.overviewDone = true;
-      markReady();
-    });
+  // ── Header numbers (exact, from GitHub counts) ──────────────────────
+  function bucketTotalsKnown() {
+    return REL_ORDER.every((b) => state.counts[b] !== undefined);
   }
 
-  function overviewDerived() {
-    const o = state.overview;
-    const d = {};
-    if (o.prs !== undefined && o.issues !== undefined) d.created = o.prs + o.issues;
-    // "My work" total comes free with the first list page; Assigned = the remainder
-    if (o.work !== undefined && d.created !== undefined && o.reviewed !== undefined && o.commented !== undefined) {
-      d.assigned = Math.max(0, o.work - d.created - o.reviewed - o.commented);
-    }
-    d.reviewed = o.reviewed;
-    d.commented = o.commented;
-    const known = ["created", "assigned", "reviewed", "commented"];
-    if (o.total !== undefined && known.every((k) => d[k] !== undefined)) {
-      d.other = Math.max(0, o.total - known.reduce((s, k) => s + d[k], 0));
-    }
-    if (WORK_SET.every((k) => d[k] !== undefined)) d.work = WORK_SET.reduce((s, k) => s + d[k], 0);
-    d.all = o.total;
-    return d;
+  function lifetimeTotal() {
+    return bucketTotalsKnown() ? REL_ORDER.reduce((s, b) => s + state.counts[b], 0) : undefined;
   }
 
   function renderOverview() {
-    const o = state.overview;
-    dom.statTotal.textContent = fmt(o.total);
-    dom.statPrs.textContent = fmt(o.prs);
-    dom.statPrsSub.textContent =
-      o.prs !== undefined && o.merged !== undefined
-        ? `${o.prs ? Math.round((o.merged / o.prs) * 100) : 0}% merged · ${fmt(o.merged)} merged`
-        : " ";
-    dom.statIssues.textContent = fmt(o.issues);
-    dom.statIssuesSub.textContent =
-      o.issues !== undefined && o.openIssues !== undefined
-        ? `${fmt(o.openIssues)} open · ${fmt(o.issues - o.openIssues)} closed`
-        : " ";
-    dom.statReviews.textContent = fmt(o.reviewed);
-    dom.statComments.textContent = fmt(o.commented);
+    const c = state.counts;
+    dom.statTotal.textContent = fmt(lifetimeTotal());
+    dom.statPrs.textContent = fmt(c.prs);
+    dom.statPrsSub.textContent = c.prs !== undefined && c.merged !== undefined ? `${c.prs ? Math.round((c.merged / c.prs) * 100) : 0}% merged · ${fmt(c.merged)} merged` : " ";
+    const issues = c.created !== undefined && c.prs !== undefined ? c.created - c.prs : undefined;
+    dom.statIssues.textContent = fmt(issues);
+    dom.statIssuesSub.textContent = issues !== undefined && c.openIssues !== undefined ? `${fmt(c.openIssues)} open · ${fmt(issues - c.openIssues)} closed` : " ";
+    dom.statReviews.textContent = fmt(c.reviewed);
+    dom.statComments.textContent = fmt(c.commented);
   }
 
-  function markReady() {
-    if (state.readyAt || !state.listQuery || state.listTotal === null) return;
-    if (!state.overviewDone) return;
-    state.readyAt = performance.now();
-    const secs = ((state.readyAt - state.startedAt) / 1000).toFixed(1);
-    state.status = `✓ Exact lifetime numbers for @${state.login} · loaded in ${secs}s`;
-    renderBanner();
+  // ── Status banner (no countdowns, no rate-limit talk) ───────────────
+  function setBanner(text, pct) {
+    dom.streamText.textContent = text;
+    dom.streamProgressFill.style.width = `${pct}%`;
   }
 
-  // ── Relationship chips ──────────────────────────────────────────────
-  function renderRelChips() {
-    const counts = isDefaultScope() ? overviewDerived() : {};
-    const sel = state.filters.rel;
-    dom.relChips.innerHTML = REL_ORDER.map((r) => {
-      const n = counts[r];
-      return `<button type="button" class="rel-chip ${sel.has(r) ? "active" : ""}" data-rel="${r}" title="${escapeHtml(REL_HINT[r])}" aria-pressed="${sel.has(r)}">
-        <span class="rel-dot rel-${r}"></span>${REL_LABEL[r]}${n !== undefined ? ` <span class="rel-count">${fmt(n)}</span>` : ""}
-      </button>`;
-    }).join("");
-    const isWork = sel.size === WORK_SET.length && WORK_SET.every((r) => sel.has(r));
-    const isAll = sel.size === REL_ORDER.length;
-    dom.relPresets.forEach((btn) => {
-      const preset = btn.dataset.preset;
-      btn.classList.toggle("active", preset === "work" ? isWork : isAll);
-      const span = btn.querySelector(".rel-count");
-      const n = counts[preset];
-      span.textContent = n !== undefined ? fmt(n) : "";
-    });
-  }
-
-  dom.relChips.addEventListener("click", (e) => {
-    const chip = e.target.closest(".rel-chip");
-    if (!chip) return;
-    const rel = chip.dataset.rel;
-    const sel = state.filters.rel;
-    const isWork = sel.size === WORK_SET.length && WORK_SET.every((r) => sel.has(r));
-    if (isWork || sel.size === REL_ORDER.length) {
-      // From a preset, clicking a chip focuses on just that bucket
-      state.filters.rel = new Set([rel]);
-    } else if (sel.has(rel)) {
-      if (sel.size > 1) sel.delete(rel);
-    } else {
-      sel.add(rel);
+  function renderBanner() {
+    if (!state.login || dom.telemetryBar.style.display === "none") return;
+    const total = lifetimeTotal();
+    const loaded = state.itemsMap.size;
+    if (!state.listReady) return setBanner(`Fetching @${state.login} from GitHub…`, 5);
+    if (state.harvestDone || (total !== undefined && loaded >= total)) {
+      return setBanner(`✓ All ${fmt(loaded)} lifetime items loaded for @${state.login}`, 100);
     }
+    const pct = total ? Math.max(5, Math.min(99, Math.round((loaded / total) * 100))) : 10;
+    setBanner(`✓ Lifetime numbers ready · loading full list: ${fmt(loaded)} of ${fmt(total)}`, pct);
+  }
+
+  // ── Filters ─────────────────────────────────────────────────────────
+  const ROLE_TEXT = {
+    created: "Created",
+    assigned: "Assigned",
+    reviewed: "Reviewed",
+    commented: "Commented",
+    other: "Mentioned / other",
+  };
+
+  function populateRoleFilter() {
+    const u = state.login || "user";
+    const total = lifetimeTotal();
+    dom.filterRole.title = `How @${u} is involved. Each item is counted once, under its strongest link: created › assigned › reviewed › commented › mentioned.`;
+    let html = `<option value="all">Any role${total !== undefined ? ` (${fmt(total)})` : ""}</option>`;
+    for (const b of REL_ORDER) {
+      const n = state.counts[b];
+      html += `<option value="${b}">${escapeHtml(ROLE_TEXT[b].replace("{u}", u))}${n !== undefined ? ` (${fmt(n)})` : ""}</option>`;
+    }
+    dom.filterRole.innerHTML = html;
+    dom.filterRole.value = state.filters.role;
+  }
+
+  function populateYears() {
+    const current = state.dateRange;
+    const nowYear = new Date().getFullYear();
+    const fromYear = state.profile?.created_at ? new Date(state.profile.created_at).getFullYear() : nowYear - 3;
+    let html = `<option value="all">Lifetime (All Time)</option>`;
+    for (let y = nowYear; y >= fromYear; y--) html += `<option value="${y}">Year ${y}</option>`;
+    html += `<option value="90d">Last 90 Days</option><option value="30d">Last 30 Days</option>`;
+    dom.dateRangeSelect.innerHTML = html;
+    dom.dateRangeSelect.value = current;
+    if (dom.dateRangeSelect.value !== current) {
+      state.dateRange = "all";
+      dom.dateRangeSelect.value = "all";
+    }
+  }
+
+  function populateRepoFilter() {
+    const all = getItemsForCurrentDateRange();
+    const counts = countBy(all, (i) => i.repo);
+    const current = state.filters.repo;
+    let html = `<option value="all">All Repositories (${fmt(all.length)})</option>`;
+    const sorted = Array.from(counts.entries()).sort((a, b) => b[1] - a[1]);
+    if (current !== "all" && !counts.has(current)) html += `<option value="${escapeHtml(current)}">${escapeHtml(current)} (0)</option>`;
+    for (const [repo, n] of sorted) html += `<option value="${escapeHtml(repo)}">${escapeHtml(repo)} (${fmt(n)})</option>`;
+    dom.filterRepo.innerHTML = html;
+    dom.filterRepo.value = current;
+  }
+
+  function syncStatusOptions() {
+    const kind = state.filters.kind;
+    const opts = [["all", "All States"], ["open", "Open"]];
+    if (kind !== "issue") opts.push(["draft", "Draft"], ["merged", "Merged"]);
+    opts.push(["closed", "Closed"]);
+    if (kind !== "pr") opts.push(["not-planned", "Not planned"]);
+    if (!opts.some(([v]) => v === state.filters.status)) state.filters.status = "all";
+    dom.filterStatus.innerHTML = opts.map(([v, l]) => `<option value="${v}">${l}</option>`).join("");
+    dom.filterStatus.value = state.filters.status;
+  }
+
+  function getFilteredItems() {
+    const f = state.filters;
+    let items = getItemsForCurrentDateRange();
+    if (f.kind !== "all") items = items.filter((i) => i.kind === f.kind);
+    if (f.status !== "all") items = items.filter((i) => i.status === f.status);
+    if (f.role !== "all") items = items.filter((i) => i.bucket === f.role);
+    if (f.repo !== "all") items = items.filter((i) => i.repo === f.repo);
+    const q = f.text.toLowerCase().trim();
+    if (q) items = items.filter((i) => i.title.toLowerCase().includes(q) || i.repo.toLowerCase().includes(q) || `#${i.number}`.includes(q.replace(/^#?/, "#")));
+    items.sort((a, b) => (a.updatedAt < b.updatedAt ? 1 : a.updatedAt > b.updatedAt ? -1 : 0));
+    return items;
+  }
+
+  function onFiltersChanged() {
+    state.currentPage = 1;
+    renderAll();
+  }
+
+  dom.filterKind.addEventListener("change", (e) => {
+    state.filters.kind = e.target.value;
+    syncStatusOptions();
     onFiltersChanged();
   });
-
-  dom.relPresets.forEach((btn) =>
-    btn.addEventListener("click", () => {
-      state.filters.rel = new Set(btn.dataset.preset === "all" ? REL_ORDER : WORK_SET);
-      onFiltersChanged();
-    })
-  );
-
-  dom.relHelp.addEventListener("click", () => {
-    dom.relHelpBox.style.display = dom.relHelpBox.style.display === "none" ? "block" : "none";
+  dom.filterStatus.addEventListener("change", (e) => {
+    state.filters.status = e.target.value;
+    onFiltersChanged();
+  });
+  dom.filterRole.addEventListener("change", (e) => {
+    state.filters.role = e.target.value;
+    onFiltersChanged();
+  });
+  dom.filterRepo.addEventListener("change", (e) => {
+    state.filters.repo = e.target.value;
+    onFiltersChanged();
+  });
+  dom.filterText.addEventListener("input", (e) => {
+    state.filters.text = e.target.value;
+    onFiltersChanged();
+  });
+  dom.dateRangeSelect.addEventListener("change", (e) => {
+    state.dateRange = e.target.value;
+    onFiltersChanged();
   });
 
   // Overview cards act as shortcuts
@@ -952,200 +1062,71 @@
     const card = e.target.closest("[data-card]");
     if (!card || !state.login) return;
     const presets = {
-      total: { rel: REL_ORDER, type: "all" },
-      prs: { rel: ["created"], type: "pr" },
-      issues: { rel: ["created"], type: "issue" },
-      reviewed: { rel: ["reviewed"], type: "pr" },
-      commented: { rel: ["commented"], type: "all" },
+      total: { kind: "all", role: "all" },
+      prs: { kind: "pr", role: "created" },
+      issues: { kind: "issue", role: "created" },
+      reviewed: { kind: "pr", role: "reviewed" },
+      commented: { kind: "all", role: "commented" },
     };
-    const p = presets[card.dataset.card];
-    Object.assign(state.filters, { rel: new Set(p.rel), type: p.type, state: "all", time: "all", repo: "all", text: "" });
-    syncFilterControls();
+    Object.assign(state.filters, presets[card.dataset.card], { status: "all", repo: "all" });
+    dom.filterKind.value = state.filters.kind;
+    dom.filterRole.value = state.filters.role;
+    syncStatusOptions();
     switchView("feed");
     onFiltersChanged();
     dom.mainContent.scrollIntoView({ behavior: "smooth", block: "start" });
   });
 
-  // ── Filters ─────────────────────────────────────────────────────────
-  function syncFilterControls() {
-    const f = state.filters;
-    dom.filterType.value = f.type;
-    dom.filterState.value = f.state;
-    dom.dateRangeSelect.value = f.time;
-    dom.filterText.value = f.text;
+  // ── Rendering (throttled while data streams in) ─────────────────────
+  let renderTimer = null;
+  function scheduleRender() {
+    if (renderTimer) return;
+    renderTimer = setTimeout(() => {
+      renderTimer = null;
+      renderAll();
+    }, 250);
+  }
+
+  function renderAll() {
+    renderBanner();
     populateRepoFilter();
-    // Disable states that can't apply to the chosen type
-    for (const opt of dom.filterState.options) {
-      opt.disabled =
-        (f.type === "issue" && (opt.value === "merged" || opt.value === "draft")) ||
-        (f.type === "pr" && opt.value === "not_planned");
+    renderList();
+    if (state.viewMode === "analytics") renderAnalytics();
+  }
+
+  function renderList() {
+    const filtered = getFilteredItems();
+    const total = filtered.length;
+    if (!state.listReady && !total) {
+      dom.listLoading.style.display = "flex";
+      dom.listEmpty.style.display = "none";
+      updatePagerUI(0);
+      return;
     }
-  }
-
-  function populateTimeframe() {
-    const current = state.filters.time;
-    const nowYear = new Date().getFullYear();
-    const fromYear = state.profile?.created_at ? new Date(state.profile.created_at).getFullYear() : nowYear - 5;
-    let html = `<option value="all">Lifetime (All Time)</option>
-      <option value="30d">Last 30 days</option>
-      <option value="90d">Last 90 days</option>
-      <option value="365d">Last 12 months</option>`;
-    for (let y = nowYear; y >= fromYear; y--) html += `<option value="y${y}">${y}</option>`;
-    dom.dateRangeSelect.innerHTML = html;
-    dom.dateRangeSelect.value = current;
-    if (dom.dateRangeSelect.value !== current) {
-      state.filters.time = "all";
-      dom.dateRangeSelect.value = "all";
-    }
-  }
-
-  function populateRepoFilter() {
-    const current = state.filters.repo;
-    const repos = Array.from(state.seenRepos.entries()).sort((a, b) => b[1] - a[1]).slice(0, 300);
-    let html = `<option value="all">All repositories</option>`;
-    if (current !== "all" && !state.seenRepos.has(current)) html += `<option value="${escapeHtml(current)}">${escapeHtml(current)}</option>`;
-    for (const [repo] of repos) html += `<option value="${escapeHtml(repo)}">${escapeHtml(repo)}</option>`;
-    dom.filterRepo.innerHTML = html;
-    dom.filterRepo.value = current;
-  }
-
-  function onFiltersChanged() {
-    const f = state.filters;
-    if (f.type === "issue" && (f.state === "merged" || f.state === "draft")) f.state = "all";
-    if (f.type === "pr" && f.state === "not_planned") f.state = "all";
-    syncFilterControls();
-    renderRelChips();
-    applyFilters();
-    if (state.viewMode === "analytics") loadAnalytics();
-  }
-
-  dom.filterType.addEventListener("change", (e) => {
-    state.filters.type = e.target.value;
-    onFiltersChanged();
-  });
-  dom.filterState.addEventListener("change", (e) => {
-    state.filters.state = e.target.value;
-    if (["merged", "draft"].includes(e.target.value)) state.filters.type = "pr";
-    if (e.target.value === "not_planned") state.filters.type = "issue";
-    onFiltersChanged();
-  });
-  dom.filterRepo.addEventListener("change", (e) => {
-    state.filters.repo = e.target.value;
-    onFiltersChanged();
-  });
-  dom.dateRangeSelect.addEventListener("change", (e) => {
-    state.filters.time = e.target.value;
-    onFiltersChanged();
-  });
-  let textTimer = null;
-  dom.filterText.addEventListener("input", (e) => {
-    clearTimeout(textTimer);
-    textTimer = setTimeout(() => {
-      if (cleanText(e.target.value) === cleanText(state.filters.text)) return;
-      state.filters.text = e.target.value;
-      onFiltersChanged();
-    }, 450);
-  });
-
-  // ── List ────────────────────────────────────────────────────────────
-  function streamsFor(q) {
-    let s = state.streams.get(q);
-    if (!s) {
-      s = { fwd: new ResultStream(q, "desc"), rev: null };
-      state.streams.set(q, s);
-    }
-    return s;
-  }
-
-  async function getPageRows(q, pageNum, isStale) {
-    const s = streamsFor(q);
-    if (s.fwd.total === null) await s.fwd.fetchNext(0, isStale);
-    const total = s.fwd.total;
-    const start = (pageNum - 1) * FEED_PAGE_SIZE;
-    const end = Math.min(start + FEED_PAGE_SIZE, total);
-    if (s.fwd.rows.length >= end || s.fwd.done) return { rows: s.fwd.rows.slice(start, end), total };
-
-    // Far pages: read from whichever end is closer (newest-first or oldest-first)
-    const fwdCost = Math.ceil((end - s.fwd.rows.length) / API_PER_PAGE);
-    const revNeed = total - start;
-    if (!s.rev) s.rev = new ResultStream(q, "asc");
-    const revCost = Math.ceil((revNeed - s.rev.rows.length) / API_PER_PAGE);
-    const progress = (loaded, need) => {
-      if (isStale()) return;
-      dom.bottomSummary.textContent = `Loading page ${pageNum}… (${fmt(Math.min(loaded, need))} of ${fmt(need)} scanned)`;
-    };
-    if (revCost < fwdCost) {
-      await s.rev.ensure(revNeed, 0, isStale, (n) => progress(n, revNeed));
-      const rows = [];
-      for (let i = start; i < end; i++) {
-        const r = s.rev.rows[total - 1 - i];
-        if (r) rows.push(r);
-      }
-      return { rows, total };
-    }
-    await s.fwd.ensure(end, 0, isStale, (n) => progress(n, end));
-    return { rows: s.fwd.rows.slice(start, end), total };
-  }
-
-  async function applyFilters() {
-    if (!state.login) return;
-    state.listQuery = buildQuery(state.filters, state.login);
-    state.currentPage = 1;
-    await renderList();
-  }
-
-  async function renderList() {
-    const q = state.listQuery;
-    const page = state.currentPage;
-    const gen = state.gen;
-    const isStale = () => gen !== state.gen || q !== state.listQuery;
-    const isCurrent = () => !isStale() && page === state.currentPage;
-
-    dom.listEmpty.style.display = "none";
-    dom.listLoading.style.display = "flex";
-    dom.listContainer.style.opacity = "0.45";
-
-    try {
-      const { rows, total } = await getPageRows(q, page, isStale);
-      if (!isCurrent()) return;
-      state.listTotal = total;
-      state.pageRows = rows;
-      if (q === buildQuery({ ...state.filters, rel: new Set(WORK_SET), type: "all", state: "all", time: "all", repo: "all", text: "" }, state.login)) {
-        state.overview.work = total;
-        renderRelChips();
-      }
-      for (const r of rows) noteRepo(r.repo);
-      populateRepoFilter();
-
-      dom.listLoading.style.display = "none";
-      dom.listContainer.style.opacity = "1";
-      dom.listContainer.innerHTML = "";
-      if (!rows.length) {
-        dom.listEmpty.style.display = "block";
-        dom.listEmpty.querySelector("p").textContent = total ? "No more results." : "Nothing matches these filters.";
-      }
-      const frag = document.createDocumentFragment();
-      const rel = new Set(state.filters.rel);
-      for (const item of rows) frag.appendChild(createItemRow(item, rel));
-      dom.listContainer.appendChild(frag);
-      updatePagerUI(total);
-      markReady();
-      enrichRoles(rows, rel, isCurrent);
-    } catch (err) {
-      if (err.cancelled || !isCurrent()) return;
-      dom.listLoading.style.display = "none";
-      dom.listContainer.style.opacity = "1";
+    dom.listLoading.style.display = "none";
+    if (!total) {
       dom.listContainer.innerHTML = "";
       dom.listEmpty.style.display = "block";
-      const msg =
-        err.status === 422
-          ? state.overview.total === undefined && !state.profile
-            ? `No GitHub user named @${state.login} was found. Check the spelling.`
-            : "GitHub couldn't run this search. Try simpler search words."
-          : `Could not load results: ${err.message}`;
-      dom.listEmpty.querySelector("p").textContent = msg;
+      dom.listEmpty.querySelector("p").textContent = state.harvestDone ? "No matching GitHub work found under current filters." : "Nothing matches yet — the rest of the list is still loading.";
       updatePagerUI(0);
+      return;
     }
+    dom.listEmpty.style.display = "none";
+    const totalPages = Math.ceil(total / state.pageSize);
+    state.currentPage = Math.min(Math.max(1, state.currentPage), totalPages);
+    const start = (state.currentPage - 1) * state.pageSize;
+    const pageItems = filtered.slice(start, start + state.pageSize);
+
+    // Keep open previews and scroll position: only rebuild if the page changed
+    const signature = pageItems.map((i) => `${i.id}|${i.updatedAt}|${i.bucket}`).join(",");
+    if (signature !== dom.listContainer.dataset.signature) {
+      dom.listContainer.dataset.signature = signature;
+      const frag = document.createDocumentFragment();
+      for (const item of pageItems) frag.appendChild(createItemRow(item));
+      dom.listContainer.innerHTML = "";
+      dom.listContainer.appendChild(frag);
+    }
+    updatePagerUI(total);
   }
 
   function updatePagerUI(total) {
@@ -1157,9 +1138,9 @@
       dom.bottomSummary.textContent = "0 items";
       return;
     }
-    const totalPages = Math.ceil(total / FEED_PAGE_SIZE);
-    const start = (state.currentPage - 1) * FEED_PAGE_SIZE + 1;
-    const end = Math.min(state.currentPage * FEED_PAGE_SIZE, total);
+    const totalPages = Math.ceil(total / state.pageSize);
+    const start = (state.currentPage - 1) * state.pageSize + 1;
+    const end = Math.min(state.currentPage * state.pageSize, total);
     dom.pagerCount.textContent = `${fmt(start)}–${fmt(end)} of ${fmt(total)}`;
     dom.pagerPrev.disabled = state.currentPage <= 1;
     dom.pagerNext.disabled = state.currentPage >= totalPages;
@@ -1178,7 +1159,9 @@
       if (endPage < totalPages - 1) addEllipsis();
       addPageButton(totalPages);
     }
-    dom.bottomSummary.textContent = `Page ${fmt(state.currentPage)} of ${fmt(totalPages)} · newest activity first`;
+    const loadedAll = state.harvestDone || (lifetimeTotal() !== undefined && state.itemsMap.size >= lifetimeTotal());
+    dom.bottomSummary.textContent = `Page ${fmt(state.currentPage)} of ${fmt(totalPages)} · 50 items/page` +
+      (loadedAll ? "" : ` · more arriving (${fmt(state.itemsMap.size)} of ${fmt(lifetimeTotal())} loaded so far)`);
   }
 
   function goToPage(p) {
@@ -1208,96 +1191,36 @@
     if (state.currentPage > 1) goToPage(state.currentPage - 1);
   });
   dom.pagerNext.addEventListener("click", () => {
-    const totalPages = Math.ceil((state.listTotal || 0) / FEED_PAGE_SIZE);
+    const totalPages = Math.ceil(getFilteredItems().length / state.pageSize);
     if (state.currentPage < totalPages) goToPage(state.currentPage + 1);
   });
 
-  // ── Relationship tags per row ───────────────────────────────────────
-  // Primary = the one bucket the row is counted under. Secondary = other links
-  // (filled in for free when the preview conversation loads).
-  function knownRoles(item) {
-    let set = state.roles.get(item.id);
-    if (!set) {
-      set = new Set();
-      state.roles.set(item.id, set);
-    }
-    const u = state.login.toLowerCase();
-    if (item.author.toLowerCase() === u) set.add("created");
-    if (item.assignees.includes(u)) set.add("assigned");
-    return set;
+  // ── How the person is linked to a row (plain words) ─────────────────
+  const ROLE_VERB = { assigned: "assigned", reviewed: "reviewed", commented: "commented", mentioned: "mentioned", other: "mentioned" };
+
+  function roleTagHtml(item) {
+    if (item.bucket === "created" || !item.bucket) return "";
+    const extra = state.linkCache.get(item.id);
+    const verbs = [ROLE_VERB[item.bucket]];
+    if (extra) for (const r of ["assigned", "reviewed", "commented", "mentioned"]) if (extra.has(r) && !verbs.includes(ROLE_VERB[r])) verbs.push(ROLE_VERB[r]);
+    const text = item.bucket === "other" && !extra ? "mentioned / linked" : verbs.join(" · ");
+    return `<span class="subline-tag role-note role-${item.bucket}" title="How @${escapeHtml(state.login)} is involved">★ @${escapeHtml(state.login)} ${escapeHtml(text)}</span>`;
   }
 
-  function primaryBucket(item, rel) {
-    const roles = knownRoles(item);
-    if (roles.has("created")) return "created";
-    if (roles.has("assigned")) return "assigned";
-    if (state.primary.has(item.id)) return state.primary.get(item.id);
-    // Not created/assigned: if the query only allows one remaining bucket, that's it
-    const left = ["reviewed", "commented", "other"].filter((b) => rel.has(b) && (b !== "reviewed" || item.kind === "pr"));
-    if (left.length === 1) return left[0];
-    for (const b of ["reviewed", "commented"]) if (roles.has(b)) return b;
-    return null;
-  }
-
-  function roleTagsHtml(item, rel) {
-    const primary = primaryBucket(item, rel);
-    if (!primary) return `<span class="role-tag pending" title="Checking how they're linked…">…</span>`;
-    const roles = knownRoles(item);
-    const extras = ["created", "assigned", "reviewed", "commented", "mentioned"].filter((r) => r !== primary && roles.has(r));
-    return (
-      `<span class="role-tag primary rel-${primary}" title="Counted under: ${escapeHtml(REL_HINT[primary])}">${escapeHtml(REL_LABEL[primary])}</span>` +
-      extras.map((r) => `<span class="role-tag rel-${r === "mentioned" ? "other" : r}" title="Also: ${escapeHtml(REL_HINT[r])}">${REL_LABEL[r]}</span>`).join("")
-    );
-  }
-
-  // Background (low priority): at most 2 searches limited to this page's
-  // time window work out the bucket of rows that aren't created/assigned.
-  async function enrichRoles(rows, rel, isCurrent) {
-    const u = state.login;
-    const todo = rows.filter((r) => !primaryBucket(r, rel));
-    if (!todo.length) return;
-    const times = todo.map((r) => r.updatedAt).sort();
-    const range = `updated:${times[0]}..${times[times.length - 1]}`;
-    const narrow = [typeQualifier(state.filters.type), state.filters.repo !== "all" ? `repo:${state.filters.repo}` : ""].filter(Boolean).join(" ");
-    const lookup = (qual) =>
-      apiGet(searchPath(`${qual}:${u} ${range} ${narrow}`.trim()), { priority: 2, isStale: () => !isCurrent() }).then((d) => ({
-        ids: new Set((d.items || []).map((x) => x.html_url)),
-        complete: (d.total_count || 0) <= API_PER_PAGE,
-      }));
-    try {
-      const needReviewed = rel.has("reviewed") && todo.some((r) => r.kind === "pr");
-      const needCommented = rel.has("commented") && rel.has("other");
-      const [rev, com] = await Promise.all([needReviewed ? lookup("reviewed-by") : null, needCommented ? lookup("commenter") : null]);
-      for (const r of todo) {
-        if (rev && rev.ids.has(r.id)) {
-          state.primary.set(r.id, "reviewed");
-          continue;
-        }
-        if (rev && !rev.complete && r.kind === "pr") continue; // unknown, keep "…"
-        if (!rel.has("commented")) state.primary.set(r.id, "other");
-        else if (!com) state.primary.set(r.id, "commented");
-        else if (com.ids.has(r.id)) state.primary.set(r.id, "commented");
-        else if (com.complete) state.primary.set(r.id, "other");
-      }
-    } catch {
-      /* tags stay "…"; the preview still shows every link */
-    }
-    refreshRoleTags(todo, rel);
-  }
-
-  function refreshRoleTags(items, rel) {
+  function refreshRoleTags(items) {
     for (const item of items) {
-      const el = dom.listContainer.querySelector(`.item-row[data-id="${CSS.escape(item.id)}"] .role-tags`);
-      if (el) el.innerHTML = roleTagsHtml(item, rel);
+      const el = dom.listContainer.querySelector(`.item-row[data-id="${CSS.escape(item.id)}"] .role-slot`);
+      if (el) el.innerHTML = roleTagHtml(item);
     }
   }
+  const LINK_LABEL = { created: "Created", assigned: "Assigned", reviewed: "Reviewed", commented: "Commented", mentioned: "Mentioned" };
 
   // ── Row builder ─────────────────────────────────────────────────────
   const ICON_PR = `<svg class="type-icon" viewBox="0 0 16 16" fill="currentColor"><path fill-rule="evenodd" d="M7.177 3.073L9.573.677A.25.25 0 0110 .854v4.792a.25.25 0 01-.427.177L7.177 3.427a.25.25 0 010-.354zM3.75 2.5a.75.75 0 100 1.5.75.75 0 000-1.5zm-2.25.75a2.25 2.25 0 113 2.122v5.256a2.251 2.251 0 11-1.5 0V5.372A2.25 2.25 0 011.5 3.25zM11 2.5h-1V4h1a1 1 0 011 1v5.128a2.251 2.251 0 101.5 0V5a2.5 2.5 0 00-2.5-2.5z"></path></svg>`;
   const ICON_ISSUE = `<svg class="type-icon" viewBox="0 0 16 16" fill="currentColor"><path d="M8 9.5a1.5 1.5 0 100-3 1.5 1.5 0 000 3z"></path><path fill-rule="evenodd" d="M8 0a8 8 0 100 16A8 8 0 008 0zM1.5 8a6.5 6.5 0 1113 0 6.5 6.5 0 01-13 0z"></path></svg>`;
   const ICON_EXT = `<svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor"><path fill-rule="evenodd" d="M10.604 1h4.146a.25.25 0 01.25.25v4.146a.25.25 0 01-.427.177L13.03 4.03 9.28 7.78a.75.75 0 01-1.06-1.06l3.75-3.75-1.543-1.543A.25.25 0 0110.604 1zM3.75 2A1.75 1.75 0 002 3.75v8.5c0 .966.784 1.75 1.75 1.75h8.5A1.75 1.75 0 0014 12.25v-3.5a.75.75 0 00-1.5 0v3.5a.25.25 0 01-.25.25h-8.5a.25.25 0 01-.25-.25v-8.5a.25.25 0 01.25-.25h3.5a.75.75 0 000-1.5h-3.5z"></path></svg>`;
 
-  function createItemRow(item, rel) {
+  function createItemRow(item) {
     const row = document.createElement("div");
     row.className = "item-row";
     row.dataset.id = item.id;
@@ -1315,10 +1238,10 @@
               <a href="${escapeHtml(item.url)}" target="_blank" rel="noopener" class="item-title-link">${escapeHtml(item.title)}</a>
             </div>
             <div class="row-subline">
-              <span class="role-tags">${roleTagsHtml(item, rel)}</span>
-              <span>by <strong class="subline-user">${escapeHtml(item.author)}</strong></span>
+              <span>by <strong class="subline-user ${item.bucket === "created" ? "is-self" : ""}">${escapeHtml(item.author)}</strong></span>
               <span>·</span>
               <span title="Comments">💬 ${fmt(item.commentsCount)}</span>
+              <span class="role-slot">${roleTagHtml(item)}</span>
               ${labels.map((l) => `<span class="label-pill" style="--l-color:#${escapeHtml(l.color || "888888")}">${escapeHtml(l.name)}</span>`).join("")}
             </div>
           </div>
@@ -1400,13 +1323,14 @@
   }
 
   function plainBody(text) {
+    if (text === undefined) return `<p class="conv-empty">Loading description…</p>`;
     if (!text || !text.trim()) return `<p class="conv-empty">No description provided.</p>`;
     return `<div class="md-plain">${escapeHtml(text)}</div>`;
   }
 
   // Formatted description (markdown rendered by GitHub); plain text stays if this fails
   async function loadDescription(item, el) {
-    if (!el || !item.body || !item.body.trim()) return;
+    if (!el || (item.body !== undefined && !item.body.trim())) return;
     const [owner, name] = item.repo.split("/");
     try {
       const issue = await apiGet(`/repos/${encodeURIComponent(owner)}/${encodeURIComponent(name)}/issues/${item.number}`, {
@@ -1414,7 +1338,7 @@
         priority: 0,
         html: true,
       });
-      if (issue?.body_html) el.innerHTML = sanitizeHtml(issue.body_html);
+      el.innerHTML = issue?.body_html ? sanitizeHtml(issue.body_html) : `<p class="conv-empty">No description provided.</p>`;
     } catch {
       /* keep plain text */
     }
@@ -1466,7 +1390,10 @@
 
   function noteLinksFromTimeline(item, events, container) {
     const u = state.login.toLowerCase();
-    const roles = knownRoles(item);
+    const roles = state.linkCache.get(item.id) || new Set();
+    state.linkCache.set(item.id, roles);
+    if (item.bucket === "created" || item.author.toLowerCase() === u) roles.add("created");
+    if ((item.assignees || []).includes(u)) roles.add("assigned");
     const mention = new RegExp(`@${u.replace(/[-]/g, "\\-")}\\b`, "i");
     if (mention.test(item.body || "")) roles.add("mentioned");
     for (const e of events) {
@@ -1477,13 +1404,12 @@
       if (e.event === "mentioned" && actor === u) roles.add("mentioned");
       if (e.event === "commented" && actor !== u && mention.test(e.body_html || "")) roles.add("mentioned");
     }
-    const rel = new Set(state.filters.rel);
-    refreshRoleTags([item], rel);
+    refreshRoleTags([item]);
     const links = ["created", "assigned", "reviewed", "commented", "mentioned"].filter((r) => roles.has(r));
     const head = container?.querySelector(".conv-links");
     if (head) {
       head.innerHTML = links.length
-        ? `@${escapeHtml(state.login)}'s links here: ${links.map((r) => `<span class="role-tag primary rel-${r === "mentioned" ? "other" : r}">${REL_LABEL[r]}</span>`).join(" ")}`
+        ? `@${escapeHtml(state.login)}'s links here: ${links.map((r) => `<span class="role-tag primary rel-${r === "mentioned" ? "other" : r}">${LINK_LABEL[r]}</span>`).join(" ")}`
         : "";
     }
   }
@@ -1570,357 +1496,403 @@
     return out.join("");
   }
 
-  // ── Visual analytics ────────────────────────────────────────────────
-  function harvestWindow() {
-    const t = state.filters.time;
-    const y = /^y(\d{4})$/.exec(t);
-    if (y) {
-      const year = Number(y[1]);
-      return { from: new Date(Date.UTC(year, 0, 1)), to: new Date(Date.UTC(year, 11, 31)), year, label: String(year) };
-    }
-    const days = /^(\d+)d$/.exec(t) ? Number(/^(\d+)d$/.exec(t)[1]) : 365;
-    return { from: new Date(Date.now() - days * DAY_MS), to: new Date(), year: null, label: days === 365 ? "last 12 months" : `last ${days} days` };
+  // ── VISUAL ANALYTICS SUITE ──────────────────────────────────────────
+  function renderAnalytics() {
+    const items = getItemsForCurrentDateRange();
+    updateTargets(items);
+    renderHeatmap(items);
+    renderDonutChart(items);
+    renderTopRepos(items);
+    renderYearlyChart(items);
+    renderMonthlyChart(items);
   }
 
-  async function loadAnalytics() {
-    if (state.viewMode !== "analytics" || !state.login) return;
-    const gen = state.gen;
-    const aGen = ++state.analyticsGen;
-    const isStale = () => gen !== state.gen || aGen !== state.analyticsGen;
-    const u = state.login;
-    const tq = timeQualifier(state.filters.time);
-    const t = tq ? ` ${tq}` : "";
-    const o = state.overview;
-    const cq = (q) => countQuery(q, 1, isStale);
+  // 1. Target Tracking Cards (Dynamic Milestones)
+  function updateTargets(items) {
+    // Targets are about what they opened themselves
+    const prs = items.filter((i) => i.kind === "pr" && i.bucket === "created");
+    const mergedPrs = prs.filter((i) => i.status === "merged");
+    const issues = items.filter((i) => i.kind === "issue" && i.bucket === "created");
+    const closedIssues = issues.filter((i) => i.status === "closed" || i.status === "not-planned");
+    const repos = new Set(items.map((i) => i.repo));
 
-    // 1. Targets + PR health (things they opened) — exact counts
-    const lifetime = !tq;
-    const nums = {};
-    const paint = () => {
-      if (isStale()) return;
-      updateTargets(nums);
-      renderDonutChart(nums);
-    };
-    const want = {
-      prs: lifetime && o.prs !== undefined ? Promise.resolve(o.prs) : cq(`author:${u} is:pr${t}`),
-      merged: lifetime && o.merged !== undefined ? Promise.resolve(o.merged) : cq(`author:${u} is:pr is:merged${t}`),
-      openPrs: cq(`author:${u} is:pr is:open${t}`),
-      draft: cq(`author:${u} is:pr is:open draft:true${t}`),
-      issues: lifetime && o.issues !== undefined ? Promise.resolve(o.issues) : cq(`author:${u} is:issue${t}`),
-      openIssues: lifetime && o.openIssues !== undefined ? Promise.resolve(o.openIssues) : cq(`author:${u} is:issue is:open${t}`),
-    };
-    paint();
-    for (const [k, p] of Object.entries(want)) {
-      p.then((n) => {
-        nums[k] = n;
-        paint();
-      }).catch(() => {});
-    }
+    let prMilestone = 50;
+    if (prs.length >= 50 && prs.length < 100) prMilestone = 100;
+    else if (prs.length >= 100 && prs.length < 250) prMilestone = 250;
+    else if (prs.length >= 250 && prs.length < 500) prMilestone = 500;
+    else if (prs.length >= 500 && prs.length < 1000) prMilestone = 1000;
+    else if (prs.length >= 1000) prMilestone = Math.ceil(prs.length / 500) * 500;
 
-    // 2. Year-over-year (exact counts, current relationship + type)
-    const relQ = [relSetExpr(state.filters.rel, u), typeQualifier(state.filters.type)].filter(Boolean).join(" ");
-    const nowYear = new Date().getFullYear();
-    const fromYear = state.profile?.created_at ? new Date(state.profile.created_at).getFullYear() : nowYear - 5;
-    const years = new Map([["earlier", undefined]]); // threads opened before they joined
-    for (let y = fromYear; y <= nowYear; y++) years.set(y, undefined);
-    renderYearlyChart(years);
-    for (const y of years.keys()) {
-      const range = y === "earlier" ? `created:<${fromYear}-01-01` : `created:${y}-01-01..${y}-12-31`;
-      countQuery(`${relQ} ${range}`, 3, isStale)
-        .then((n) => {
-          if (isStale()) return;
-          years.set(y, n);
-          renderYearlyChart(years);
-        })
-        .catch(() => {});
-    }
-
-    // 3. Heatmap, monthly, top repos, reach: items in the window, pulled in background
-    const win = harvestWindow();
-    const hq = [relQ, `created:${isoDay(win.from)}..${isoDay(win.to)}`, state.filters.repo !== "all" ? `repo:${state.filters.repo}` : ""]
-      .filter(Boolean)
-      .join(" ");
-    const stream = streamsFor(hq).fwd;
-    state.harvest = { rows: stream.rows.length, total: stream.total, label: win.label, done: false };
-    const paintHarvest = () => {
-      if (isStale()) return;
-      const items = stream.rows;
-      state.harvest.rows = items.length;
-      state.harvest.total = stream.total;
-      const partial = !stream.done && items.length < Math.min(stream.total || 0, HARVEST_CAP);
-      const capped = (stream.total || 0) > HARVEST_CAP;
-      const note = capped ? ` (newest ${fmt(HARVEST_CAP)} of ${fmt(stream.total)})` : partial ? " (loading…)" : "";
-      renderHeatmap(items, win, note);
-      renderMonthlyChart(items, win);
-      renderTopRepos(items, note);
-      const repos = new Set(items.map((i) => i.repo)).size;
-      nums.repos = repos;
-      nums.reposLabel = `${win.label}${note}`;
-      for (const i of items) if (!state.seenRepos.has(i.repo)) state.seenRepos.set(i.repo, 0);
-      for (const [repo, n] of countBy(items, (i) => i.repo)) state.seenRepos.set(repo, Math.max(state.seenRepos.get(repo) || 0, n));
-      paint();
-      renderBanner();
-    };
-    paintHarvest();
-    try {
-      while (!stream.done && stream.rows.length < HARVEST_CAP) {
-        await stream.fetchNext(2, isStale);
-        paintHarvest();
-      }
-    } catch (err) {
-      if (err.cancelled || isStale()) return;
-    }
-    if (isStale()) return;
-    state.harvest.done = true;
-    paintHarvest();
-    populateRepoFilter();
-  }
-
-  function countBy(items, keyFn) {
-    const m = new Map();
-    for (const i of items) {
-      const k = keyFn(i);
-      m.set(k, (m.get(k) || 0) + 1);
-    }
-    return m;
-  }
-
-  function setTarget(prefix, { val, pct, sub, status, achieved }) {
-    dom[`target${prefix}Val`].textContent = val;
-    dom[`target${prefix}Bar`].style.width = `${pct}%`;
-    dom[`target${prefix}Sub`].textContent = sub;
-    dom[`target${prefix}Status`].textContent = status;
-    dom[`target${prefix}Status`].className = `target-badge ${achieved ? "achieved" : ""}`;
-  }
-
-  function nextMilestone(n, steps) {
-    for (const s of steps) if (n < s) return s;
-    const last = steps[steps.length - 1];
-    return Math.ceil((n + 1) / last) * last;
-  }
-
-  function updateTargets(n) {
-    const prs = n.prs;
-    if (prs !== undefined) {
-      const goal = nextMilestone(prs, [50, 100, 250, 500, 1000, 2500, 5000]);
-      const pct = Math.min(100, Math.round((prs / goal) * 100));
-      setTarget("Pr", { val: fmt(prs), pct, sub: `${fmt(prs)} / ${fmt(goal)} PRs opened (${pct}% of next milestone)`, status: "On Track", achieved: false });
-    } else setTarget("Pr", { val: "…", pct: 0, sub: "Counting…", status: "…" });
-
-    if (prs !== undefined && n.merged !== undefined) {
-      const rate = prs ? Math.round((n.merged / prs) * 100) : 0;
-      setTarget("Merge", {
-        val: `${rate}%`,
-        pct: Math.min(100, Math.round((rate / 80) * 100)),
-        sub: `${fmt(n.merged)} merged of ${fmt(prs)} PRs opened`,
-        status: rate >= 80 ? "Goal Exceeded" : "Goal: 80%",
-        achieved: rate >= 80,
-      });
-    } else setTarget("Merge", { val: "…", pct: 0, sub: "Counting…", status: "…" });
-
-    if (n.issues !== undefined && n.openIssues !== undefined) {
-      const closed = n.issues - n.openIssues;
-      const rate = n.issues ? Math.round((closed / n.issues) * 100) : 0;
-      setTarget("Issue", {
-        val: `${rate}%`,
-        pct: Math.min(100, Math.round((rate / 85) * 100)),
-        sub: `${fmt(closed)} closed of ${fmt(n.issues)} issues opened`,
-        status: rate >= 85 ? "Optimal" : "Goal: 85%",
-        achieved: rate >= 85,
-      });
-    } else setTarget("Issue", { val: "…", pct: 0, sub: "Counting…", status: "…" });
-
-    if (n.repos !== undefined) {
-      const goal = nextMilestone(n.repos, [10, 25, 50, 100, 250]);
-      setTarget("Repo", {
-        val: fmt(n.repos),
-        pct: Math.min(100, Math.round((n.repos / goal) * 100)),
-        sub: `${fmt(n.repos)} repositories · ${n.reposLabel}`,
-        status: `Goal: ${goal} Repos`,
-        achieved: false,
-      });
-    } else setTarget("Repo", { val: "…", pct: 0, sub: "Counting…", status: "…" });
-  }
-
-  function renderHeatmap(items, win, note) {
-    if (!dom.heatmapCalendar) return;
-    dom.heatmapYearPills.innerHTML = "";
-    const dayCounts = countBy(items, (i) => (i.createdAt || "").slice(0, 10));
-
-    let startDate;
-    if (win.year) {
-      startDate = new Date(win.year, 0, 1);
+    const prPct = prMilestone > 0 ? Math.min(100, Math.round((prs.length / prMilestone) * 100)) : 0;
+    dom.targetPrVal.textContent = prs.length;
+    dom.targetPrBar.style.width = `${prPct}%`;
+    dom.targetPrSub.textContent = `${prs.length} / ${prMilestone} PRs (${prPct}% of milestone)`;
+    if (prPct >= 100) {
+      dom.targetPrStatus.textContent = "Achieved";
+      dom.targetPrStatus.className = "target-badge achieved";
     } else {
-      startDate = new Date();
-      startDate.setDate(startDate.getDate() - 364);
+      dom.targetPrStatus.textContent = "On Track";
+      dom.targetPrStatus.className = "target-badge";
     }
-    startDate.setDate(startDate.getDate() - startDate.getDay());
+
+    const mergeRate = prs.length ? Math.round((mergedPrs.length / prs.length) * 100) : 0;
+    const mergeGoal = 80;
+    const mergeBarPct = Math.min(100, Math.round((mergeRate / mergeGoal) * 100));
+    dom.targetMergeVal.textContent = `${mergeRate}%`;
+    dom.targetMergeBar.style.width = `${mergeBarPct}%`;
+    dom.targetMergeSub.textContent = `${mergedPrs.length} merged of ${prs.length} total PRs`;
+    if (mergeRate >= mergeGoal) {
+      dom.targetMergeStatus.textContent = "Goal Exceeded";
+      dom.targetMergeStatus.className = "target-badge achieved";
+    } else {
+      dom.targetMergeStatus.textContent = `Goal: ${mergeGoal}%`;
+      dom.targetMergeStatus.className = "target-badge";
+    }
+
+    const resRate = issues.length ? Math.round((closedIssues.length / issues.length) * 100) : 0;
+    const resGoal = 85;
+    const resBarPct = Math.min(100, Math.round((resRate / resGoal) * 100));
+    dom.targetIssueVal.textContent = `${resRate}%`;
+    dom.targetIssueBar.style.width = `${resBarPct}%`;
+    dom.targetIssueSub.textContent = `${closedIssues.length} closed of ${issues.length} total issues`;
+    if (resRate >= resGoal) {
+      dom.targetIssueStatus.textContent = "Optimal";
+      dom.targetIssueStatus.className = "target-badge achieved";
+    } else {
+      dom.targetIssueStatus.textContent = `Goal: ${resGoal}%`;
+      dom.targetIssueStatus.className = "target-badge";
+    }
+
+    let repoGoal = 10;
+    if (repos.size >= 10 && repos.size < 25) repoGoal = 25;
+    else if (repos.size >= 25 && repos.size < 50) repoGoal = 50;
+    else if (repos.size >= 50 && repos.size < 100) repoGoal = 100;
+    else if (repos.size >= 100) repoGoal = Math.ceil(repos.size / 25) * 25;
+
+    const repoBarPct = Math.min(100, Math.round((repos.size / repoGoal) * 100));
+    dom.targetRepoVal.textContent = repos.size;
+    dom.targetRepoBar.style.width = `${repoBarPct}%`;
+    dom.targetRepoSub.textContent = `${repos.size} distinct repositories`;
+    if (repos.size >= repoGoal) {
+      dom.targetRepoStatus.textContent = "Achieved";
+      dom.targetRepoStatus.className = "target-badge achieved";
+    } else {
+      dom.targetRepoStatus.textContent = `Goal: ${repoGoal} Repos`;
+      dom.targetRepoStatus.className = "target-badge";
+    }
+  }
+
+  // 2. GitHub-style Contribution Heatmap Calendar
+  function renderHeatmap(items) {
+    if (!dom.heatmapCalendar) return;
+
+    const dayCounts = new Map();
+    const yearsFound = new Set();
+
+    for (const item of items) {
+      const d = item.createdAt ? item.createdAt.split("T")[0] : null;
+      if (d) {
+        dayCounts.set(d, (dayCounts.get(d) || 0) + 1);
+        const y = new Date(d).getFullYear();
+        if (!isNaN(y)) yearsFound.add(y);
+      }
+    }
+
+    const sortedYears = Array.from(yearsFound).sort((a, b) => b - a);
+    dom.heatmapYearPills.innerHTML = "";
+
+    const addPill = (yearVal, label) => {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = `year-pill ${state.heatmapYear === String(yearVal) ? "active" : ""}`;
+      btn.textContent = label;
+      btn.addEventListener("click", () => {
+        state.heatmapYear = String(yearVal);
+        renderHeatmap(items);
+      });
+      dom.heatmapYearPills.appendChild(btn);
+    };
+
+    addPill("all", "52 Weeks");
+    for (const y of sortedYears) {
+      addPill(y, String(y));
+    }
+
+    const now = new Date();
+    let startDate = new Date();
+
+    if (state.heatmapYear === "all") {
+      startDate.setDate(now.getDate() - 364);
+      const dayOfWeek = startDate.getDay();
+      startDate.setDate(startDate.getDate() - dayOfWeek);
+    } else {
+      const selectedYear = parseInt(state.heatmapYear, 10);
+      startDate = new Date(selectedYear, 0, 1);
+      const dayOfWeek = startDate.getDay();
+      startDate.setDate(startDate.getDate() - dayOfWeek);
+    }
 
     const cols = 53;
     const rows = 7;
     const cellSize = 10;
-    const stride = 13;
+    const cellGap = 3;
+    const stride = cellSize + cellGap;
     const offsetX = 32;
     const offsetY = 20;
-    const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-    let total = 0;
-    let rects = "";
-    let monthsSvg = "";
+
+    let totalCalendarCount = 0;
+    let rectsSvg = "";
+    let monthLabelsSvg = "";
     let lastMonth = -1;
+
     const curr = new Date(startDate);
-    const today = new Date();
+    const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
     for (let c = 0; c < cols; c++) {
       for (let r = 0; r < rows; r++) {
-        const iso = `${curr.getFullYear()}-${String(curr.getMonth() + 1).padStart(2, "0")}-${String(curr.getDate()).padStart(2, "0")}`;
-        const count = dayCounts.get(iso) || 0;
-        const inRange = curr <= today && (!win.year || curr.getFullYear() === win.year);
-        if (inRange) total += count;
-        const lvl = count >= 10 ? 4 : count >= 6 ? 3 : count >= 3 ? 2 : count >= 1 ? 1 : 0;
+        const isoDate = curr.toISOString().split("T")[0];
+        const count = dayCounts.get(isoDate) || 0;
+        totalCalendarCount += count;
+
+        let lvl = 0;
+        if (count >= 10) lvl = 4;
+        else if (count >= 6) lvl = 3;
+        else if (count >= 3) lvl = 2;
+        else if (count >= 1) lvl = 1;
+
         const x = offsetX + c * stride;
         const y = offsetY + r * stride;
+
         if (r === 0 && curr.getMonth() !== lastMonth) {
           lastMonth = curr.getMonth();
-          monthsSvg += `<text x="${x}" y="12" class="heatmap-month-label">${monthNames[lastMonth]}</text>`;
+          monthLabelsSvg += `<text x="${x}" y="12" class="heatmap-month-label">${monthNames[lastMonth]}</text>`;
         }
+
         const dateStr = curr.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
-        rects += `<rect x="${x}" y="${y}" width="${cellSize}" height="${cellSize}" rx="2" class="lvl-${lvl}" ${inRange ? "" : 'opacity="0.35"'}><title>${count} opened on ${dateStr}</title></rect>`;
+        const label = `${count} contribution${count === 1 ? "" : "s"} on ${dateStr}`;
+
+        rectsSvg += `<rect x="${x}" y="${y}" width="${cellSize}" height="${cellSize}" rx="2" class="lvl-${lvl}"><title>${label}</title></rect>`;
+
         curr.setDate(curr.getDate() + 1);
       }
     }
-    const w = offsetX + cols * stride + 10;
-    const h = offsetY + rows * stride + 10;
-    dom.heatmapCalendar.innerHTML = `<svg viewBox="0 0 ${w} ${h}" width="${w}" height="${h}">${monthsSvg}
-      <text x="6" y="${offsetY + stride + 8}" class="heatmap-day-label">Mon</text>
-      <text x="6" y="${offsetY + 3 * stride + 8}" class="heatmap-day-label">Wed</text>
-      <text x="6" y="${offsetY + 5 * stride + 8}" class="heatmap-day-label">Fri</text>${rects}</svg>`;
-    dom.heatmapSub.textContent = "PRs & issues opened per day, for the selected relationship";
-    dom.heatmapCountLabel.textContent = `${fmt(total)} in ${win.year ? win.year : "the last 52 weeks"}${note}`;
+
+    const svgWidth = offsetX + cols * stride + 10;
+    const svgHeight = offsetY + rows * stride + 10;
+
+    dom.heatmapCalendar.innerHTML = `
+      <svg viewBox="0 0 ${svgWidth} ${svgHeight}" width="${svgWidth}" height="${svgHeight}">
+        ${monthLabelsSvg}
+        <text x="6" y="${offsetY + 1 * stride + 8}" class="heatmap-day-label">Mon</text>
+        <text x="6" y="${offsetY + 3 * stride + 8}" class="heatmap-day-label">Wed</text>
+        <text x="6" y="${offsetY + 5 * stride + 8}" class="heatmap-day-label">Fri</text>
+        ${rectsSvg}
+      </svg>
+    `;
+
+    const periodLabel = state.heatmapYear === "all" ? "last 52 weeks" : `year ${state.heatmapYear}`;
+    dom.heatmapCountLabel.textContent = `${totalCalendarCount} contribution${totalCalendarCount === 1 ? "" : "s"} in ${periodLabel}`;
   }
 
-  function renderDonutChart(n) {
-    if (!dom.donutSvgContainer) return;
-    const ready = n.prs !== undefined && n.merged !== undefined && n.openPrs !== undefined && n.draft !== undefined;
-    const merged = n.merged || 0;
-    const draft = n.draft || 0;
-    const open = Math.max(0, (n.openPrs || 0) - draft);
-    const closed = Math.max(0, (n.prs || 0) - merged - (n.openPrs || 0));
-    const total = ready ? n.prs : 0;
-    const rate = total ? Math.round((merged / total) * 100) : 0;
+  // 3. Pull Request Health & Distribution Donut Chart
+  function renderDonutChart(items) {
+    if (!dom.donutSvgContainer || !dom.donutLegend) return;
+
+    const prs = items.filter((i) => i.kind === "pr" && i.bucket === "created");
+    const merged = prs.filter((i) => i.status === "merged").length;
+    const open = prs.filter((i) => i.status === "open").length;
+    const closed = prs.filter((i) => i.status === "closed").length;
+    const draft = prs.filter((i) => i.status === "draft").length;
+    const totalPrs = prs.length;
+
+    const mergeRate = totalPrs ? Math.round((merged / totalPrs) * 100) : 0;
+
     const slices = [
-      { label: "Merged", count: merged, color: "#a371f7" },
-      { label: "Open", count: open, color: "#3fb950" },
-      { label: "Closed", count: closed, color: "#f85149" },
-      { label: "Draft", count: draft, color: "#8b949e" },
+      { key: "merged", label: "Merged", count: merged, color: "#a371f7" },
+      { key: "open", label: "Open", count: open, color: "#3fb950" },
+      { key: "closed", label: "Closed", count: closed, color: "#f85149" },
+      { key: "draft", label: "Draft", count: draft, color: "#8b949e" },
     ];
+
     const radius = 54;
-    const circ = 2 * Math.PI * radius;
-    let acc = 0;
-    let paths = "";
-    if (!total) {
-      paths = `<circle cx="80" cy="80" r="${radius}" fill="none" stroke="var(--canvas-subtle)" stroke-width="18" />`;
+    const circumference = 2 * Math.PI * radius; // ~339.29
+
+    let accumulatedPct = 0;
+    let pathsSvg = "";
+
+    if (totalPrs === 0) {
+      pathsSvg = `<circle cx="80" cy="80" r="${radius}" fill="none" stroke="var(--canvas-subtle)" stroke-width="18" />`;
     } else {
-      for (const s of slices) {
-        if (!s.count) continue;
-        const pct = s.count / total;
-        paths += `<circle cx="80" cy="80" r="${radius}" fill="none" stroke="${s.color}" stroke-width="18"
-          stroke-dasharray="${(pct * circ).toFixed(2)} ${(circ - pct * circ).toFixed(2)}" stroke-dashoffset="${(-acc * circ).toFixed(2)}"
-          transform="rotate(-90 80 80)"><title>${s.label}: ${fmt(s.count)} (${Math.round(pct * 100)}%)</title></circle>`;
-        acc += pct;
+      for (const slice of slices) {
+        if (slice.count === 0) continue;
+        const pct = slice.count / totalPrs;
+        const dashLen = pct * circumference;
+        const spaceLen = circumference - dashLen;
+        const offset = -accumulatedPct * circumference;
+
+        pathsSvg += `
+          <circle
+            cx="80" cy="80" r="${radius}"
+            fill="none"
+            stroke="${slice.color}"
+            stroke-width="18"
+            stroke-dasharray="${dashLen.toFixed(2)} ${spaceLen.toFixed(2)}"
+            stroke-dashoffset="${offset.toFixed(2)}"
+            transform="rotate(-90 80 80)"
+          >
+            <title>${slice.label}: ${slice.count} (${Math.round(pct * 100)}%)</title>
+          </circle>
+        `;
+        accumulatedPct += pct;
       }
     }
-    dom.donutSvgContainer.innerHTML = `<svg viewBox="0 0 160 160" width="160" height="160">${paths}
-      <text x="80" y="78" text-anchor="middle" font-size="22" font-weight="700" fill="var(--text-white)" font-family="var(--font-mono)">${ready ? `${rate}%` : "…"}</text>
-      <text x="80" y="96" text-anchor="middle" font-size="11" fill="var(--text-faint)" font-family="var(--font-mono)">Merged</text></svg>`;
+
+    dom.donutSvgContainer.innerHTML = `
+      <svg viewBox="0 0 160 160" width="160" height="160">
+        ${pathsSvg}
+        <text x="80" y="78" text-anchor="middle" font-size="22" font-weight="700" fill="var(--text-white)" font-family="var(--font-mono)">${mergeRate}%</text>
+        <text x="80" y="96" text-anchor="middle" font-size="11" fill="var(--text-faint)" font-family="var(--font-mono)">Merged</text>
+      </svg>
+    `;
+
     dom.donutLegend.innerHTML = slices
-      .map(
-        (s) => `<div class="donut-legend-row"><div class="donut-legend-label"><span class="legend-color-dot" style="background:${s.color};"></span><span>${s.label}</span></div>
-        <span class="donut-legend-val">${ready ? fmt(s.count) : "…"} <span style="opacity:0.6;">${ready && total ? `(${Math.round((s.count / total) * 100)}%)` : ""}</span></span></div>`
-      )
+      .map((s) => {
+        const pct = totalPrs ? Math.round((s.count / totalPrs) * 100) : 0;
+        return `
+          <div class="donut-legend-row">
+            <div class="donut-legend-label">
+              <span class="legend-color-dot" style="background:${s.color};"></span>
+              <span>${s.label}</span>
+            </div>
+            <span class="donut-legend-val">${s.count} <span style="opacity:0.6;">(${pct}%)</span></span>
+          </div>
+        `;
+      })
       .join("");
   }
 
-  function renderTopRepos(items, note) {
+  // 4. Top Repositories Breakdown (Horizontal Bars)
+  function renderTopRepos(items) {
     if (!dom.topReposList) return;
-    const sorted = Array.from(countBy(items, (i) => i.repo).entries()).sort((a, b) => b[1] - a[1]).slice(0, 8);
+
+    const counts = new Map();
+    for (const item of items) {
+      counts.set(item.repo, (counts.get(item.repo) || 0) + 1);
+    }
+
+    const sorted = Array.from(counts.entries()).sort((a, b) => b[1] - a[1]).slice(0, 6);
+    const maxVal = sorted.length ? sorted[0][1] : 1;
+    const total = items.length || 1;
+
     if (!sorted.length) {
-      dom.topReposList.innerHTML = `<p style="font-size:0.8rem;color:var(--text-faint);">${state.harvest && !state.harvest.done ? "Loading…" : "No repository activity in this period."}</p>`;
+      dom.topReposList.innerHTML = `<p style="font-size:0.8rem;color:var(--text-faint);">No repository data available.</p>`;
       return;
     }
-    const max = sorted[0][1];
-    const total = items.length || 1;
-    dom.topReposList.innerHTML =
-      sorted
-        .map(
-          ([repo, count]) => `<div class="top-repo-row" data-repo="${escapeHtml(repo)}" style="cursor:pointer;" title="Show ${escapeHtml(repo)} in the feed">
-          <div class="top-repo-meta"><span class="top-repo-name">${escapeHtml(repo)}</span><span class="top-repo-count">${fmt(count)} <span style="opacity:0.6;">(${Math.round((count / total) * 100)}%)</span></span></div>
-          <div class="top-repo-bar-wrap"><div class="top-repo-bar-fill" style="width:${Math.round((count / max) * 100)}%;"></div></div></div>`
-        )
-        .join("") + (note ? `<p class="chart-note">${escapeHtml(note.trim())}</p>` : "");
-    dom.topReposList.querySelectorAll(".top-repo-row").forEach((row) =>
-      row.addEventListener("click", () => {
-        state.filters.repo = row.dataset.repo;
-        switchView("feed");
-        onFiltersChanged();
-      })
-    );
-  }
 
-  function renderYearlyChart(years) {
-    if (!dom.yearlyChartContainer) return;
-    // Hide the "earlier" bar when nothing predates the account
-    const entries = Array.from(years.entries()).filter(([y, n]) => y !== "earlier" || n);
-    const max = Math.max(1, ...entries.map(([, n]) => n || 0));
-    const selected = /^y(\d{4})$/.exec(state.filters.time)?.[1];
-    dom.yearlyChartContainer.innerHTML = entries
-      .map(([y, n]) => {
-        const h = n === undefined ? 6 : Math.max(6, Math.round((n / max) * 125));
-        if (y === "earlier") {
-          return `<div class="chart-bar-col" title="${fmt(n)} opened before they joined GitHub (they took part later)">
-          <span class="chart-bar-val">${fmt(n)}</span>
-          <div class="chart-bar-body" style="height:${h}px;opacity:.6;"></div>
-          <span class="chart-bar-label">Earlier</span></div>`;
-        }
-        return `<div class="chart-bar-col" data-year="${y}" style="cursor:pointer;" title="${n === undefined ? "Counting…" : `${fmt(n)} opened in ${y}`} — click to focus on ${y}">
-          <span class="chart-bar-val">${n === undefined ? "…" : fmt(n)}</span>
-          <div class="chart-bar-body ${String(y) === selected ? "peak-bar" : ""}" style="height:${h}px;${n === undefined ? "opacity:.3;" : ""}"></div>
-          <span class="chart-bar-label">${y}</span></div>`;
+    dom.topReposList.innerHTML = sorted
+      .map(([repo, count]) => {
+        const barPct = Math.round((count / maxVal) * 100);
+        const overallPct = Math.round((count / total) * 100);
+        return `
+          <div class="top-repo-row" data-repo="${escapeHtml(repo)}" style="cursor:pointer;" title="Click to filter by ${escapeHtml(repo)}">
+            <div class="top-repo-meta">
+              <span class="top-repo-name">${escapeHtml(repo)}</span>
+              <span class="top-repo-count">${count} <span style="opacity:0.6;">(${overallPct}%)</span></span>
+            </div>
+            <div class="top-repo-bar-wrap">
+              <div class="top-repo-bar-fill" style="width: ${barPct}%;"></div>
+            </div>
+          </div>
+        `;
       })
       .join("");
-    dom.yearlyChartContainer.querySelectorAll(".chart-bar-col[data-year]").forEach((col) =>
-      col.addEventListener("click", () => {
-        state.filters.time = `y${col.dataset.year}`;
+
+    dom.topReposList.querySelectorAll(".top-repo-row").forEach((row) => {
+      row.addEventListener("click", () => {
+        const repo = row.dataset.repo;
+        state.filters.repo = repo;
+        switchView("feed");
         onFiltersChanged();
-      })
-    );
+      });
+    });
   }
 
-  function renderMonthlyChart(items, win) {
-    if (!dom.monthlyChartContainer) return;
-    const names = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-    const months = [];
-    if (win.year) {
-      for (let m = 0; m < 12; m++) months.push({ key: `${win.year}-${String(m + 1).padStart(2, "0")}`, label: names[m] });
-    } else {
-      const d = new Date();
-      d.setDate(1);
-      d.setMonth(d.getMonth() - 11);
-      for (let i = 0; i < 12; i++) {
-        months.push({ key: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`, label: names[d.getMonth()] });
-        d.setMonth(d.getMonth() + 1);
+  // 5. Year-over-Year Performance (Bar Chart)
+  function renderYearlyChart(items) {
+    if (!dom.yearlyChartContainer) return;
+
+    const allItems = Array.from(state.itemsMap.values());
+    const yearCounts = new Map();
+
+    for (const item of allItems) {
+      const y = item.createdAt ? new Date(item.createdAt).getFullYear() : null;
+      if (y && !isNaN(y)) {
+        yearCounts.set(y, (yearCounts.get(y) || 0) + 1);
       }
     }
-    const counts = countBy(items, (i) => (i.createdAt || "").slice(0, 7));
-    const values = months.map((m) => counts.get(m.key) || 0);
-    const max = Math.max(1, ...values);
-    const peak = values.indexOf(max);
-    dom.monthlyChartContainer.innerHTML = months
-      .map((m, i) => {
-        const n = values[i];
-        return `<div class="chart-bar-col" title="${fmt(n)} opened in ${m.label} ${m.key.slice(0, 4)}">
-          <span class="chart-bar-val">${fmt(n)}</span>
-          <div class="chart-bar-body ${i === peak && n ? "peak-bar" : ""}" style="height:${Math.max(6, Math.round((n / max) * 125))}px;"></div>
-          <span class="chart-bar-label">${m.label}</span></div>`;
+
+    const sortedYears = Array.from(yearCounts.keys()).sort((a, b) => a - b);
+    const maxVal = sortedYears.length ? Math.max(...sortedYears.map((y) => yearCounts.get(y))) : 1;
+
+    if (!sortedYears.length) {
+      dom.yearlyChartContainer.innerHTML = `<p style="font-size:0.8rem;color:var(--text-faint);">No yearly data available.</p>`;
+      return;
+    }
+
+    dom.yearlyChartContainer.innerHTML = sortedYears
+      .map((y) => {
+        const count = yearCounts.get(y);
+        const height = Math.max(6, Math.round((count / maxVal) * 125));
+        const isCurrentSelected = state.dateRange === String(y);
+        return `
+          <div class="chart-bar-col" data-year="${y}" style="cursor:pointer;" title="${count} contributions in ${y} (click to view)">
+            <span class="chart-bar-val">${count}</span>
+            <div class="chart-bar-body ${isCurrentSelected ? "peak-bar" : ""}" style="height:${height}px;"></div>
+            <span class="chart-bar-label">${y}</span>
+          </div>
+        `;
+      })
+      .join("");
+
+    dom.yearlyChartContainer.querySelectorAll(".chart-bar-col").forEach((col) => {
+      col.addEventListener("click", () => {
+        const y = col.dataset.year;
+        dom.dateRangeSelect.value = y;
+        state.dateRange = y;
+        onFiltersChanged();
+      });
+    });
+  }
+
+  // 6. Monthly Trajectory (Jan–Dec Bar Chart)
+  function renderMonthlyChart(items) {
+    if (!dom.monthlyChartContainer) return;
+
+    const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+    const monthCounts = new Array(12).fill(0);
+
+    for (const item of items) {
+      if (item.createdAt) {
+        const m = new Date(item.createdAt).getMonth();
+        if (m >= 0 && m < 12) monthCounts[m]++;
+      }
+    }
+
+    const maxVal = Math.max(1, ...monthCounts);
+    const peakIndex = monthCounts.indexOf(maxVal);
+
+    dom.monthlyChartContainer.innerHTML = monthNames
+      .map((name, idx) => {
+        const count = monthCounts[idx];
+        const height = Math.max(6, Math.round((count / maxVal) * 125));
+        const isPeak = idx === peakIndex && count > 0;
+        return `
+          <div class="chart-bar-col" title="${count} contributions in ${name}">
+            <span class="chart-bar-val">${count}</span>
+            <div class="chart-bar-body ${isPeak ? "peak-bar" : ""}" style="height:${height}px;"></div>
+            <span class="chart-bar-label">${name}</span>
+          </div>
+        `;
       })
       .join("");
   }
@@ -1933,13 +1905,8 @@
     dom.tabBtnFeed.classList.toggle("active", !analytics);
     dom.analyticsView.style.display = analytics ? "block" : "none";
     dom.feedView.style.display = analytics ? "none" : "block";
-    if (analytics) loadAnalytics();
-    else {
-      state.analyticsGen++; // stop background chart loading
-      renderBanner();
-    }
+    if (analytics) renderAnalytics();
   }
-
   dom.tabBtnFeed.addEventListener("click", () => switchView("feed"));
   dom.tabBtnAnalytics.addEventListener("click", () => switchView("analytics"));
 
@@ -1957,7 +1924,6 @@
     dom.inputClear.style.display = dom.searchInput.value ? "block" : "none";
   });
   dom.quickPills.forEach((pill) => pill.addEventListener("click", () => startTracking(pill.dataset.user)));
-
   dom.btnClearCache?.addEventListener("click", async () => {
     await cacheClear();
     if (state.login) startTracking(state.login);
@@ -1997,28 +1963,18 @@
 
   dom.btnTheme.addEventListener("click", () => applyTheme(document.documentElement.dataset.theme === "light" ? "dark" : "light"));
 
-  // ── Export (the rows loaded for the current filters) ────────────────
-  function exportRows() {
-    const s = state.streams.get(state.listQuery);
-    const rows = s ? s.fwd.rows : state.pageRows;
-    return { rows, total: state.listTotal || rows.length };
-  }
-
+  // ── Export ──────────────────────────────────────────────────────────
   function generateExportContent(format) {
-    const { rows, total } = exportRows();
+    const items = getFilteredItems();
     if (format === "json") {
-      dom.exportContent.value = JSON.stringify(
-        rows.map(({ body, ...rest }) => ({ ...rest, countedUnder: primaryBucket(rest, state.filters.rel), links: [...knownRoles(rest)] })),
-        null,
-        2
-      );
+      dom.exportContent.value = JSON.stringify(items.map(({ body, ...rest }) => rest), null, 2);
       return;
     }
-    let md = `# GitHub work for @${state.login}\n\n`;
-    md += `*Exported from ghtrack on ${isoDay(new Date())} · ${fmt(rows.length)} of ${fmt(total)} matching items loaded · filter: \`${state.listQuery}\`*\n\n`;
-    md += `| Type | Status | Repository | Number | Title | Updated |\n| :--- | :--- | :--- | :--- | :--- | :--- |\n`;
-    for (const i of rows) {
-      md += `| ${i.kind.toUpperCase()} | ${i.statusLabel} | \`${i.repo}\` | #${i.number} | [${i.title.replace(/\|/g, "\\|")}](${i.url}) | ${(i.updatedAt || "").slice(0, 10)} |\n`;
+    let md = `# GitHub Lifetime Work for @${state.login}\n\n`;
+    md += `*Exported from ghtrack on ${isoDay(new Date())} · ${fmt(items.length)} items*\n\n`;
+    md += `| Type | Status | Involvement | Repository | Number | Title | Updated |\n| :--- | :--- | :--- | :--- | :--- | :--- | :--- |\n`;
+    for (const i of items) {
+      md += `| ${i.kind.toUpperCase()} | ${i.statusLabel} | ${i.bucket || ""} | \`${i.repo}\` | #${i.number} | [${i.title.replace(/\|/g, "\\|")}](${i.url}) | ${(i.updatedAt || "").slice(0, 10)} |\n`;
     }
     dom.exportContent.value = md;
   }
@@ -2086,9 +2042,11 @@
 
   async function init() {
     initTheme();
-    syncFilterControls();
-    renderRelChips();
+    syncStatusOptions();
+    populateRoleFilter();
+    populateYears();
     cachePrune();
+    window.addEventListener("pagehide", flushSnapshotNow);
     await detectLocalProxy();
     const params = new URLSearchParams(window.location.search);
     const initialName = params.get("name") || params.get("u") || "";

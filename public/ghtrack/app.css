@@ -2141,3 +2141,15 @@ p.conv-empty { padding: 0; }
 .md-plain { white-space: pre-wrap; font-size: 0.84rem; }
 .conv-links { margin-top: 8px; font-size: 0.78rem; color: var(--text); display: flex; flex-wrap: wrap; align-items: center; gap: 4px; }
 .conv-links:empty { display: none; }
+
+/* v3: plain-language involvement note in each row */
+.subline-tag.role-note { font-weight: 600; color: var(--gh-warn); }
+.subline-tag.role-reviewed { color: var(--gh-merged); }
+.subline-tag.role-assigned { color: var(--gh-warn); }
+.subline-tag.role-commented { color: var(--link); }
+.subline-tag.role-other { color: var(--text-faint); font-weight: 500; }
+.role-slot:empty { display: none; }
+.subline-user.is-self { color: var(--gh-open); }
+#filter-role { max-width: 175px; }
+.pager-group { flex-shrink: 0; }
+.search-box-wrap { min-width: 110px; }

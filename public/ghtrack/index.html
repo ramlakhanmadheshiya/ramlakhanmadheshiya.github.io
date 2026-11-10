@@ -6,7 +6,7 @@
   <title>ghtrack — Lifetime GitHub Work & Telemetry</title>
   <meta name="description" content="Ultra-fast, zero-cost lifetime tracker for your GitHub PRs, issues, comments, CI status, and reviews with instant background pagination." />
   <link rel="icon" type="image/svg+xml" href="./favicon.svg" />
-  <link rel="stylesheet" href="./app.css?v=45515881f8" />
+  <link rel="stylesheet" href="./app.css?v=ae42b0ab7a" />
 </head>
 <body>
   <div class="noise-overlay" aria-hidden="true"></div>
@@ -54,7 +54,7 @@
     <!-- Hero / Search Section -->
     <section class="hero">
       <h1>Track your entire GitHub lifetime</h1>
-      <p class="lead">Every pull request, issue, review and discussion for any GitHub user — exact lifetime numbers in about a second. No login, no token.</p>
+      <p class="lead">Every pull request, issue, review and discussion for any GitHub user — exact lifetime numbers in seconds, full list streamed in the background. No login, no token.</p>
 
       <form id="search-form" class="search-form" autocomplete="off">
         <div class="input-wrap">
@@ -122,7 +122,7 @@
           <div id="stream-progress-fill" class="stream-progress-fill" style="width: 5%;"></div>
         </div>
         <div class="stream-actions">
-          <button id="btn-clear-cache" class="btn-secondary-sm" type="button" title="Forget saved results and reload live from GitHub">Refresh</button>
+          <button id="btn-clear-cache" class="btn-secondary-sm" type="button" title="Forget the saved copy and reload everything live from GitHub">Clear Cache</button>
           <button id="btn-export" class="btn-secondary-sm" type="button" title="Export data">Export</button>
         </div>
       </div>
@@ -151,26 +151,11 @@
 
         <!-- Global Date Range Filter -->
         <div class="date-filter-wrap">
-          <label for="date-range-select" class="filter-label" title="When the PR or issue was opened">Opened:</label>
+          <label for="date-range-select" class="filter-label">Timeframe:</label>
           <select id="date-range-select" class="custom-select">
             <option value="all">Lifetime (All Time)</option>
           </select>
         </div>
-      </div>
-
-      <!-- Relationship filter: every item belongs to exactly one bucket (its strongest link), so buckets add up -->
-      <div class="rel-bar">
-        <div class="rel-presets">
-          <button type="button" class="rel-preset" data-preset="work" title="Created, assigned, reviewed or commented — hides mention-only noise">My work <span class="rel-count" data-count="work"></span></button>
-          <button type="button" class="rel-preset" data-preset="all" title="Everything GitHub links to this person">Everything <span class="rel-count" data-count="all"></span></button>
-        </div>
-        <div id="rel-chips" class="rel-chips" role="group" aria-label="Relationship"></div>
-        <button type="button" id="rel-help" class="rel-help" title="How this works">?</button>
-      </div>
-      <div id="rel-help-box" class="rel-help-box" style="display:none;">
-        Each PR or issue is counted <strong>once</strong>, under its strongest link to the person:
-        <strong>Created</strong> › <strong>Assigned</strong> › <strong>Reviewed</strong> › <strong>Commented</strong> › <strong>Mentioned &amp; other</strong>.
-        So an issue you opened, commented on, got assigned and were mentioned in is counted under <em>Created</em> — once — and the buckets always add up to the total. Open a row's preview to see every link (commented, assigned, mentioned…). Click chips to combine buckets.
       </div>
 
       <!-- ── SECTION: VISUAL ANALYTICS VIEW ────────────────────── -->
@@ -317,30 +302,29 @@
         <div class="controls-bar">
         <!-- Filters Row -->
         <div class="filters-group">
-          <!-- Filter 1: Type -->
+          <!-- Filter 1: Item Kind -->
           <div class="select-wrap">
-            <label for="filter-type" class="filter-label">Type:</label>
-            <select id="filter-type" class="custom-select">
-              <option value="all">PRs &amp; Issues</option>
+            <label for="filter-kind" class="filter-label">Kind:</label>
+            <select id="filter-kind" class="custom-select">
+              <option value="all">All Items</option>
               <option value="pr">Pull Requests</option>
               <option value="issue">Issues</option>
             </select>
           </div>
 
-          <!-- Filter 2: State -->
-          <div class="select-wrap">
-            <label for="filter-state" class="filter-label">State:</label>
-            <select id="filter-state" class="custom-select">
-              <option value="all">Any state</option>
-              <option value="open">Open</option>
-              <option value="draft">Draft (PR)</option>
-              <option value="merged">Merged (PR)</option>
-              <option value="closed">Closed</option>
-              <option value="not_planned">Not planned (issue)</option>
-            </select>
+          <!-- Filter 2: Status -->
+          <div id="wrap-status" class="select-wrap">
+            <label for="filter-status" class="filter-label">Status:</label>
+            <select id="filter-status" class="custom-select"></select>
           </div>
 
-          <!-- Filter 3: Repository -->
+          <!-- Filter 3: How the person is involved (each item counted once) -->
+          <div class="select-wrap">
+            <label for="filter-role" class="filter-label">Role:</label>
+            <select id="filter-role" class="custom-select" title="Each item is counted once, under its strongest link: created › assigned › reviewed › commented › mentioned"></select>
+          </div>
+
+          <!-- Filter 4: Repository -->
           <div class="select-wrap">
             <label for="filter-repo" class="filter-label">Repo:</label>
             <select id="filter-repo" class="custom-select">
@@ -354,7 +338,7 @@
               id="filter-text"
               type="search"
               class="filter-text-input"
-              placeholder="Search titles &amp; text (/)…"
+              placeholder="Search in results (/)..."
               autocomplete="off"
             />
           </div>
@@ -380,14 +364,13 @@
 
       <!-- Item List Container -->
       <div class="list-card">
-        <div id="pace-note" class="pace-note" style="display:none;"></div>
         <div id="list-container" class="items-list">
           <!-- Rows will be injected here -->
         </div>
 
         <!-- Empty & Loading States -->
         <div id="list-empty" class="list-empty" style="display:none;">
-          <p>Nothing matches these filters.</p>
+          <p>No matching GitHub work found under current filters.</p>
         </div>
 
         <div id="list-loading" class="list-loading" style="display:none;">
@@ -439,6 +422,6 @@
     </div>
   </div>
 
-  <script src="./app.js?v=45515881f8"></script>
+  <script src="./app.js?v=ae42b0ab7a"></script>
 </body>
 </html>
