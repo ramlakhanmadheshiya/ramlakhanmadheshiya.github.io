@@ -6,7 +6,7 @@
   <title>ghtrack — Lifetime GitHub Work & Telemetry</title>
   <meta name="description" content="Ultra-fast, zero-cost lifetime tracker for your GitHub PRs, issues, comments, CI status, and reviews with instant background pagination." />
   <link rel="icon" type="image/svg+xml" href="./favicon.svg" />
-  <link rel="stylesheet" href="./app.css?v=ae42b0ab7a" />
+  <link rel="stylesheet" href="./app.css?v=1211f5de78" />
 </head>
 <body>
   <div class="noise-overlay" aria-hidden="true"></div>
@@ -63,7 +63,7 @@
             id="search-input"
             class="search-input"
             type="text"
-            placeholder="github username"
+            placeholder="username or github.com/username link"
             spellcheck="false"
             autocapitalize="off"
             required
@@ -75,10 +75,47 @@
         </button>
       </form>
 
-      <div class="quick-pills">
-        <span>Suggested:</span>
-        <button type="button" class="quick-pill" data-user="ramlakhanmadheshiya">@ramlakhanmadheshiya</button>
-        <button type="button" class="quick-pill" data-user="shravanngoswamii">@shravanngoswamii</button>
+
+      <!-- Landing content (hidden once someone is tracked) -->
+      <div id="landing" class="landing">
+        <p class="landing-hint">Type a username or paste a profile link like <code>https://github.com/torvalds</code> — tracking starts automatically.</p>
+        <div class="landing-grid">
+          <div class="landing-card">
+            <div class="landing-icon">⚡</div>
+            <h3>Exact numbers in seconds</h3>
+            <p>Lifetime pull requests, issues, reviews and comments, counted straight from GitHub — even for accounts with 40,000+ items.</p>
+          </div>
+          <div class="landing-card">
+            <div class="landing-icon">🔎</div>
+            <h3>Instant filters</h3>
+            <p>Kind, status, role, repository, timeframe and text search, all answered in the browser with no waiting.</p>
+          </div>
+          <div class="landing-card">
+            <div class="landing-icon">🧭</div>
+            <h3>Clear involvement</h3>
+            <p>Every item is counted once, under how the person is linked: created, assigned, reviewed, commented or mentioned.</p>
+          </div>
+          <div class="landing-card">
+            <div class="landing-icon">💬</div>
+            <h3>Conversation preview</h3>
+            <p>Open any row to read the description, comments, reviews and commits without leaving the page.</p>
+          </div>
+          <div class="landing-card">
+            <div class="landing-icon">📊</div>
+            <h3>Visual analytics</h3>
+            <p>Heatmap, weekly, monthly and yearly activity, working hours, merge speed, streaks, top repos, labels and collaborators.</p>
+          </div>
+          <div class="landing-card">
+            <div class="landing-icon">🔒</div>
+            <h3>No login, nothing stored on a server</h3>
+            <p>Uses GitHub's public API from your browser. Results are saved only on your device, so the next visit is instant.</p>
+          </div>
+        </div>
+        <ol class="landing-steps">
+          <li><strong>1</strong> Enter a username or profile link</li>
+          <li><strong>2</strong> Numbers and newest work appear in seconds</li>
+          <li><strong>3</strong> The full history keeps loading in the background</li>
+        </ol>
       </div>
 
       <div id="profile-line" class="profile-line" style="display:none;"></div>
@@ -294,6 +331,91 @@
             </div>
           </div>
         </div>
+        <!-- More insights -->
+        <div class="insight-tiles" id="insight-tiles"></div>
+
+        <div class="analytics-card wide-card">
+          <div class="card-header">
+            <h3 class="card-title">Weekly Activity</h3>
+            <p class="card-sub" id="weekly-sub">PRs and issues opened per week, last 52 weeks</p>
+          </div>
+          <div id="weekly-chart" class="bar-chart-container dense-bars"></div>
+        </div>
+
+        <div class="analytics-card wide-card">
+          <div class="card-header">
+            <h3 class="card-title">Every Month</h3>
+            <p class="card-sub" id="timeline-sub">PRs and issues opened per month across the whole period</p>
+          </div>
+          <div id="timeline-chart" class="bar-chart-container dense-bars"></div>
+        </div>
+
+        <div class="analytics-card wide-card">
+          <div class="card-header">
+            <h3 class="card-title">Cumulative Growth</h3>
+            <p class="card-sub">Total PRs and issues over time</p>
+          </div>
+          <div id="growth-chart" class="growth-chart"></div>
+        </div>
+
+        <div class="charts-grid">
+          <div class="analytics-card">
+            <div class="card-header">
+              <h3 class="card-title">Day of the Week</h3>
+              <p class="card-sub">When they open PRs and issues (your local time)</p>
+            </div>
+            <div id="weekday-chart" class="bar-chart-container"></div>
+          </div>
+          <div class="analytics-card">
+            <div class="card-header">
+              <h3 class="card-title">Hour of the Day</h3>
+              <p class="card-sub">When they open PRs and issues (your local time)</p>
+            </div>
+            <div id="hour-chart" class="bar-chart-container dense-bars"></div>
+          </div>
+          <div class="analytics-card">
+            <div class="card-header">
+              <h3 class="card-title">How They're Involved</h3>
+              <p class="card-sub">Each item counted once, under its strongest link</p>
+            </div>
+            <div id="role-chart" class="top-repos-list"></div>
+          </div>
+          <div class="analytics-card">
+            <div class="card-header">
+              <h3 class="card-title">Time to Merge</h3>
+              <p class="card-sub">How long their merged PRs took, from opening to merge</p>
+            </div>
+            <div id="merge-time-chart" class="bar-chart-container"></div>
+          </div>
+          <div class="analytics-card">
+            <div class="card-header">
+              <h3 class="card-title">Issue Outcomes</h3>
+              <p class="card-sub">Issues they opened, by current state</p>
+            </div>
+            <div id="issue-chart" class="top-repos-list"></div>
+          </div>
+          <div class="analytics-card">
+            <div class="card-header">
+              <h3 class="card-title">Top Labels</h3>
+              <p class="card-sub">Most common labels on their work</p>
+            </div>
+            <div id="labels-chart" class="top-repos-list"></div>
+          </div>
+          <div class="analytics-card">
+            <div class="card-header">
+              <h3 class="card-title">People They Work With</h3>
+              <p class="card-sub">Authors of the PRs and issues they joined</p>
+            </div>
+            <div id="people-chart" class="top-repos-list"></div>
+          </div>
+          <div class="analytics-card">
+            <div class="card-header">
+              <h3 class="card-title">Discussion Size</h3>
+              <p class="card-sub">Comments per PR or issue they're involved in</p>
+            </div>
+            <div id="comments-chart" class="bar-chart-container"></div>
+          </div>
+        </div>
       </section>
 
       <!-- ── SECTION: WORK FEED VIEW (Paging & List) ─────────────── -->
@@ -422,6 +544,6 @@
     </div>
   </div>
 
-  <script src="./app.js?v=ae42b0ab7a"></script>
+  <script src="./app.js?v=1211f5de78"></script>
 </body>
 </html>

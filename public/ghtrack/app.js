@@ -457,9 +457,20 @@
   // ── Bucket harvester: one GitHub search per 100 items ───────────────
   // The 5 relationship buckets split a person's involvement with no overlap,
   // so loading them gives every item exactly once, already labelled.
+  // "Created" is loaded as two lists (PRs, issues) so both totals come free
+  function makeHarvesters(login) {
+    const list = [
+      new BucketHarvester("created", `author:${login} is:pr`, "pr"),
+      new BucketHarvester("created", `author:${login} is:issue`, "issue"),
+    ];
+    for (const b of REL_ORDER.slice(1)) list.push(new BucketHarvester(b, bucketExpr(b, login)));
+    return list;
+  }
+
   class BucketHarvester {
-    constructor(bucket, q) {
+    constructor(bucket, q, kind = null) {
       this.bucket = bucket;
+      this.kind = kind;
       this.q = q;
       this.extra = "";
       this.page = 0;
@@ -527,7 +538,7 @@
     searchInput: $("search-input"),
     inputClear: $("input-clear"),
     btnSearch: $("btn-search"),
-    quickPills: document.querySelectorAll(".quick-pill"),
+    landing: $("landing"),
 
     profileLine: $("profile-line"),
     telemetryBar: $("telemetry-bar"),
@@ -713,10 +724,19 @@
 
 
 
+  // Accepts "name", "@name", "github.com/name", "https://www.github.com/name/repo?tab=x"
+  function parseLogin(text) {
+    let t = (text || "").trim().replace(/^@/, "");
+    t = t.replace(/^(?:https?:\/\/)?(?:www\.)?github\.com\//i, "");
+    t = t.split(/[/?#\s]/)[0];
+    return /^[a-z\d](?:[a-z\d-]{0,38})$/i.test(t) ? t : "";
+  }
+
   // ── Start tracking a person ─────────────────────────────────────────
   async function startTracking(username) {
-    const login = username.trim().replace(/^@/, "").replace(/^https?:\/\/github\.com\//i, "").split(/[/?#\s]/)[0];
+    const login = parseLogin(username);
     if (!login) return;
+    dom.landing && (dom.landing.style.display = "none");
     const gen = ++state.gen;
     const isStale = () => gen !== state.gen;
 
@@ -731,7 +751,7 @@
       startedAt: performance.now(),
       syncStartedAt: new Date().toISOString(),
       itemsMap: new Map(),
-      harvesters: REL_ORDER.map((b) => new BucketHarvester(b, bucketExpr(b, login))),
+      harvesters: makeHarvesters(login),
       counts: {},
       listReady: false,
       harvestDone: false,
@@ -797,18 +817,20 @@
       state.listReady = true;
       dom.btnSearch.disabled = false;
       dom.btnSearch.textContent = "Track";
+      deriveCreatedCounts();
       loadExtraCounts(gen);
       renderAll();
 
       // 2. Everything else, 100 at a time, strongest link first
       for (const h of state.harvesters) {
-        while (!h.done && bucketLoaded(h.bucket) < (h.total || 0)) {
+        while (!h.done && bucketLoaded(h) < (h.total || 0)) {
           const items = await h.next(3, isStale);
           if (isStale()) return;
           mergeItems(items, h.bucket);
         }
       }
       state.harvestDone = true;
+      deriveCreatedCounts();
       flushSnapshotNow();
       renderAll();
     } catch (err) {
@@ -833,7 +855,10 @@
     let items = await h.next(0, isStale);
     if (isStale()) return;
     mergeItems(items, h.bucket);
-    state.counts[h.bucket] = h.total;
+    if (h.kind === "pr") state.counts.prs = h.total;
+    else if (h.kind === "issue") state.counts.issues = h.total;
+    else state.counts[h.bucket] = h.total;
+    if (state.counts.prs !== undefined && state.counts.issues !== undefined) state.counts.created = state.counts.prs + state.counts.issues;
     renderOverview();
     populateRoleFilter();
     if (!snap) return;
@@ -846,14 +871,18 @@
     // Continue the full load from the oldest saved item in this bucket
     if (!h.done) {
       let oldest = null;
-      for (const it of state.itemsMap.values()) if (it.bucket === h.bucket && (!oldest || it.updatedAt < oldest)) oldest = it.updatedAt;
+      for (const it of state.itemsMap.values()) if (inHarvester(it, h) && (!oldest || it.updatedAt < oldest)) oldest = it.updatedAt;
       if (oldest) h.resumeBefore(oldest);
     }
   }
 
-  function bucketLoaded(bucket) {
+  function inHarvester(it, h) {
+    return it.bucket === h.bucket && (!h.kind || it.kind === h.kind);
+  }
+
+  function bucketLoaded(h) {
     let n = 0;
-    for (const it of state.itemsMap.values()) if (it.bucket === bucket) n++;
+    for (const it of state.itemsMap.values()) if (inHarvester(it, h)) n++;
     return n;
   }
 
@@ -874,11 +903,26 @@
     }
   }
 
+  // When every item they created is loaded, PR/issue numbers need no extra search
+  function deriveCreatedCounts() {
+    const mine = Array.from(state.itemsMap.values()).filter((i) => i.bucket === "created");
+    const [prH, issueH] = state.harvesters;
+    if (prH && (prH.done || mine.filter((i) => i.kind === "pr").length >= (state.counts.prs ?? Infinity))) {
+      state.counts.merged = mine.filter((i) => i.kind === "pr" && i.status === "merged").length;
+    }
+    if (issueH && (issueH.done || mine.filter((i) => i.kind === "issue").length >= (state.counts.issues ?? Infinity))) {
+      state.counts.openIssues = mine.filter((i) => i.kind === "issue" && i.status === "open").length;
+    }
+    renderOverview();
+  }
+
   // Background counts that need their own search
   function loadExtraCounts(gen) {
     const u = state.login;
     const isStale = () => gen !== state.gen;
-    const jobs = { prs: [`author:${u} is:pr`, 1], merged: [`author:${u} is:pr is:merged`, 2], openIssues: [`author:${u} is:issue is:open`, 2] };
+    const jobs = {};
+    if (!state.harvesters[0].done) jobs.merged = [`author:${u} is:pr is:merged`, 2];
+    if (!state.harvesters[1].done) jobs.openIssues = [`author:${u} is:issue is:open`, 2];
     for (const [key, [q, priority]] of Object.entries(jobs)) {
       countQuery(q, priority, isStale)
         .then((n) => {
@@ -928,7 +972,7 @@
     dom.statTotal.textContent = fmt(lifetimeTotal());
     dom.statPrs.textContent = fmt(c.prs);
     dom.statPrsSub.textContent = c.prs !== undefined && c.merged !== undefined ? `${c.prs ? Math.round((c.merged / c.prs) * 100) : 0}% merged · ${fmt(c.merged)} merged` : " ";
-    const issues = c.created !== undefined && c.prs !== undefined ? c.created - c.prs : undefined;
+    const issues = c.issues;
     dom.statIssues.textContent = fmt(issues);
     dom.statIssuesSub.textContent = issues !== undefined && c.openIssues !== undefined ? `${fmt(c.openIssues)} open · ${fmt(issues - c.openIssues)} closed` : " ";
     dom.statReviews.textContent = fmt(c.reviewed);
@@ -1505,6 +1549,257 @@
     renderTopRepos(items);
     renderYearlyChart(items);
     renderMonthlyChart(items);
+    renderInsights(items);
+  }
+
+  // ── More insights (all computed in the browser from the loaded list) ─
+  const DAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+  const MONTH_NAMES = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+  function dayKey(d) {
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  }
+
+  // Vertical bars. dense = many thin bars, values only in the hover tooltip.
+  function vbars(el, data, { dense = false, labelEvery = 1 } = {}) {
+    if (!el) return;
+    if (!data.length || data.every((d) => !d.value)) {
+      el.innerHTML = `<p class="chart-empty">${state.harvestDone ? "No data for this period." : "Loading…"}</p>`;
+      return;
+    }
+    const max = Math.max(1, ...data.map((d) => d.value));
+    const peak = data.reduce((best, d, i) => (d.value > data[best].value ? i : best), 0);
+    el.innerHTML = data
+      .map(
+        (d, i) => `<div class="chart-bar-col" title="${escapeHtml(d.title || `${d.label}: ${fmt(d.value)}`)}">
+          ${dense ? "" : `<span class="chart-bar-val">${fmt(d.value)}</span>`}
+          <div class="chart-bar-body ${i === peak && d.value ? "peak-bar" : ""}" style="height:${d.value ? Math.max(3, Math.round((d.value / max) * 125)) : 2}px;${d.value ? "" : "opacity:.25;"}"></div>
+          <span class="chart-bar-label">${i % labelEvery === 0 ? escapeHtml(d.short ?? d.label) : "&nbsp;"}</span></div>`
+      )
+      .join("");
+  }
+
+  // Horizontal ranked bars (same look as Top Repositories)
+  function hbars(el, rows, total, onClick) {
+    if (!el) return;
+    if (!rows.length) {
+      el.innerHTML = `<p class="chart-empty">${state.harvestDone ? "No data for this period." : "Loading…"}</p>`;
+      return;
+    }
+    const max = Math.max(1, ...rows.map((r) => r.value));
+    el.innerHTML = rows
+      .map(
+        (r) => `<div class="top-repo-row" ${onClick ? `data-key="${escapeHtml(r.key ?? r.name)}" style="cursor:pointer;"` : ""} title="${escapeHtml(r.title || `${r.name}: ${fmt(r.value)}`)}">
+          <div class="top-repo-meta"><span class="top-repo-name">${escapeHtml(r.name)}</span><span class="top-repo-count">${fmt(r.value)}${total ? ` <span style="opacity:0.6;">(${Math.round((r.value / total) * 100)}%)</span>` : ""}</span></div>
+          <div class="top-repo-bar-wrap"><div class="top-repo-bar-fill" style="width:${Math.round((r.value / max) * 100)}%;"></div></div></div>`
+      )
+      .join("");
+    if (onClick) el.querySelectorAll("[data-key]").forEach((row) => row.addEventListener("click", () => onClick(row.dataset.key)));
+  }
+
+  function renderInsights(items) {
+    const mine = items.filter((i) => i.bucket === "created");
+    const lowerLogin = state.login.toLowerCase();
+
+    // Stat tiles: streaks, active days, busiest day, merge speed
+    const days = new Set(mine.map((i) => dayKey(new Date(i.createdAt))));
+    const sorted = Array.from(days).sort();
+    let longest = 0;
+    let run = 0;
+    let prev = null;
+    for (const k of sorted) {
+      const d = new Date(`${k}T00:00:00`);
+      run = prev && (d - prev) / DAY_MS < 1.5 ? run + 1 : 1;
+      longest = Math.max(longest, run);
+      prev = d;
+    }
+    let current = 0;
+    const cursor = new Date();
+    if (!days.has(dayKey(cursor))) cursor.setDate(cursor.getDate() - 1);
+    while (days.has(dayKey(cursor))) {
+      current++;
+      cursor.setDate(cursor.getDate() - 1);
+    }
+    const perDay = countBy(mine, (i) => dayKey(new Date(i.createdAt)));
+    let busiest = null;
+    for (const [k, n] of perDay) if (!busiest || n > busiest[1]) busiest = [k, n];
+    const mergeHours = mine
+      .filter((i) => i.kind === "pr" && i.mergedAt)
+      .map((i) => (new Date(i.mergedAt) - new Date(i.createdAt)) / 3600000)
+      .sort((a, b) => a - b);
+    const median = mergeHours.length ? mergeHours[Math.floor(mergeHours.length / 2)] : null;
+    const fmtDur = (h) => (h === null ? "–" : h < 1 ? `${Math.max(1, Math.round(h * 60))} min` : h < 48 ? `${Math.round(h)} h` : `${Math.round(h / 24)} days`);
+    const weeks = new Set(mine.map((i) => { const d = new Date(i.createdAt); d.setDate(d.getDate() - d.getDay()); return dayKey(d); }));
+    const tiles = [
+      ["Active days", fmt(days.size), "days they opened a PR or issue"],
+      ["Longest streak", `${fmt(longest)} day${longest === 1 ? "" : "s"}`, "in a row"],
+      ["Current streak", `${fmt(current)} day${current === 1 ? "" : "s"}`, current ? "still going" : "no activity today or yesterday"],
+      ["Busiest day", busiest ? fmt(busiest[1]) : "–", busiest ? new Date(`${busiest[0]}T00:00:00`).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : "–"],
+      ["Per active week", weeks.size ? (mine.length / weeks.size).toFixed(1) : "–", "PRs + issues opened"],
+      ["Median time to merge", fmtDur(median), `${fmt(mergeHours.length)} merged PRs`],
+    ];
+    const tilesEl = document.getElementById("insight-tiles");
+    if (tilesEl) {
+      tilesEl.innerHTML = tiles
+        .map(([label, value, sub]) => `<div class="insight-tile"><div class="telemetry-label">${label}</div><div class="insight-value">${value}</div><div class="telemetry-sub">${escapeHtml(sub)}</div></div>`)
+        .join("");
+    }
+
+    // Weekly: last 52 weeks (or the selected year)
+    const yearSel = /^\d{4}$/.test(state.dateRange) ? Number(state.dateRange) : null;
+    const start = yearSel ? new Date(yearSel, 0, 1) : new Date(Date.now() - 364 * DAY_MS);
+    start.setHours(0, 0, 0, 0);
+    start.setDate(start.getDate() - start.getDay());
+    const weekCounts = countBy(items, (i) => {
+      const d = new Date(i.createdAt);
+      d.setHours(0, 0, 0, 0);
+      d.setDate(d.getDate() - d.getDay());
+      return dayKey(d);
+    });
+    const weekly = [];
+    for (let w = 0; w < 53; w++) {
+      const d = new Date(start);
+      d.setDate(d.getDate() + w * 7);
+      if (d > new Date() || (yearSel && d.getFullYear() > yearSel)) break;
+      const k = dayKey(d);
+      weekly.push({ label: k, short: d.getDate() <= 7 ? MONTH_NAMES[d.getMonth()] : "", value: weekCounts.get(k) || 0, title: `Week of ${d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}: ${fmt(weekCounts.get(k) || 0)}` });
+    }
+    const weeklySub = document.getElementById("weekly-sub");
+    if (weeklySub) weeklySub.textContent = `PRs and issues opened per week, ${yearSel ? yearSel : "last 52 weeks"}`;
+    vbars(document.getElementById("weekly-chart"), weekly, { dense: true });
+
+    // Every month across the whole period
+    const monthCounts = countBy(items, (i) => (i.createdAt || "").slice(0, 7));
+    const keys = Array.from(monthCounts.keys()).filter(Boolean).sort();
+    const timeline = [];
+    if (keys.length) {
+      const [y0, m0] = keys[0].split("-").map(Number);
+      const d = new Date(y0, m0 - 1, 1);
+      const end = new Date();
+      while (d <= end) {
+        const k = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+        timeline.push({ label: k, short: d.getMonth() === 0 ? String(d.getFullYear()) : "", value: monthCounts.get(k) || 0, title: `${MONTH_NAMES[d.getMonth()]} ${d.getFullYear()}: ${fmt(monthCounts.get(k) || 0)}` });
+        d.setMonth(d.getMonth() + 1);
+      }
+    }
+    vbars(document.getElementById("timeline-chart"), timeline, { dense: true });
+
+    renderGrowth(items);
+
+    // Day of week & hour of day (their own PRs/issues, viewer's local time)
+    const dow = countBy(mine, (i) => new Date(i.createdAt).getDay());
+    vbars(document.getElementById("weekday-chart"), DAY_NAMES.map((n, i) => ({ label: n, value: dow.get(i) || 0 })));
+    const hours = countBy(mine, (i) => new Date(i.createdAt).getHours());
+    vbars(
+      document.getElementById("hour-chart"),
+      Array.from({ length: 24 }, (_, h) => ({ label: `${String(h).padStart(2, "0")}:00`, short: h % 6 === 0 ? `${h}h` : "", value: hours.get(h) || 0 })),
+      { dense: true }
+    );
+
+    // Involvement breakdown (click = filter the feed)
+    const roles = countBy(items, (i) => i.bucket);
+    hbars(
+      document.getElementById("role-chart"),
+      REL_ORDER.map((b) => ({ key: b, name: b === "other" ? "Mentioned / other" : ROLE_TEXT[b], value: roles.get(b) || 0 })).filter((r) => r.value),
+      items.length,
+      (key) => {
+        state.filters.role = key;
+        dom.filterRole.value = key;
+        switchView("feed");
+        onFiltersChanged();
+      }
+    );
+
+    // Time to merge distribution
+    const bins = [["< 1 hour", 1], ["< 1 day", 24], ["1–7 days", 168], ["1–4 weeks", 672], ["1–3 months", 2160], ["> 3 months", Infinity]];
+    const binCounts = bins.map(() => 0);
+    for (const h of mergeHours) binCounts[bins.findIndex(([, lim]) => h < lim)]++;
+    vbars(document.getElementById("merge-time-chart"), bins.map(([label], i) => ({ label, value: binCounts[i] })));
+
+    // Issue outcomes
+    const issues = mine.filter((i) => i.kind === "issue");
+    const outcome = countBy(issues, (i) => i.statusLabel);
+    hbars(
+      document.getElementById("issue-chart"),
+      Array.from(outcome.entries()).sort((a, b) => b[1] - a[1]).map(([name, value]) => ({ name, value })),
+      issues.length
+    );
+
+    // Top labels
+    const labelCounts = new Map();
+    for (const i of items) for (const l of i.labels || []) labelCounts.set(l.name, (labelCounts.get(l.name) || 0) + 1);
+    hbars(
+      document.getElementById("labels-chart"),
+      Array.from(labelCounts.entries()).sort((a, b) => b[1] - a[1]).slice(0, 8).map(([name, value]) => ({ name, value })),
+      0
+    );
+
+    // People they work with (authors of threads they joined, bots excluded)
+    const people = countBy(
+      items.filter((i) => i.author.toLowerCase() !== lowerLogin && !/\[bot\]$|-bot$/i.test(i.author)),
+      (i) => i.author
+    );
+    hbars(
+      document.getElementById("people-chart"),
+      Array.from(people.entries()).sort((a, b) => b[1] - a[1]).slice(0, 8).map(([name, value]) => ({ name: `@${name}`, value })),
+      0
+    );
+
+    // Discussion size
+    const cbins = [["0", 1], ["1–2", 3], ["3–5", 6], ["6–10", 11], ["11–25", 26], ["26+", Infinity]];
+    const cc = cbins.map(() => 0);
+    for (const i of items) cc[cbins.findIndex(([, lim]) => (i.commentsCount || 0) < lim)]++;
+    vbars(document.getElementById("comments-chart"), cbins.map(([label], i) => ({ label: `${label}`, value: cc[i], title: `${label} comments: ${fmt(cc[i])} items` })));
+  }
+
+  // Cumulative growth: one line, crosshair + tooltip on hover
+  function renderGrowth(items) {
+    const el = document.getElementById("growth-chart");
+    if (!el) return;
+    const dates = items.map((i) => i.createdAt).filter(Boolean).sort();
+    if (dates.length < 2) {
+      el.innerHTML = `<p class="chart-empty">${state.harvestDone ? "Not enough data for this period." : "Loading…"}</p>`;
+      return;
+    }
+    const monthly = new Map();
+    dates.forEach((d, idx) => monthly.set(d.slice(0, 7), idx + 1));
+    const pts = Array.from(monthly.entries());
+    const W = 1000;
+    const H = 180;
+    const pad = { l: 44, r: 12, t: 12, b: 24 };
+    const max = pts[pts.length - 1][1];
+    const x = (i) => pad.l + (i / Math.max(1, pts.length - 1)) * (W - pad.l - pad.r);
+    const y = (v) => pad.t + (1 - v / max) * (H - pad.t - pad.b);
+    const line = pts.map(([, v], i) => `${i ? "L" : "M"}${x(i).toFixed(1)},${y(v).toFixed(1)}`).join("");
+    const area = `${line}L${x(pts.length - 1).toFixed(1)},${y(0)}L${x(0).toFixed(1)},${y(0)}Z`;
+    const ticks = [0, 0.5, 1].map((f) => Math.round(max * f));
+    const yearMarks = pts.map(([k], i) => [k, i]).filter(([k], i) => k.endsWith("-01") || i === 0);
+    const step = Math.max(1, Math.ceil(yearMarks.length / 10));
+    el.innerHTML = `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" class="growth-svg" role="img" aria-label="Cumulative PRs and issues over time">
+      ${ticks.map((t) => `<line x1="${pad.l}" x2="${W - pad.r}" y1="${y(t)}" y2="${y(t)}" class="growth-grid"/><text x="${pad.l - 6}" y="${y(t) + 4}" text-anchor="end" class="growth-axis">${fmt(t)}</text>`).join("")}
+      <path d="${area}" class="growth-area"/><path d="${line}" class="growth-line" vector-effect="non-scaling-stroke"/>
+      ${yearMarks.filter((_, i) => i % step === 0).map(([k, i]) => `<text x="${x(i)}" y="${H - 6}" text-anchor="middle" class="growth-axis">${k.slice(0, 4)}</text>`).join("")}
+      <line class="growth-cross" y1="${pad.t}" y2="${H - pad.b}" x1="-10" x2="-10"/>
+    </svg><div class="growth-tip" hidden></div>`;
+    const svg = el.querySelector("svg");
+    const cross = el.querySelector(".growth-cross");
+    const tip = el.querySelector(".growth-tip");
+    svg.addEventListener("mousemove", (e) => {
+      const r = svg.getBoundingClientRect();
+      const fx = ((e.clientX - r.left) / r.width) * W;
+      const i = Math.min(pts.length - 1, Math.max(0, Math.round(((fx - pad.l) / (W - pad.l - pad.r)) * (pts.length - 1))));
+      const [k, v] = pts[i];
+      cross.setAttribute("x1", x(i));
+      cross.setAttribute("x2", x(i));
+      tip.hidden = false;
+      tip.textContent = `${MONTH_NAMES[Number(k.slice(5, 7)) - 1]} ${k.slice(0, 4)}: ${fmt(v)} total`;
+      tip.style.left = `${Math.min(r.width - 150, Math.max(0, (x(i) / W) * r.width - 60))}px`;
+    });
+    svg.addEventListener("mouseleave", () => {
+      tip.hidden = true;
+      cross.setAttribute("x1", -10);
+      cross.setAttribute("x2", -10);
+    });
   }
 
   // 1. Target Tracking Cards (Dynamic Milestones)
@@ -1923,7 +2218,16 @@
   dom.searchInput.addEventListener("input", () => {
     dom.inputClear.style.display = dom.searchInput.value ? "block" : "none";
   });
-  dom.quickPills.forEach((pill) => pill.addEventListener("click", () => startTracking(pill.dataset.user)));
+  // Pasting a profile link starts tracking right away
+  dom.searchInput.addEventListener("paste", () => {
+    setTimeout(() => {
+      const v = dom.searchInput.value;
+      if (/github\.com\//i.test(v) && parseLogin(v)) {
+        dom.searchInput.value = parseLogin(v);
+        startTracking(v);
+      }
+    }, 0);
+  });
   dom.btnClearCache?.addEventListener("click", async () => {
     await cacheClear();
     if (state.login) startTracking(state.login);
