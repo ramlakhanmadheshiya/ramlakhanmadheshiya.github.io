@@ -522,7 +522,7 @@
     harvestDone: false,
     fromSnapshot: false,
     currentPage: 1,
-    pageSize: FEED_PAGE_SIZE,
+    pageSize: (() => { try { return Math.min(1000, Math.max(5, Number(localStorage.getItem("ghtrack_pagesize")) || FEED_PAGE_SIZE)); } catch { return FEED_PAGE_SIZE; } })(),
     viewMode: "feed",
     dateRange: "all",          // all | 1d | 7d | 30d | 90d | 1y | y2024 …
     heatYear: "recent",        // recent | 2024 …
@@ -555,6 +555,8 @@
 
     telemetryBar: $("telemetry-bar"),
     statTotal: $("stat-total"),
+    statTotalSub: $("stat-total-sub"),
+    ddPageSize: $("dd-pagesize"),
     statPrs: $("stat-prs"),
     statPrsSub: $("stat-prs-sub"),
     statIssues: $("stat-issues"),
@@ -723,6 +725,7 @@
       listReady: false,
       harvestDone: false,
       fromSnapshot: false,
+      syncing: true,
       currentPage: 1,
     });
     state.expandedPreviews.clear();
@@ -783,8 +786,10 @@
 
     try {
       // 1. First 100 of every bucket: the newest list + exact bucket totals
+      state.syncing = true;
       await Promise.all(state.harvesters.map((h) => firstPages(h, snap, isStale)));
       if (isStale()) return;
+      state.syncing = false;
       state.listReady = true;
       dom.btnSearch.disabled = false;
       dom.btnSearch.textContent = "Track";
@@ -942,7 +947,29 @@
   }
 
   function renderOverview() {
+    const range = typeof rangeBounds === "function" ? rangeBounds() : null;
+    if (range || state.harvestDone) {
+      // Same source as the list, so every number on the page agrees
+      const items = getItemsForCurrentDateRange();
+      const mine = items.filter((i) => i.bucket === "created");
+      const prs = mine.filter((i) => i.kind === "pr");
+      const issues = mine.filter((i) => i.kind === "issue");
+      const merged = prs.filter((i) => i.status === "merged").length;
+      const open = issues.filter((i) => i.status === "open").length;
+      const when = range ? (range.year ? ` in ${range.year}` : ` · last ${range.label}`) : "";
+      const partial = !loadedEverything() ? " (so far)" : "";
+      dom.statTotal.textContent = fmt(items.length);
+      dom.statTotalSub.textContent = `PRs & issues touched${when}${partial}`;
+      dom.statPrs.textContent = fmt(prs.length);
+      dom.statPrsSub.textContent = `${prs.length ? Math.round((merged / prs.length) * 100) : 0}% merged · ${fmt(merged)} merged`;
+      dom.statIssues.textContent = fmt(issues.length);
+      dom.statIssuesSub.textContent = `${fmt(open)} open · ${fmt(issues.length - open)} closed`;
+      dom.statReviews.textContent = fmt(items.filter((i) => i.bucket === "reviewed").length);
+      dom.statComments.textContent = fmt(items.filter((i) => i.bucket === "commented").length);
+      return;
+    }
     const c = state.counts;
+    dom.statTotalSub.textContent = "PRs & issues touched";
     dom.statTotal.textContent = fmt(lifetimeTotal());
     dom.statPrs.textContent = fmt(c.prs);
     dom.statPrsSub.textContent = c.prs !== undefined && c.merged !== undefined ? `${c.prs ? Math.round((c.merged / c.prs) * 100) : 0}% merged · ${fmt(c.merged)} merged` : " ";
@@ -965,7 +992,8 @@
     if (!state.login || state.fatal) return;
     const total = lifetimeTotal();
     const loaded = state.itemsMap.size;
-    if (!state.listReady) return setBanner(`Fetching @${state.login} from GitHub…`, 5);
+    if (state.syncing && state.fromSnapshot) return setBanner(`Saved copy · checking GitHub for updates (${fmt(loaded)} items ready to browse)`, 60);
+    if (!state.listReady) return setBanner(state.fromSnapshot ? "Showing saved copy · checking GitHub for updates…" : `Fetching @${state.login} from GitHub…`, state.fromSnapshot ? 60 : 5);
     if (state.harvestDone || (total !== undefined && loaded >= total)) {
       return setBanner(`Up to date · ${fmt(loaded)} items`, 100, "done");
     }
@@ -1047,12 +1075,12 @@
   const ICON_CHECK = `<svg class="dd-check" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 8.5l3 3 6-7"/></svg>`;
   const openDropdowns = new Set();
 
-  function createDropdown(host, { label = "", searchable = false, alignRight = false, onChange }) {
+  function createDropdown(host, { label = "", searchable = false, alignRight = false, custom = null, onChange }) {
     const root = document.createElement("div");
     root.className = `dd${alignRight ? " align-right" : ""}${host.className ? ` ${host.className}` : ""}`;
     root.innerHTML = `<button type="button" class="dd-btn" aria-haspopup="listbox" aria-expanded="false">
         ${label ? `<span class="dd-k">${escapeHtml(label)}</span>` : ""}<span class="dd-v"></span>${ICON_CHEVRON}</button>
-      <div class="dd-menu" role="listbox">${searchable ? `<input class="dd-search" type="text" placeholder="Search…" aria-label="Filter options" />` : ""}<div class="dd-list"></div></div>`;
+      <div class="dd-menu" role="listbox">${searchable ? `<input class="dd-search" type="text" placeholder="Search…" aria-label="Filter options" />` : ""}<div class="dd-list"></div>${custom ? `<form class="dd-custom"><input type="number" inputmode="numeric" min="${custom.min}" max="${custom.max}" placeholder="${escapeHtml(custom.placeholder)}" aria-label="${escapeHtml(custom.placeholder)}" /><button type="submit" class="btn btn-sm">Apply</button></form>` : ""}</div>`;
     host.replaceWith(root);
     root.id = host.id;
     const btn = root.querySelector(".dd-btn");
@@ -1118,11 +1146,28 @@
       const el = e.target.closest(".dd-opt");
       if (el) choose(visibleOptions()[Number(el.dataset.i)]);
     });
+    root.querySelector(".dd-custom")?.addEventListener("submit", (e) => {
+      e.preventDefault();
+      const input = e.currentTarget.querySelector("input");
+      const n = Math.round(Number(input.value));
+      if (!n || n < custom.min || n > custom.max) {
+        input.focus();
+        return;
+      }
+      input.value = "";
+      close();
+      btn.focus();
+      if (n === cfg.value) return;
+      cfg.value = n;
+      paintButton();
+      onChange(n);
+    });
     search?.addEventListener("input", () => {
       kb = -1;
       paintList();
     });
     root.addEventListener("keydown", (e) => {
+      if (e.target.closest(".dd-custom") && e.key !== "Escape") return;
       if (!root.classList.contains("open")) {
         if (e.key === "ArrowDown" && e.target === btn) {
           e.preventDefault();
@@ -1165,6 +1210,22 @@
   const kindDd = createDropdown(dom.ddKind, { label: "Type", onChange: (v) => { state.filters.kind = v; onFiltersChanged(); } });
   const statusDd = createDropdown(dom.ddStatus, { label: "Status", onChange: (v) => { state.filters.status = v; onFiltersChanged(); } });
   const roleDd = createDropdown(dom.ddRole, { label: "Role", onChange: (v) => { state.filters.role = v; onFiltersChanged(); } });
+  const PAGE_SIZES = [25, 50, 100, 150, 250, 500];
+  const pageSizeDd = createDropdown(dom.ddPageSize, {
+    label: "Show",
+    alignRight: true,
+    custom: { placeholder: "Custom (1–1000)", min: 1, max: 1000 },
+    onChange: (v) => {
+      state.pageSize = Number(v);
+      prefSet("pagesize", String(v));
+      renderPageSize();
+      onFiltersChanged();
+    },
+  });
+  function renderPageSize() {
+    const sizes = PAGE_SIZES.includes(state.pageSize) ? PAGE_SIZES : [...PAGE_SIZES, state.pageSize].sort((a, b) => a - b);
+    pageSizeDd.set({ options: sizes.map((n) => ({ value: n, label: `${n} per page`, short: String(n) })), value: state.pageSize });
+  }
   const repoDd = createDropdown(dom.ddRepo, { label: "Repo", searchable: true, onChange: (v) => { state.filters.repo = v; onFiltersChanged(); } });
   yearDd.root.classList.add("year-dd");
 
@@ -1172,45 +1233,72 @@
   const ROLE_TEXT = { created: "Created", assigned: "Assigned", reviewed: "Reviewed", commented: "Commented", other: "Mentioned / other" };
   const ROLE_COLOR = { created: "var(--s3)", assigned: "var(--s4)", reviewed: "var(--s7)", commented: "var(--s1)", other: "var(--text-3)" };
 
+  // Each filter's numbers = what you'd get if you picked that option,
+  // given the time range and every OTHER active filter (faceted counts).
+  function matchesFilters(i, f, skip) {
+    if (skip !== "kind" && f.kind !== "all" && i.kind !== f.kind) return false;
+    if (skip !== "status" && f.status !== "all" && i.status !== f.status) return false;
+    if (skip !== "role" && f.role !== "all" && i.bucket !== f.role) return false;
+    if (skip !== "repo" && f.repo !== "all" && i.repo !== f.repo) return false;
+    return true;
+  }
+
+  function textFiltered(items) {
+    const q = state.filters.text.toLowerCase().trim();
+    if (!q) return items;
+    const num = q.replace(/^#/, "");
+    return items.filter((i) => i.title.toLowerCase().includes(q) || i.repo.toLowerCase().includes(q) || String(i.number) === num);
+  }
+
   function renderFilterControls() {
     const f = state.filters;
-    const scoped = getItemsForCurrentDateRange();
+    const base = textFiltered(getItemsForCurrentDateRange());
+    const facet = (skip) => base.filter((i) => matchesFilters(i, f, skip));
+
+    const forKind = facet("kind");
     kindDd.set({
       options: [
-        { value: "all", label: "All types", short: "All", count: scoped.length },
-        { value: "pr", label: "Pull requests", count: scoped.filter((i) => i.kind === "pr").length },
-        { value: "issue", label: "Issues", count: scoped.filter((i) => i.kind === "issue").length },
+        { value: "all", label: "All types", short: "All", count: forKind.length },
+        { value: "pr", label: "Pull requests", count: forKind.filter((i) => i.kind === "pr").length },
+        { value: "issue", label: "Issues", count: forKind.filter((i) => i.kind === "issue").length },
       ],
       value: f.kind,
       defaultValue: "all",
     });
-    const statuses = [["all", "Any status"], ["open", "Open"]];
-    if (f.kind !== "issue") statuses.push(["draft", "Draft"], ["merged", "Merged"]);
-    statuses.push(["closed", "Closed"]);
-    if (f.kind !== "pr") statuses.push(["not-planned", "Not planned"]);
+
+    // Open/Closed apply to both; Draft/Merged only exist for PRs, Not planned only for issues
+    const both = f.kind === "all";
+    const statuses = [["all", "Any status", "Any"], ["open", "Open"]];
+    if (f.kind !== "issue") statuses.push(["draft", both ? "Draft (PR)" : "Draft", "Draft"], ["merged", both ? "Merged (PR)" : "Merged", "Merged"]);
+    statuses.push(["closed", both ? "Closed (PR or issue)" : "Closed", "Closed"]);
+    if (f.kind !== "pr") statuses.push(["not-planned", both ? "Not planned (issue)" : "Not planned", "Not planned"]);
     if (!statuses.some(([v]) => v === f.status)) f.status = "all";
-    const byKind = f.kind === "all" ? scoped : scoped.filter((i) => i.kind === f.kind);
-    const sc = countBy(byKind, (i) => i.status);
+    const forStatus = facet("status");
+    const sc = countBy(forStatus, (i) => i.status);
     statusDd.set({
-      options: statuses.map(([v, l]) => ({ value: v, label: l, short: v === "all" ? "Any" : l, count: v === "all" ? byKind.length : sc.get(v) || 0 })),
+      options: statuses.map(([v, l, short]) => ({ value: v, label: l, short: short || l, count: v === "all" ? forStatus.length : sc.get(v) || 0 })),
       value: f.status,
       defaultValue: "all",
     });
-    const total = lifetimeTotal();
-    const exact = !rangeBounds();
-    const rc = countBy(scoped, (i) => i.bucket);
+
+    // While the full list is still loading, an unfiltered all-time view shows GitHub's exact totals
+    const forRole = facet("role");
+    const useGitHub = !loadedEverything() && !rangeBounds() && forRole.length === state.itemsMap.size && bucketTotalsKnown();
+    const rc = countBy(forRole, (i) => i.bucket);
     roleDd.set({
       options: [
-        { value: "all", label: "Any role", short: "Any", count: exact && total !== undefined ? total : scoped.length },
-        ...REL_ORDER.map((b) => ({ value: b, label: ROLE_TEXT[b], dot: ROLE_COLOR[b], count: exact && state.counts[b] !== undefined ? state.counts[b] : rc.get(b) || 0 })),
+        { value: "all", label: "Any role", short: "Any", count: useGitHub ? lifetimeTotal() : forRole.length },
+        ...REL_ORDER.map((b) => ({ value: b, label: ROLE_TEXT[b], dot: ROLE_COLOR[b], count: useGitHub ? state.counts[b] : rc.get(b) || 0 })),
       ],
       value: f.role,
       defaultValue: "all",
     });
-    const repos = Array.from(countBy(scoped, (i) => i.repo).entries()).sort((a, b) => b[1] - a[1]);
+
+    const forRepo = facet("repo");
+    const repos = Array.from(countBy(forRepo, (i) => i.repo).entries()).sort((a, b) => b[1] - a[1]);
     if (f.repo !== "all" && !repos.some(([r]) => r === f.repo)) repos.unshift([f.repo, 0]);
     repoDd.set({
-      options: [{ value: "all", label: "All repositories", short: "All", count: scoped.length }, ...repos.map(([r, n]) => ({ value: r, label: r, short: r.split("/")[1] || r, count: n }))],
+      options: [{ value: "all", label: "All repositories", short: "All", count: forRepo.length }, ...repos.map(([r, n]) => ({ value: r, label: r, short: r.split("/")[1] || r, count: n }))],
       value: f.repo,
       defaultValue: "all",
     });
@@ -1281,6 +1369,7 @@
 
   function renderAll() {
     renderBanner();
+    renderOverview();
     renderRangeControls();
     if (state.viewMode === "analytics") renderAnalytics();
     else {
@@ -1315,11 +1404,11 @@
     state.currentPage = Math.min(Math.max(1, state.currentPage), totalPages);
     const start = (state.currentPage - 1) * state.pageSize;
     const pageItems = filtered.slice(start, start + state.pageSize);
-    const signature = pageItems.map((i) => `${i.id}|${i.updatedAt}|${i.bucket}`).join(",");
+    const signature = `${start}:` + pageItems.map((i) => `${i.id}|${i.updatedAt}|${i.bucket}`).join(",");
     if (signature !== dom.listContainer.dataset.signature) {
       dom.listContainer.dataset.signature = signature;
       const frag = document.createDocumentFragment();
-      for (const item of pageItems) frag.appendChild(createItemRow(item));
+      pageItems.forEach((item, k) => frag.appendChild(createItemRow(item, start + k + 1)));
       dom.listContainer.innerHTML = "";
       dom.listContainer.appendChild(frag);
     }
@@ -1327,8 +1416,9 @@
   }
 
   function loadedEverything() {
+    if (state.harvestDone) return true;
     const t = lifetimeTotal();
-    return state.harvestDone || (t !== undefined && state.itemsMap.size >= t);
+    return t !== undefined && state.itemsMap.size >= t;
   }
 
   function updatePagerUI(total) {
@@ -1361,7 +1451,7 @@
         last = p;
       }
     }
-    dom.bottomSummary.textContent = loadedEverything() ? `${fmt(totalPages)} page${totalPages === 1 ? "" : "s"}` : `Loading history · ${fmt(state.itemsMap.size)} of ${fmt(lifetimeTotal())}`;
+    dom.bottomSummary.textContent = `${fmt(state.pageSize)} per page · ${fmt(totalPages)} page${totalPages === 1 ? "" : "s"}${loadedEverything() ? "" : ` · loading history (${fmt(state.itemsMap.size)} so far)`}`;
   }
 
   function goToPage(p) {
@@ -1403,7 +1493,7 @@
   const ICON_ISSUE = `<svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 9.5a1.5 1.5 0 100-3 1.5 1.5 0 000 3z"/><path fill-rule="evenodd" d="M8 0a8 8 0 100 16A8 8 0 008 0zM1.5 8a6.5 6.5 0 1113 0 6.5 6.5 0 01-13 0z"/></svg>`;
   const ICON_EXT = `<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M9.5 2.5h4v4M13.5 2.5L8 8M12 9.5v3a1 1 0 01-1 1H3.5a1 1 0 01-1-1V5a1 1 0 011-1h3"/></svg>`;
 
-  function createItemRow(item) {
+  function createItemRow(item, serial) {
     const row = document.createElement("div");
     row.className = "item-row";
     row.dataset.id = item.id;
@@ -1411,6 +1501,7 @@
     const icon = (item.kind === "pr" ? ICON_PR : ICON_ISSUE).replace("<svg", `<svg class="type-icon ${item.status}" aria-hidden="true"`);
     row.innerHTML = `
       <div class="row-main">
+        <span class="row-num" aria-label="Item ${serial}">${fmt(serial)}</span>
         ${icon}
         <div class="row-content">
           <div class="row-title">
@@ -2089,8 +2180,8 @@
       data: (c) => { const m = new Map(); for (const i of c.items) for (const l of i.labels || []) m.set(l.name, (m.get(l.name) || 0) + 1); return Array.from(m.entries()).sort((a, b) => b[1] - a[1]).map(([k, v]) => ({ key: k, label: k, value: v })); },
     },
     people: {
-      title: "People", kind: "cat", def: "bars", colLabel: "Author", sub: () => "Authors of threads they joined (bots excluded)",
-      data: (c) => { const u = state.login.toLowerCase(); return Array.from(countBy(c.items.filter((i) => i.author.toLowerCase() !== u && !/\[bot\]$|-bot$/i.test(i.author)), (i) => i.author).entries()).sort((a, b) => b[1] - a[1]).map(([k, v]) => ({ key: k, label: `@${k}`, value: v })); },
+      title: "People", kind: "cat", def: "bars", colLabel: "Author", sub: () => "Authors of the PRs and issues they joined",
+      data: (c) => { const u = state.login.toLowerCase(); return Array.from(countBy(c.items.filter((i) => i.author.toLowerCase() !== u), (i) => i.author).entries()).sort((a, b) => b[1] - a[1]).map(([k, v]) => ({ key: k, label: `@${k}`, value: v })); },
     },
   };
 
@@ -2256,8 +2347,16 @@
     dom.inputClear.style.display = dom.searchInput.value ? "block" : "none";
   });
   dom.btnClearCache?.addEventListener("click", async () => {
-    await cacheClear();
-    if (state.login) startTracking(state.login);
+    if (!state.login) return;
+    flushSnapshotNow();
+    memCache.clear(); // forget cached GitHub answers, keep the saved list
+    const db = await openDB();
+    try {
+      db?.transaction(STORE, "readwrite").objectStore(STORE).clear();
+    } catch {
+      /* ignore */
+    }
+    startTracking(state.login);
   });
 
   // ── Theme: System / Light / Dark ────────────────────────────────────
@@ -2370,6 +2469,7 @@
     initCharts();
     renderRangeControls();
     renderFilterControls();
+    renderPageSize();
     cachePrune();
     window.addEventListener("pagehide", flushSnapshotNow);
     await detectLocalProxy();

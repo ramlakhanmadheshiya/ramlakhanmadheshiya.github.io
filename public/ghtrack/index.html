@@ -12,7 +12,7 @@
     // Apply the saved theme before first paint (no flash)
     try { var t = localStorage.getItem("ghtrack_theme"); if (t === "light" || t === "dark") document.documentElement.dataset.theme = t; } catch (e) {}
   </script>
-  <link rel="stylesheet" href="./app.css?v=d1d66051d1" />
+  <link rel="stylesheet" href="./app.css?v=82ba8f5612" />
 </head>
 <body>
   <header class="app-header">
@@ -187,6 +187,7 @@
         <div class="list-head">
           <span id="pager-count">0 items</span>
           <div class="pager">
+            <div id="dd-pagesize"></div>
             <button id="pager-prev" class="pager-btn" type="button" aria-label="Previous page" disabled><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M10 3.5L5.5 8l4.5 4.5"/></svg></button>
             <button id="pager-next" class="pager-btn" type="button" aria-label="Next page" disabled><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3.5L10.5 8 6 12.5"/></svg></button>
           </div>
@@ -276,6 +277,6 @@
     </div>
   </div>
 
-  <script src="./app.js?v=d1d66051d1"></script>
+  <script src="./app.js?v=82ba8f5612"></script>
 </body>
 </html>
