@@ -534,7 +534,7 @@
     currentPage: 1,
     pageSize: (() => { try { return Math.min(1000, Math.max(5, Number(localStorage.getItem("ghtrack_pagesize")) || FEED_PAGE_SIZE)); } catch { return FEED_PAGE_SIZE; } })(),
     viewMode: "feed",
-    dateRange: "all",          // all | 1d | 7d | 30d | 90d | 1y | y2024 …
+    dateRange: "30d",          // all | 1d | 7d | 30d | 90d | 1y | y2024 … (30 days loads first)
     heatYear: "recent",        // recent | 2024 …
     filters: { kind: "all", status: "all", role: "all", repo: "all", text: "" },
     expandedPreviews: new Set(),
@@ -727,6 +727,7 @@
       harvestDone: false,
       fromSnapshot: false,
       scopes: null,
+      dateRange: "30d",
       syncing: true,
       currentPage: 1,
     });
@@ -1147,7 +1148,7 @@
     const nowYear = new Date().getFullYear();
     let from = state.profile?.created_at ? new Date(state.profile.created_at).getFullYear() : nowYear;
     for (const it of state.itemsMap.values()) {
-      const y = Number((it.createdAt || "").slice(0, 4));
+      const y = Number(actAt(it).slice(0, 4));
       if (y && y < from) from = y;
     }
     const out = [];
@@ -2282,8 +2283,18 @@
     return { from: defaultDays ? new Date(Date.now() - defaultDays * DAY_MS) : null, to: new Date() };
   }
 
+  // When the person was involved: the day they opened it, or — for threads
+  // they joined — the latest activity (GitHub search has no comment dates),
+  // never earlier than the day their account was created.
+  function actAt(i) {
+    let t = i.bucket === "created" || !i.bucket ? i.createdAt : i.updatedAt || i.createdAt;
+    const join = state.profile?.created_at;
+    if (join && t && t < join) t = join;
+    return t || "";
+  }
+
   function monthlySeries(items, cumulativeAll) {
-    const counts = countBy(items, (i) => (i.createdAt || "").slice(0, 7));
+    const counts = countBy(items, (i) => actAt(i).slice(0, 7));
     const b = periodBounds(0);
     let start;
     if (b.from) start = new Date(b.from.getFullYear(), b.from.getMonth(), 1);
@@ -2306,7 +2317,7 @@
 
   function weeklySeries(items) {
     const b = periodBounds(364);
-    const counts = countBy(items, (i) => dayKey(weekStart(new Date(i.createdAt))));
+    const counts = countBy(items, (i) => dayKey(weekStart(new Date(actAt(i)))));
     const out = [];
     const d = weekStart(b.from);
     while (d <= b.to) {
@@ -2321,7 +2332,7 @@
     const r = state.dateRange;
     if (r === "1d") {
       const counts = countBy(items, (i) => {
-        const d = new Date(i.createdAt);
+        const d = new Date(actAt(i));
         return Date.now() - d < DAY_MS ? `${dayKey(d)} ${d.getHours()}` : null;
       });
       const out = [];
@@ -2335,7 +2346,7 @@
     }
     const b = periodBounds(r === "all" || r === "1y" ? 89 : 89);
     const from = r === "1y" || r === "all" ? new Date(Date.now() - 89 * DAY_MS) : b.from;
-    const counts = countBy(items, (i) => dayKey(new Date(i.createdAt)));
+    const counts = countBy(items, (i) => dayKey(new Date(actAt(i))));
     const out = [];
     const d = new Date(from);
     d.setHours(0, 0, 0, 0);
@@ -2349,7 +2360,7 @@
   }
 
   function yearlySeries(all) {
-    const counts = countBy(all, (i) => (i.createdAt || "").slice(0, 4));
+    const counts = countBy(all, (i) => actAt(i).slice(0, 4));
     const years = Array.from(counts.keys()).filter(Boolean).map(Number);
     if (!years.length) return [];
     const out = [];
@@ -2372,11 +2383,11 @@
   }
 
   const CHARTS = {
-    monthly: { title: "Monthly", kind: "series", def: "bar", sub: () => "PRs and issues opened each month", data: (c) => monthlySeries(c.items) },
-    weekly: { title: "Weekly", kind: "series", def: "bar", sub: () => `PRs and issues opened each week${rangeBounds() ? "" : ", last 52 weeks"}`, data: (c) => weeklySeries(c.items) },
-    daily: { title: "Daily", kind: "series", def: "bar", sub: () => (state.dateRange === "1d" ? "Opened per hour, last 24 hours" : /^(all|1y)$/.test(state.dateRange) ? "Opened per day, last 90 days" : "Opened per day"), data: (c) => dailySeries(c.items) },
-    yearly: { title: "Yearly", kind: "series", def: "bar", sub: () => "PRs and issues opened each year, all time", data: (c) => yearlySeries(c.all) },
-    growth: { title: "Growth", kind: "series", def: "cumulative", sub: () => "Running total of PRs and issues opened", data: (c) => monthlySeries(c.items) },
+    monthly: { title: "Monthly", kind: "series", def: "bar", sub: () => "Their activity each month", data: (c) => monthlySeries(c.items) },
+    weekly: { title: "Weekly", kind: "series", def: "bar", sub: () => `Their activity each week${rangeBounds() ? "" : ", last 52 weeks"}`, data: (c) => weeklySeries(c.items) },
+    daily: { title: "Daily", kind: "series", def: "bar", sub: () => (state.dateRange === "1d" ? "Activity per hour, last 24 hours" : /^(all|1y)$/.test(state.dateRange) ? "Activity per day, last 90 days" : "Activity per day"), data: (c) => dailySeries(c.items) },
+    yearly: { title: "Yearly", kind: "series", def: "bar", sub: () => "Activity each year, all time", data: (c) => yearlySeries(c.all) },
+    growth: { title: "Growth", kind: "series", def: "cumulative", sub: () => "Running total of their activity", data: (c) => monthlySeries(c.items) },
     weekday: { title: "By weekday", kind: "bins", def: "bar", sub: () => "When they open PRs and issues (your local time)", data: (c) => { const m = countBy(c.mine, (i) => new Date(i.createdAt).getDay()); return DAY_NAMES.map((n, i) => ({ label: n, value: m.get(i) || 0 })); } },
     hour: { title: "By hour of day", kind: "bins", def: "bar", sub: () => "When they open PRs and issues (your local time)", data: (c) => { const m = countBy(c.mine, (i) => new Date(i.createdAt).getHours()); return Array.from({ length: 24 }, (_, h) => ({ label: `${String(h).padStart(2, "0")}:00`, short: h % 3 === 0 ? `${h}h` : "", value: m.get(h) || 0 })); } },
     mergeTime: { title: "Time to merge", kind: "bins", def: "bar", sub: () => "How long their merged PRs took", data: (c) => binSeries(c.mergeHours, [["< 1h", 1], ["< 1d", 24], ["1–7d", 168], ["1–4w", 672], ["1–3mo", 2160], ["> 3mo", Infinity]]) },
@@ -2421,9 +2432,10 @@
     const mergeHours = mine.filter((i) => i.kind === "pr" && i.mergedAt).map((i) => (new Date(i.mergedAt) - new Date(i.createdAt)) / 3600000).sort((a, b) => a - b);
     const ctx = { items, all, mine, mergeHours };
     const total = lifetimeTotal();
-    dom.anNote.textContent = loadedEverything()
+    const dateNote = " Dates show when they opened an item, or the latest activity on threads they joined.";
+    dom.anNote.textContent = (loadedEverything()
       ? `${fmt(items.length)} items${rangeBounds() ? ` in ${rangeBounds().year || `the last ${rangeBounds().label}`}` : ""}.`
-      : `Based on ${fmt(state.itemsMap.size)} of ${fmt(total)} items loaded so far — charts update as the rest arrives.`;
+      : `Based on ${fmt(state.itemsMap.size)} of ${fmt(total)} items loaded so far — charts update as the rest arrives.`) + dateNote;
     renderTiles(ctx);
     const periodKey = `${state.login}|${state.dateRange}`;
     for (const [id, st] of chartState) {
@@ -2491,8 +2503,7 @@
     const el = dom.heatmapCalendar;
     const W = el.parentElement.clientWidth;
     if (!W) return;
-    const mine = items.filter((i) => i.bucket === "created");
-    const counts = countBy(mine, (i) => dayKey(new Date(i.createdAt)));
+    const counts = countBy(items, (i) => dayKey(new Date(actAt(i))));
     const year = state.heatYear === "recent" ? null : Number(state.heatYear);
     const start = year ? new Date(year, 0, 1) : new Date(Date.now() - 364 * DAY_MS);
     start.setHours(0, 0, 0, 0);
@@ -2531,7 +2542,7 @@
     el.innerHTML = `${svg}</svg>`;
     const hs = el.parentElement;
     if (hs.scrollWidth > hs.clientWidth) hs.scrollLeft = hs.scrollWidth;
-    dom.heatmapCountLabel.textContent = `${fmt(total)} PRs and issues opened ${year ? `in ${year}` : "in the last 12 months"}`;
+    dom.heatmapCountLabel.textContent = `${fmt(total)} contributions ${year ? `in ${year}` : "in the last 12 months"}`;
   }
 
   // ── View switching ──────────────────────────────────────────────────
@@ -2665,6 +2676,8 @@
 
   async function init() {
     applyTheme(prefGet("theme", "system"));
+    const yearEl = $("year");
+    if (yearEl) yearEl.textContent = String(new Date().getFullYear());
     initCharts();
     renderRangeControls();
     renderFilterControls();

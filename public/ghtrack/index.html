@@ -12,7 +12,7 @@
     // Apply the saved theme before first paint (no flash)
     try { var t = localStorage.getItem("ghtrack_theme"); if (t === "light" || t === "dark") document.documentElement.dataset.theme = t; } catch (e) {}
   </script>
-  <link rel="stylesheet" href="./app.css?v=275689d32f" />
+  <link rel="stylesheet" href="./app.css?v=7f208072e8" />
 </head>
 <body>
   <header class="app-header">
@@ -241,15 +241,42 @@
   </main>
 
   <footer class="app-footer">
-    <div class="wrap">
-      <span>ghtrack</span>
-      <div class="footer-links">
-        <a href="mailto:hello@theramlakhan.com">hello@theramlakhan.com</a>
-        <a href="https://theramlakhan.com" target="_blank" rel="noopener">theramlakhan.com</a>
+    <div class="wrap footer-grid">
+      <div class="footer-brand">
+        <a href="./" class="brand" aria-label="ghtrack home">
+          <svg class="brand-mark" viewBox="0 0 24 24" aria-hidden="true">
+            <rect class="bm-bg" width="24" height="24" rx="7"/>
+            <rect class="bm-bar" x="6" y="12.5" width="3" height="5.5" rx="1.5"/>
+            <rect class="bm-bar" x="10.5" y="9" width="3" height="9" rx="1.5"/>
+            <rect class="bm-hot" x="15" y="5.5" width="3" height="12.5" rx="1.5"/>
+          </svg>
+          <span>ghtrack</span>
+        </a>
+        <p>Lifetime GitHub activity for any user — pull requests, issues, reviews and discussions in one place.</p>
       </div>
+      <nav class="footer-col" aria-label="Product">
+        <h4>Product</h4>
+        <a href="./">Track a user</a>
+        <a href="./?name=ramlakhanmadheshiya">Example profile</a>
+      </nav>
+      <nav class="footer-col" aria-label="More from the author">
+        <h4>Author</h4>
+        <a href="https://theramlakhan.com" target="_blank" rel="noopener">Website</a>
+        <a href="https://theramlakhan.com/projects/" target="_blank" rel="noopener">Projects</a>
+        <a href="https://theramlakhan.com/cv/" target="_blank" rel="noopener">CV</a>
+      </nav>
+      <nav class="footer-col" aria-label="Contact">
+        <h4>Contact</h4>
+        <a href="mailto:hello@theramlakhan.com">hello@theramlakhan.com</a>
+        <a href="https://github.com/ramlakhanmadheshiya" target="_blank" rel="noopener">GitHub</a>
+      </nav>
+    </div>
+    <div class="wrap footer-bottom">
+      <span>© <span id="year">2026</span> Ramlakhan Madheshiya</span>
+      <span>Uses GitHub's public API · Not affiliated with GitHub · Your data stays on your device</span>
     </div>
   </footer>
 
-  <script src="./app.js?v=275689d32f"></script>
+  <script src="./app.js?v=7f208072e8"></script>
 </body>
 </html>
