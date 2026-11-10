@@ -12,16 +12,17 @@
     // Apply the saved theme before first paint (no flash)
     try { var t = localStorage.getItem("ghtrack_theme"); if (t === "light" || t === "dark") document.documentElement.dataset.theme = t; } catch (e) {}
   </script>
-  <link rel="stylesheet" href="./app.css?v=82ba8f5612" />
+  <link rel="stylesheet" href="./app.css?v=275689d32f" />
 </head>
 <body>
   <header class="app-header">
     <div class="wrap">
       <a href="./" class="brand" aria-label="ghtrack home">
-        <svg class="brand-mark" viewBox="0 0 26 26" aria-hidden="true">
-          <rect class="bm-bg" width="26" height="26" rx="7"/>
-          <path class="bm-fg" d="M6 16.5l3.6-4 3.2 3 4.4-6.5" fill="none" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"/>
-          <circle class="bm-dot" cx="19.6" cy="7.4" r="2.3"/>
+        <svg class="brand-mark" viewBox="0 0 24 24" aria-hidden="true">
+          <rect class="bm-bg" width="24" height="24" rx="7"/>
+          <rect class="bm-bar" x="6" y="12.5" width="3" height="5.5" rx="1.5"/>
+          <rect class="bm-bar" x="10.5" y="9" width="3" height="9" rx="1.5"/>
+          <rect class="bm-hot" x="15" y="5.5" width="3" height="12.5" rx="1.5"/>
         </svg>
         <span>ghtrack</span>
       </a>
@@ -33,10 +34,13 @@
         </div>
       </form>
 
-      <div class="theme-switch" role="group" aria-label="Theme">
-        <button type="button" data-theme-choice="system" title="System" aria-label="System theme"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1.75" y="2.75" width="12.5" height="8.5" rx="1.5"/><path d="M5.5 14h5M8 11.5V14" stroke-linecap="round"/></svg></button>
-        <button type="button" data-theme-choice="light" title="Light" aria-label="Light theme"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="8" cy="8" r="3"/><path d="M8 1.5v1.5M8 13v1.5M1.5 8H3M13 8h1.5M3.4 3.4l1.06 1.06M11.54 11.54l1.06 1.06M3.4 12.6l1.06-1.06M11.54 4.46l1.06-1.06"/></svg></button>
-        <button type="button" data-theme-choice="dark" title="Dark" aria-label="Dark theme"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M13.5 9.6A5.75 5.75 0 016.4 2.5a5.75 5.75 0 107.1 7.1z"/></svg></button>
+      <div class="theme" id="theme">
+        <button type="button" class="theme-btn" id="theme-btn" aria-haspopup="menu" aria-expanded="false" aria-label="Theme"></button>
+        <div class="theme-menu" role="menu">
+          <button type="button" role="menuitemradio" data-theme-choice="system"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1.75" y="2.75" width="12.5" height="8.5" rx="1.5"/><path d="M5.5 14h5M8 11.5V14" stroke-linecap="round"/></svg>System<svg class="ck" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 8.5l3 3 6-7"/></svg></button>
+          <button type="button" role="menuitemradio" data-theme-choice="light"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="8" cy="8" r="3"/><path d="M8 1.5v1.5M8 13v1.5M1.5 8H3M13 8h1.5M3.4 3.4l1.06 1.06M11.54 11.54l1.06 1.06M3.4 12.6l1.06-1.06M11.54 4.46l1.06-1.06"/></svg>Light<svg class="ck" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 8.5l3 3 6-7"/></svg></button>
+          <button type="button" role="menuitemradio" data-theme-choice="dark"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M13.5 9.6A5.75 5.75 0 016.4 2.5a5.75 5.75 0 107.1 7.1z"/></svg>Dark<svg class="ck" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 8.5l3 3 6-7"/></svg></button>
+        </div>
       </div>
     </div>
   </header>
@@ -44,8 +48,8 @@
   <main>
     <!-- Landing -->
     <section class="hero wrap">
-      <h1>Your entire GitHub history, in one place</h1>
-      <p class="lead">Every pull request, issue, review and discussion of any GitHub user — exact lifetime numbers in seconds. No login, no token.</p>
+      <h1>Every GitHub contribution.<br />One place.</h1>
+      <p class="lead">Pull requests, issues, reviews and discussions for any GitHub user. No sign-in.</p>
       <form id="search-form" class="search" autocomplete="off" role="search">
         <div class="search-field">
           <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="7" cy="7" r="4.75"/><path d="M10.6 10.6L14 14" stroke-linecap="round"/></svg>
@@ -54,47 +58,42 @@
         </div>
         <button type="submit" id="btn-search" class="btn btn-primary">Track</button>
       </form>
-      <p class="hero-hint">Tip: paste a profile link like <code>https://github.com/torvalds</code> and tracking starts on its own.</p>
+      <p class="hero-hint">Or paste a profile link — it starts on its own.</p>
     </section>
 
     <section class="landing wrap" id="landing">
       <div class="features">
         <div class="feature">
           <div class="feature-icon"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M9 1.5L3 9h4.5L7 14.5 13 7H8.5z"/></svg></div>
-          <h3>Exact numbers in seconds</h3>
-          <p>Lifetime pull requests, issues, reviews and comments counted straight from GitHub, even for accounts with 40,000+ items.</p>
+          <h3>Exact lifetime counts</h3>
+          <p>Straight from GitHub, in seconds.</p>
         </div>
         <div class="feature">
           <div class="feature-icon"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M2 4h12M4.5 8h7M7 12h2"/></svg></div>
           <h3>Instant filters</h3>
-          <p>Type, status, role, repository, time range and text search — answered in your browser with no waiting.</p>
+          <p>Type, status, role, repo and time.</p>
         </div>
         <div class="feature">
           <div class="feature-icon"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><circle cx="8" cy="5" r="2.5"/><path d="M3 14c.6-2.6 2.6-4 5-4s4.4 1.4 5 4"/></svg></div>
           <h3>Clear involvement</h3>
-          <p>Every item is counted once, under how the person is linked: created, assigned, reviewed, commented or mentioned.</p>
+          <p>Each item counted once, by role.</p>
         </div>
         <div class="feature">
           <div class="feature-icon"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><path d="M2.5 3.5h11v7h-6l-3 2.5v-2.5h-2z"/></svg></div>
-          <h3>Conversation preview</h3>
-          <p>Open any item to read its description, comments, reviews and commits without leaving the page.</p>
+          <h3>Inline conversations</h3>
+          <p>Read threads without leaving.</p>
         </div>
         <div class="feature">
           <div class="feature-icon"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M2.5 13.5V9M6.2 13.5V5M9.9 13.5V7.5M13.6 13.5V2.5"/></svg></div>
           <h3>Analytics</h3>
-          <p>Calendar, daily, weekly, monthly and yearly activity, working hours, merge speed, streaks, repositories, labels and people.</p>
+          <p>Activity, streaks and merge speed.</p>
         </div>
         <div class="feature">
           <div class="feature-icon"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><rect x="3" y="7" width="10" height="7" rx="1.5"/><path d="M5.5 7V5a2.5 2.5 0 015 0v2"/></svg></div>
           <h3>Private by design</h3>
-          <p>Uses GitHub's public API from your browser. Results are saved only on your device, so the next visit is instant.</p>
+          <p>Saved only on your device.</p>
         </div>
       </div>
-      <ol class="steps">
-        <li><b>1</b>Enter a username or profile link</li>
-        <li><b>2</b>Numbers and the newest work appear in seconds</li>
-        <li><b>3</b>The full history keeps loading in the background</li>
-      </ol>
     </section>
 
     <!-- Dashboard -->
@@ -104,14 +103,6 @@
         <div class="profile-main">
           <div class="profile-name"><span id="profile-name">…</span> <a id="profile-login" href="#" target="_blank" rel="noopener"></a></div>
           <div class="profile-meta" id="profile-meta"></div>
-        </div>
-        <div class="profile-actions">
-          <button id="btn-clear-cache" class="btn btn-sm" type="button" title="Forget the saved copy and reload everything from GitHub">
-            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M13.5 8A5.5 5.5 0 113 4.5"/><path d="M3 1.5v3h3"/></svg>Refresh
-          </button>
-          <button id="btn-export" class="btn btn-sm" type="button">
-            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2v8M4.5 6.5L8 10l3.5-3.5M2.5 13.5h11"/></svg>Export
-          </button>
         </div>
       </div>
 
@@ -252,31 +243,13 @@
   <footer class="app-footer">
     <div class="wrap">
       <span>ghtrack</span>
-      <a href="https://theramlakhan.com" target="_blank" rel="noopener">theramlakhan.com</a>
+      <div class="footer-links">
+        <a href="mailto:hello@theramlakhan.com">hello@theramlakhan.com</a>
+        <a href="https://theramlakhan.com" target="_blank" rel="noopener">theramlakhan.com</a>
+      </div>
     </div>
   </footer>
 
-  <!-- Export -->
-  <div id="modal-export" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="modal-export-title">
-    <div class="modal-card">
-      <div class="modal-header">
-        <h2 id="modal-export-title" class="modal-title">Export</h2>
-        <button id="modal-export-close" class="modal-close" type="button" aria-label="Close">✕</button>
-      </div>
-      <div class="modal-body">
-        <div class="seg export-tabs" role="group">
-          <button id="tab-export-md" type="button" aria-pressed="true">Markdown</button>
-          <button id="tab-export-json" type="button" aria-pressed="false">JSON</button>
-        </div>
-        <textarea id="export-content" class="export-textarea" readonly></textarea>
-      </div>
-      <div class="modal-footer">
-        <button id="btn-copy-export" class="btn btn-sm" type="button">Copy</button>
-        <button id="btn-download-export" class="btn btn-sm btn-primary" type="button">Download</button>
-      </div>
-    </div>
-  </div>
-
-  <script src="./app.js?v=82ba8f5612"></script>
+  <script src="./app.js?v=275689d32f"></script>
 </body>
 </html>

@@ -440,7 +440,7 @@
     const db = await openDB();
     if (!db) return;
     const items = Array.from(state.itemsMap.values()).map(({ body, ...rest }) => rest);
-    const rec = { login: state.login.toLowerCase(), items, syncedAt: state.syncStartedAt, savedAt: Date.now() };
+    const rec = { login: state.login.toLowerCase(), items, syncedAt: state.syncStartedAt, savedAt: Date.now(), scopes: state.scopes || null };
     try {
       db.transaction(SNAP_STORE, "readwrite").objectStore(SNAP_STORE).put(rec);
     } catch {
@@ -458,19 +458,29 @@
   // The 5 relationship buckets split a person's involvement with no overlap,
   // so loading them gives every item exactly once, already labelled.
   // "Created" is loaded as two lists (PRs, issues) so both totals come free
-  function makeHarvesters(login) {
-    const list = [
-      new BucketHarvester("created", `author:${login} is:pr`, "pr"),
-      new BucketHarvester("created", `author:${login} is:issue`, "issue"),
-    ];
-    for (const b of REL_ORDER.slice(1)) list.push(new BucketHarvester(b, bucketExpr(b, login)));
+  // scopes = [null] normally; for accounts hidden from GitHub search it is a
+  // list of repository groups, and every bucket query runs inside each group.
+  function makeHarvesters(login, scopes = [null]) {
+    const list = [];
+    for (const [order, make] of [
+      [0, (pre, set) => new BucketHarvester("created", `${pre}author:${login} is:pr`, "pr", set)],
+      [1, (pre, set) => new BucketHarvester("created", `${pre}author:${login} is:issue`, "issue", set)],
+      ...REL_ORDER.slice(1).map((b, i) => [i + 2, (pre, set) => new BucketHarvester(b, `${pre}${bucketExpr(b, login)}`, null, set)]),
+    ]) {
+      void order;
+      for (const scope of scopes) {
+        const pre = scope ? `(${scope.map((r) => `repo:${r}`).join(" OR ")}) ` : "";
+        list.push(make(pre, scope ? new Set(scope.map((r) => r.toLowerCase())) : null));
+      }
+    }
     return list;
   }
 
   class BucketHarvester {
-    constructor(bucket, q, kind = null) {
+    constructor(bucket, q, kind = null, scope = null) {
       this.bucket = bucket;
       this.kind = kind;
+      this.scope = scope;
       this.q = q;
       this.extra = "";
       this.page = 0;
@@ -550,8 +560,6 @@
     sync: $("sync"),
     streamText: $("stream-text"),
     streamProgressFill: $("stream-progress-fill"),
-    btnClearCache: $("btn-clear-cache"),
-    btnExport: $("btn-export"),
 
     telemetryBar: $("telemetry-bar"),
     statTotal: $("stat-total"),
@@ -597,13 +605,6 @@
     heatmapYear: $("heatmap-year"),
     heatmapCountLabel: $("heatmap-count-label"),
 
-    modalExport: $("modal-export"),
-    modalExportClose: $("modal-export-close"),
-    tabExportMd: $("tab-export-md"),
-    tabExportJson: $("tab-export-json"),
-    exportContent: $("export-content"),
-    btnCopyExport: $("btn-copy-export"),
-    btnDownloadExport: $("btn-download-export"),
   };
 
   // Small per-viewer preferences (chart types, theme). Never required.
@@ -725,6 +726,7 @@
       listReady: false,
       harvestDone: false,
       fromSnapshot: false,
+      scopes: null,
       syncing: true,
       currentPage: 1,
     });
@@ -764,7 +766,8 @@
     }
 
     // Profile check runs alongside the searches (validates the name, gives join year)
-    apiGet(`/users/${encodeURIComponent(login)}`, { bucket: "core", priority: 0 })
+    const profileP = apiGet(`/users/${encodeURIComponent(login)}`, { bucket: "core", priority: 0 });
+    profileP
       .then((p) => {
         if (isStale()) return;
         if (p.type === "Organization") {
@@ -784,34 +787,36 @@
         }
       });
 
-    try {
-      // 1. First 100 of every bucket: the newest list + exact bucket totals
-      state.syncing = true;
-      await Promise.all(state.harvesters.map((h) => firstPages(h, snap, isStale)));
-      if (isStale()) return;
-      state.syncing = false;
-      state.listReady = true;
-      dom.btnSearch.disabled = false;
-      dom.btnSearch.textContent = "Track";
-      deriveCreatedCounts();
-      loadExtraCounts(gen);
-      renderAll();
+    // Accounts hidden from search: reuse the repository groups found last time
+    if (snap?.scopes?.length) {
+      state.scopes = snap.scopes;
+      state.harvesters = makeHarvesters(login, snap.scopes);
+    }
 
-      // 2. Everything else, 100 at a time, strongest link first
-      for (const h of state.harvesters) {
-        while (!h.done && bucketLoaded(h) < (h.total || 0)) {
-          const items = await h.next(3, isStale);
-          if (isStale()) return;
-          mergeItems(items, h.bucket);
-        }
-      }
-      state.harvestDone = true;
-      deriveCreatedCounts();
-      flushSnapshotNow();
-      renderAll();
+    try {
+      await runHarvest(gen, snap, isStale);
     } catch (err) {
       if (isStale() || err.cancelled) return;
-      if (err.status === 422 && !state.itemsMap.size) {
+      const hidden = err.status === 422 && (err.errors || []).some((e) => /cannot be searched/i.test(e.message || ""));
+      if (hidden) {
+        // GitHub hides this account from search, but repo-scoped searches still work
+        const profile = await profileP.catch(() => null);
+        if (isStale()) return;
+        if (!profile) return showFatal(`No GitHub user named @${login} was found. Check the spelling.`);
+        try {
+          setBanner("This account is hidden from GitHub search · finding the repositories they work in…", 10);
+          const repos = await discoverRepos(profile.login || login, isStale);
+          if (isStale()) return;
+          if (!repos.length) return showFatal(`GitHub hides @${login} from search and no public activity was found.`);
+          state.scopes = chunkRepos(repos);
+          state.harvesters = makeHarvesters(login, state.scopes);
+          renderProfile();
+          await runHarvest(gen, snap, isStale);
+        } catch (err2) {
+          if (isStale() || err2.cancelled) return;
+          showFatal(`Could not load GitHub data: ${err2.message}`);
+        }
+      } else if (err.status === 422 && !state.itemsMap.size) {
         showFatal(`No GitHub user named @${login} was found. Check the spelling.`);
       } else if (!state.itemsMap.size) {
         showFatal(`Could not load GitHub data: ${err.message}`);
@@ -827,14 +832,105 @@
     }
   }
 
+  async function runHarvest(gen, snap, isStale) {
+    // 1. First 100 of every bucket: the newest list + exact bucket totals
+    state.syncing = true;
+    await Promise.all(state.harvesters.map((h) => firstPages(h, snap, isStale)));
+    if (isStale()) return;
+    state.syncing = false;
+    state.listReady = true;
+    dom.btnSearch.disabled = false;
+    dom.btnSearch.textContent = "Track";
+    deriveCreatedCounts();
+    loadExtraCounts(gen);
+    renderAll();
+
+    // 2. Everything else, 100 at a time, strongest link first
+    for (const h of state.harvesters) {
+      while (!h.done && bucketLoaded(h) < (h.total || 0)) {
+        const items = await h.next(3, isStale);
+        if (isStale()) return;
+        mergeItems(items, h.bucket);
+      }
+    }
+    state.harvestDone = true;
+    deriveCreatedCounts();
+    flushSnapshotNow();
+    renderAll();
+  }
+
+  // Find repositories a search-hidden account works in, from public sources:
+  // their activity feed, a plain-text search for their name, their own repos,
+  // and the upstream repos of their most recent forks.
+  async function discoverRepos(login, isStale) {
+    const found = new Map();
+    const add = (name, weight) => {
+      if (!name || !/^[\w.-]+\/[\w.-]+$/.test(name)) return;
+      const k = name.toLowerCase();
+      found.set(k, { name, w: (found.get(k)?.w || 0) + weight });
+    };
+    const u = encodeURIComponent(login);
+    const core = (path) => apiGet(path, { bucket: "core", priority: 0 }).catch(() => null);
+
+    const [events1, owned] = await Promise.all([core(`/users/${u}/events/public?per_page=100&page=1`), core(`/users/${u}/repos?type=owner&sort=pushed&per_page=100`)]);
+    let events = events1 || [];
+    if (events.length === 100) {
+      for (const p of [2, 3]) {
+        const more = await core(`/users/${u}/events/public?per_page=100&page=${p}`);
+        if (!more?.length) break;
+        events = events.concat(more);
+        if (more.length < 100) break;
+      }
+    }
+    for (const e of events) add(e.repo?.name, 3);
+    if (isStale()) return [];
+
+    // Plain-text search (no user qualifier) finds threads that mention them
+    for (let page = 1; page <= 3; page++) {
+      const data = await apiGet(searchPath(login, { page }), { priority: 0, isStale }).catch(() => null);
+      const items = data?.items || [];
+      for (const it of items) add((it.repository_url || "").split("/repos/")[1], 1);
+      if (items.length < API_PER_PAGE) break;
+    }
+    if (isStale()) return [];
+
+    const repos = owned || [];
+    for (const r of repos) if (!r.fork && (r.open_issues_count > 0 || r.forks_count > 0 || r.stargazers_count > 0)) add(r.full_name, 2);
+    const forks = repos.filter((r) => r.fork).slice(0, 10);
+    const parents = await Promise.all(forks.map((r) => core(`/repos/${encodeURIComponent(r.owner.login)}/${encodeURIComponent(r.name)}`)));
+    for (const p of parents) add(p?.parent?.full_name, 3);
+
+    return Array.from(found.values())
+      .filter((r) => !r.name.toLowerCase().startsWith(`${login.toLowerCase()}/`) || repos.some((o) => !o.fork && o.full_name.toLowerCase() === r.name.toLowerCase()))
+      .sort((a, b) => b.w - a.w)
+      .slice(0, 160)
+      .map((r) => r.name);
+  }
+
+  // Groups of repositories that fit in one GitHub query
+  function chunkRepos(repos) {
+    const chunks = [];
+    let cur = [];
+    let len = 0;
+    for (const r of repos) {
+      const add = r.length + 9;
+      if (cur.length && (cur.length >= 40 || len + add > 1300)) {
+        chunks.push(cur);
+        cur = [];
+        len = 0;
+      }
+      cur.push(r);
+      len += add;
+    }
+    if (cur.length) chunks.push(cur);
+    return chunks;
+  }
+
   async function firstPages(h, snap, isStale) {
     let items = await h.next(0, isStale);
     if (isStale()) return;
     mergeItems(items, h.bucket);
-    if (h.kind === "pr") state.counts.prs = h.total;
-    else if (h.kind === "issue") state.counts.issues = h.total;
-    else state.counts[h.bucket] = h.total;
-    if (state.counts.prs !== undefined && state.counts.issues !== undefined) state.counts.created = state.counts.prs + state.counts.issues;
+    recomputeCounts();
     renderOverview();
     scheduleRender();
     if (!snap) return;
@@ -853,7 +949,21 @@
   }
 
   function inHarvester(it, h) {
-    return it.bucket === h.bucket && (!h.kind || it.kind === h.kind);
+    return it.bucket === h.bucket && (!h.kind || it.kind === h.kind) && (!h.scope || h.scope.has(it.repo.toLowerCase()));
+  }
+
+  // Totals = sum over every harvester of the same kind (one per repo group)
+  function recomputeCounts() {
+    const groups = new Map();
+    for (const h of state.harvesters) {
+      const key = h.kind === "pr" ? "prs" : h.kind === "issue" ? "issues" : h.bucket;
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key).push(h);
+    }
+    for (const [key, hs] of groups) {
+      if (hs.every((h) => h.total !== null)) state.counts[key] = hs.reduce((n, h) => n + h.total, 0);
+    }
+    if (state.counts.prs !== undefined && state.counts.issues !== undefined) state.counts.created = state.counts.prs + state.counts.issues;
   }
 
   function bucketLoaded(h) {
@@ -882,11 +992,11 @@
   // When every item they created is loaded, PR/issue numbers need no extra search
   function deriveCreatedCounts() {
     const mine = Array.from(state.itemsMap.values()).filter((i) => i.bucket === "created");
-    const [prH, issueH] = state.harvesters;
-    if (prH && (prH.done || mine.filter((i) => i.kind === "pr").length >= (state.counts.prs ?? Infinity))) {
+    const allDone = (kind) => state.harvesters.filter((h) => h.kind === kind).every((h) => h.done);
+    if (allDone("pr") || mine.filter((i) => i.kind === "pr").length >= (state.counts.prs ?? Infinity)) {
       state.counts.merged = mine.filter((i) => i.kind === "pr" && i.status === "merged").length;
     }
-    if (issueH && (issueH.done || mine.filter((i) => i.kind === "issue").length >= (state.counts.issues ?? Infinity))) {
+    if (allDone("issue") || mine.filter((i) => i.kind === "issue").length >= (state.counts.issues ?? Infinity)) {
       state.counts.openIssues = mine.filter((i) => i.kind === "issue" && i.status === "open").length;
     }
     renderOverview();
@@ -897,6 +1007,7 @@
     const u = state.login;
     const isStale = () => gen !== state.gen;
     const jobs = {};
+    if (state.scopes) return; // account hidden from search: numbers come from the loaded list
     if (!state.harvesters[0].done) jobs.merged = [`author:${u} is:pr is:merged`, 2];
     if (!state.harvesters[1].done) jobs.openIssues = [`author:${u} is:issue is:open`, 2];
     for (const [key, [q, priority]] of Object.entries(jobs)) {
@@ -934,7 +1045,8 @@
     dom.profileLogin.textContent = `@${p.login}`;
     dom.profileLogin.href = p.html_url;
     const meta = [since && `Joined ${since}`, p.company, p.location, p.public_repos !== undefined && `${fmt(p.public_repos)} public repos`].filter(Boolean);
-    dom.profileMeta.innerHTML = meta.map((m) => `<span>${escapeHtml(String(m))}</span>`).join("");
+    dom.profileMeta.innerHTML = meta.map((m) => `<span>${escapeHtml(String(m))}</span>`).join("") +
+      (state.scopes ? `<span class="hidden-note" title="GitHub hides this account from search, so ghtrack searched inside the ${fmt(state.scopes.flat().length)} repositories they are active in. Activity in other repositories may be missing.">Hidden from GitHub search · ${fmt(state.scopes.flat().length)} repositories scanned</span>` : "");
   }
 
   // ── Header numbers (exact, from GitHub counts) ──────────────────────
@@ -993,6 +1105,7 @@
     const total = lifetimeTotal();
     const loaded = state.itemsMap.size;
     if (state.syncing && state.fromSnapshot) return setBanner(`Saved copy · checking GitHub for updates (${fmt(loaded)} items ready to browse)`, 60);
+    if (!state.listReady && loaded && !state.fromSnapshot) return setBanner(`Loading · ${fmt(loaded)} items so far`, 30);
     if (!state.listReady) return setBanner(state.fromSnapshot ? "Showing saved copy · checking GitHub for updates…" : `Fetching @${state.login} from GitHub…`, state.fromSnapshot ? 60 : 5);
     if (state.harvestDone || (total !== undefined && loaded >= total)) {
       return setBanner(`Up to date · ${fmt(loaded)} items`, 100, "done");
@@ -1826,10 +1939,21 @@
       .join("")}</tbody></table></div>`;
   }
 
-  // Time / bin series: bar, line, area, cumulative, table
-  function drawSeries(el, data, type) {
-    if (!data.length || data.every((d) => !d.value)) return emptyChart(el);
+  // Time / bin series: bar, line, area, cumulative, table.
+  // Bars never get squeezed: when there are more points than fit, the plot
+  // scrolls horizontally (hidden scrollbar, drag to pan, ⌘/Ctrl + wheel or
+  // the − / + buttons to zoom). The y-axis stays pinned on the left.
+  const MIN_STEP = { bar: 14, line: 9, area: 9, cumulative: 9 };
+  const MAX_STEP = 96;
+
+  function drawSeries(st) {
+    const { el, data, type } = st;
+    if (!data.length || data.every((d) => !d.value)) {
+      updateZoomButtons(st, false);
+      return emptyChart(el);
+    }
     if (type === "table") {
+      updateZoomButtons(st, false);
       let run = 0;
       return tableView(el, data.map((d) => ((run += d.value), [d.full || d.label, d.value, run])), ["Period", "Count", "Running total"]);
     }
@@ -1839,53 +1963,89 @@
     let run = 0;
     const vals = type === "cumulative" ? data.map((d) => (run += d.value)) : data.map((d) => d.value);
     const max = niceMax(Math.max(...vals));
-    const pad = { l: 8 + Math.max(2, shortNum(max).length) * 7, r: 8, t: 10, b: 24 };
-    const iw = W - pad.l - pad.r;
-    const ih = H - pad.t - pad.b;
+    const axisW = 10 + Math.max(2, shortNum(max).length) * 7;
+    const V = W - axisW;
     const n = data.length;
-    const bw = iw / n;
-    const cx = (i) => pad.l + bw * (i + 0.5);
+    const fit = V / n;
+    const auto = Math.max(fit, MIN_STEP[type] || 9);
+    const step = Math.min(MAX_STEP, Math.max(fit, st.step ?? auto));
+    const plotW = Math.max(V, n * step);
+    const bw = plotW / n;
+    const pad = { t: 10, b: 24, r: 6 };
+    const ih = H - pad.t - pad.b;
+    const cx = (i) => bw * (i + 0.5);
     const y = (v) => pad.t + ih - (v / max) * ih;
-    let svg = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${escapeHtml(data.length + " points")}">`;
-    for (const t of [0, max / 2, max]) {
-      svg += `<line class="${t ? "gl" : "base"}" x1="${pad.l}" x2="${W - pad.r}" y1="${y(t).toFixed(1)}" y2="${y(t).toFixed(1)}"/>`;
-      svg += `<text class="ax" x="${pad.l - 6}" y="${(y(t) + 4).toFixed(1)}" text-anchor="end">${shortNum(t)}</text>`;
-    }
-    // x labels without collisions
+
+    // Pinned y-axis
+    let ax = `<svg viewBox="0 0 ${axisW} ${H}">`;
+    for (const t of [0, max / 2, max]) ax += `<text class="ax" x="${axisW - 8}" y="${(y(t) + 4).toFixed(1)}" text-anchor="end">${shortNum(t)}</text>`;
+    ax += "</svg>";
+
+    // Scrollable plot
+    let svg = `<svg width="${plotW}" viewBox="0 0 ${plotW} ${H}" role="img" aria-label="${escapeHtml(`${st.spec.title}: ${n} points`)}">`;
+    for (const t of [0, max / 2, max]) svg += `<line class="${t ? "gl" : "base"}" x1="0" x2="${plotW}" y1="${y(t).toFixed(1)}" y2="${y(t).toFixed(1)}"/>`;
     let lastX = -Infinity;
     data.forEach((d, i) => {
       const text = d.short !== undefined ? d.short : d.label;
       if (!text) return;
-      const tw = String(text).length * 6.4 + 10;
+      const tw = String(text).length * 6.4 + 12;
       const x = cx(i);
-      if (x - lastX < tw || x - tw / 2 < 0 || x + tw / 2 > W + 4) return;
+      if (x - lastX < tw || x - tw / 2 < -2 || x + tw / 2 > plotW + 2) return;
       lastX = x;
       svg += `<text class="ax" x="${x.toFixed(1)}" y="${H - 6}" text-anchor="middle">${escapeHtml(text)}</text>`;
     });
     if (type === "bar") {
-      const barW = Math.max(1, Math.min(44, bw - Math.max(1, Math.min(6, bw * 0.28))));
+      const barW = Math.max(1, Math.min(44, bw - Math.max(1.5, Math.min(8, bw * 0.28))));
       vals.forEach((v, i) => {
         if (!v) return;
         const h = Math.max(1.5, ih - (y(v) - pad.t));
         const x0 = cx(i) - barW / 2;
         const r = Math.min(4, barW / 2, h);
         const top = pad.t + ih - h;
-        svg += `<path class="mark-bar" data-i="${i}" d="M${x0.toFixed(1)},${(pad.t + ih).toFixed(1)}V${(top + r).toFixed(1)}Q${x0.toFixed(1)},${top.toFixed(1)} ${(x0 + r).toFixed(1)},${top.toFixed(1)}H${(x0 + barW - r).toFixed(1)}Q${(x0 + barW).toFixed(1)},${top.toFixed(1)} ${(x0 + barW).toFixed(1)},${(top + r).toFixed(1)}V${(pad.t + ih).toFixed(1)}Z"/>`;
+        const base = pad.t + ih;
+        svg += `<path class="mark-bar" data-i="${i}" d="M${x0.toFixed(1)},${base.toFixed(1)}V${(top + r).toFixed(1)}Q${x0.toFixed(1)},${top.toFixed(1)} ${(x0 + r).toFixed(1)},${top.toFixed(1)}H${(x0 + barW - r).toFixed(1)}Q${(x0 + barW).toFixed(1)},${top.toFixed(1)} ${(x0 + barW).toFixed(1)},${(top + r).toFixed(1)}V${base.toFixed(1)}Z"/>`;
       });
     } else {
       const pts = vals.map((v, i) => [cx(i), y(v)]);
       const line = pts.map(([x, yy], i) => `${i ? "L" : "M"}${x.toFixed(1)},${yy.toFixed(1)}`).join("");
       if (type !== "line") svg += `<path class="mark-area" d="${line}L${pts[n - 1][0].toFixed(1)},${(pad.t + ih).toFixed(1)}L${pts[0][0].toFixed(1)},${(pad.t + ih).toFixed(1)}Z"/>`;
       svg += `<path class="mark-line" d="${line}"/>`;
-      svg += `<line class="cross" x1="-9" x2="-9" y1="${pad.t}" y2="${pad.t + ih}" opacity="0"/><circle class="mark-dot" r="4.5" cx="-20" cy="-20" opacity="0"/>`;
+      svg += `<line class="cross" x1="0" x2="0" y1="${pad.t}" y2="${pad.t + ih}" opacity="0"/><circle class="mark-dot" r="4.5" cx="0" cy="0" opacity="0"/>`;
     }
-    svg += `<rect class="hit" x="${pad.l}" y="0" width="${iw}" height="${H}"/></svg>`;
-    el.innerHTML = svg;
-    const s = el.querySelector("svg");
+    svg += `<rect class="hit" x="0" y="0" width="${plotW}" height="${H}"/></svg>`;
+
+    // Keep the same point under the viewport centre (or cursor) across redraws
+    const prev = el.querySelector(".chart-scroll");
+    const anchorFrac = st.anchorFrac ?? (prev ? (prev.scrollLeft + prev.clientWidth / 2) / prev.scrollWidth : null);
+    el.innerHTML = `<div class="chart-y" style="width:${axisW}px">${ax}</div><div class="chart-scroll" style="left:${axisW}px">${svg}</div><div class="chart-fade l" style="left:${axisW}px"></div><div class="chart-fade r"></div>`;
+    const sc = el.querySelector(".chart-scroll");
+    const s = sc.querySelector("svg");
+    const scrollable = plotW > V + 1;
+    sc.classList.toggle("can-pan", scrollable);
+    if (scrollable) {
+      if (anchorFrac === null || st.pinEnd) sc.scrollLeft = sc.scrollWidth; // newest data first, like a trading chart
+      else sc.scrollLeft = anchorFrac * sc.scrollWidth - (st.anchorPx ?? sc.clientWidth / 2);
+    }
+    st.anchorFrac = null;
+    st.anchorPx = null;
+    const fades = () => {
+      el.querySelector(".chart-fade.l").classList.toggle("on", sc.scrollLeft > 2);
+      el.querySelector(".chart-fade.r").classList.toggle("on", sc.scrollLeft < sc.scrollWidth - sc.clientWidth - 2);
+      st.pinEnd = sc.scrollLeft >= sc.scrollWidth - sc.clientWidth - 2;
+    };
+    sc.addEventListener("scroll", fades, { passive: true });
+    fades();
+    st.cur = { step, fit, auto };
+    updateZoomButtons(st, true);
+
+    // Hover tooltip
     const hit = s.querySelector(".hit");
+    let dragging = null;
     const move = (ev) => {
+      if (dragging?.moved) return;
       const r = s.getBoundingClientRect();
-      const i = Math.max(0, Math.min(n - 1, Math.floor(((ev.clientX - r.left) * (W / r.width) - pad.l) / bw)));
+      const px = (ev.clientX - r.left) * (plotW / r.width);
+      const i = Math.max(0, Math.min(n - 1, Math.floor(px / bw)));
       const d = data[i];
       el.classList.add("hovering");
       if (type === "bar") {
@@ -1893,27 +2053,84 @@
         s.querySelector(`.mark-bar[data-i="${i}"]`)?.classList.add("on");
       } else {
         const c = s.querySelector(".cross");
-        c.setAttribute("opacity", "1");
         c.setAttribute("x1", cx(i));
         c.setAttribute("x2", cx(i));
+        c.setAttribute("opacity", "1");
         const dot = s.querySelector(".mark-dot");
         dot.setAttribute("cx", cx(i));
         dot.setAttribute("cy", y(vals[i]));
         dot.setAttribute("opacity", "1");
       }
       const val = type === "cumulative" ? `<b>${fmt(vals[i])}</b> total · +${fmt(d.value)}` : `<b>${fmt(d.value)}</b>`;
-      showTip(el, (cx(i) / W) * r.width, (y(vals[i]) / H) * r.height, `${escapeHtml(d.full || d.label)} · ${val}`);
+      showTip(el, axisW + cx(i) - sc.scrollLeft, y(vals[i]), `${escapeHtml(d.full || d.label)} · ${val}`);
     };
-    hit.addEventListener("pointermove", move);
-    hit.addEventListener("pointerdown", move);
-    hit.addEventListener("pointerleave", () => {
+    const leave = () => {
       el.classList.remove("hovering");
       hideTip(el);
       if (type !== "bar") {
         s.querySelector(".cross").setAttribute("opacity", "0");
         s.querySelector(".mark-dot").setAttribute("opacity", "0");
       }
+    };
+    hit.addEventListener("pointermove", move);
+    hit.addEventListener("pointerleave", leave);
+
+    // Drag to pan (mouse / pen); touch scrolls natively
+    sc.addEventListener("pointerdown", (ev) => {
+      if (!scrollable || ev.pointerType === "touch" || ev.button !== 0) return;
+      dragging = { x: ev.clientX, left: sc.scrollLeft, moved: false };
+      sc.setPointerCapture(ev.pointerId);
     });
+    sc.addEventListener("pointermove", (ev) => {
+      if (!dragging) return;
+      const dx = ev.clientX - dragging.x;
+      if (Math.abs(dx) > 3) {
+        dragging.moved = true;
+        sc.classList.add("dragging");
+        leave();
+      }
+      sc.scrollLeft = dragging.left - dx;
+    });
+    const endDrag = () => {
+      dragging = null;
+      sc.classList.remove("dragging");
+    };
+    sc.addEventListener("pointerup", endDrag);
+    sc.addEventListener("pointercancel", endDrag);
+
+    // Pinch / ⌘-Ctrl + wheel to zoom around the cursor
+    sc.addEventListener(
+      "wheel",
+      (ev) => {
+        if (!(ev.ctrlKey || ev.metaKey)) return;
+        ev.preventDefault();
+        const r = sc.getBoundingClientRect();
+        zoomChart(st, Math.exp(-ev.deltaY * 0.01), ev.clientX - r.left);
+      },
+      { passive: false }
+    );
+  }
+
+  function zoomChart(st, factor, atPx) {
+    const sc = st.el.querySelector(".chart-scroll");
+    if (!sc || !st.cur) return;
+    const px = atPx ?? sc.clientWidth / 2;
+    st.anchorFrac = (sc.scrollLeft + px) / sc.scrollWidth;
+    st.anchorPx = px;
+    st.pinEnd = false;
+    st.step = Math.min(MAX_STEP, Math.max(st.cur.fit, st.cur.step * factor));
+    drawChart(st);
+  }
+
+  function updateZoomButtons(st, active) {
+    const z = st.card.querySelector(".zoom");
+    if (!z) return;
+    const c = st.cur;
+    const show = active && c && (c.auto > c.fit + 0.5 || c.step > c.fit + 0.5);
+    z.hidden = !show;
+    if (!show) return;
+    z.querySelector('[data-zoom="out"]').disabled = c.step <= c.fit + 0.01;
+    z.querySelector('[data-zoom="in"]').disabled = c.step >= MAX_STEP - 0.01;
   }
 
   // Breakdowns: donut, pie, horizontal bars, table
@@ -1957,7 +2174,7 @@
       return d;
     };
     const paths = slices.map((s, i) => `<path class="slice" data-i="${i}" d="${arc(s)}" style="fill:${s.color}" fill-rule="evenodd"/>`).join("");
-    const center = r0 ? `<text class="donut-total" x="50" y="52" text-anchor="middle" font-size="15">${shortNum(total)}</text><text class="donut-cap" x="50" y="62" text-anchor="middle" font-size="6.5">total</text>` : "";
+    const center = r0 ? `<text class="donut-total" x="50" y="52" text-anchor="middle" font-size="15">${shortNum(total)}</text><text class="donut-cap" x="50" y="64.5" text-anchor="middle" font-size="6.5">total</text>` : "";
     el.classList.add("cat");
     el.innerHTML = `<div class="donut-wrap"><svg viewBox="-2 -2 104 104" role="img" aria-label="${escapeHtml(spec.title)}">${paths}${center}</svg>
       <div class="legend">${slices
@@ -2002,11 +2219,20 @@
       let type = prefGet(`chart_${id}`, spec.def);
       if (!types.includes(type)) type = spec.def;
       card.innerHTML = `<div class="card-head"><div><h3 class="card-title">${escapeHtml(spec.title)}</h3><p class="card-sub"></p></div>
-        <div class="card-tools"><div class="types" role="group" aria-label="Chart type">${types
+        <div class="card-tools">${spec.kind === "series" ? `<div class="zoom" role="group" aria-label="Zoom" hidden><button type="button" data-zoom="out" title="Zoom out" aria-label="Zoom out"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M3.5 8h9"/></svg></button><button type="button" data-zoom="in" title="Zoom in" aria-label="Zoom in"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M3.5 8h9M8 3.5v9"/></svg></button><button type="button" data-zoom="fit" title="Fit all" aria-label="Fit all"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 6V2.5H6M10 2.5h3.5V6M13.5 10v3.5H10M6 13.5H2.5V10"/></svg></button></div>` : ""}<div class="types" role="group" aria-label="Chart type">${types
           .map((t) => `<button type="button" data-type="${t}" aria-pressed="${t === type}" title="${TYPE_LABEL[t]}" aria-label="${TYPE_LABEL[t]}">${TYPE_ICON[t]}</button>`)
           .join("")}</div></div></div><div class="chart ${spec.tall ? "tall" : ""}"></div>`;
-      const st = { card, spec, el: card.querySelector(".chart"), type, data: [], w: 0 };
+      const st = { card, spec, el: card.querySelector(".chart"), type, data: [], w: 0, step: null, pinEnd: true };
       chartState.set(id, st);
+      card.querySelector(".zoom")?.addEventListener("click", (e) => {
+        const b = e.target.closest("[data-zoom]");
+        if (!b || b.disabled) return;
+        if (b.dataset.zoom === "fit") {
+          st.step = 0; // smallest = everything visible
+          st.pinEnd = true;
+          drawChart(st);
+        } else zoomChart(st, b.dataset.zoom === "in" ? 1.5 : 1 / 1.5);
+      });
       card.querySelector(".types").addEventListener("click", (e) => {
         const b = e.target.closest("[data-type]");
         if (!b) return;
@@ -2032,7 +2258,7 @@
     st.w = st.el.clientWidth;
     st.el.classList.remove("cat", "hovering");
     if (st.spec.kind === "cat") drawCat(st.el, st.data, st.type, st.spec);
-    else drawSeries(st.el, st.data, st.type);
+    else drawSeries(st);
   }
 
   // ── Data for each chart ─────────────────────────────────────────────
@@ -2199,7 +2425,13 @@
       ? `${fmt(items.length)} items${rangeBounds() ? ` in ${rangeBounds().year || `the last ${rangeBounds().label}`}` : ""}.`
       : `Based on ${fmt(state.itemsMap.size)} of ${fmt(total)} items loaded so far — charts update as the rest arrives.`;
     renderTiles(ctx);
+    const periodKey = `${state.login}|${state.dateRange}`;
     for (const [id, st] of chartState) {
+      if (st.periodKey !== periodKey) {
+        st.periodKey = periodKey;
+        st.step = null;
+        st.pinEnd = true;
+      }
       st.data = CHARTS[id].data(ctx);
       st.card.querySelector(".card-sub").textContent = CHARTS[id].sub(ctx);
       drawChart(st);
@@ -2297,6 +2529,8 @@
       }
     }
     el.innerHTML = `${svg}</svg>`;
+    const hs = el.parentElement;
+    if (hs.scrollWidth > hs.clientWidth) hs.scrollLeft = hs.scrollWidth;
     dom.heatmapCountLabel.textContent = `${fmt(total)} PRs and issues opened ${year ? `in ${year}` : "in the last 12 months"}`;
   }
 
@@ -2346,95 +2580,60 @@
   dom.searchInput.addEventListener("input", () => {
     dom.inputClear.style.display = dom.searchInput.value ? "block" : "none";
   });
-  dom.btnClearCache?.addEventListener("click", async () => {
-    if (!state.login) return;
-    flushSnapshotNow();
-    memCache.clear(); // forget cached GitHub answers, keep the saved list
-    const db = await openDB();
-    try {
-      db?.transaction(STORE, "readwrite").objectStore(STORE).clear();
-    } catch {
-      /* ignore */
-    }
-    startTracking(state.login);
-  });
-
   // ── Theme: System / Light / Dark ────────────────────────────────────
   const darkQuery = window.matchMedia("(prefers-color-scheme: dark)");
   function effectiveTheme() {
     const t = document.documentElement.dataset.theme;
     return t === "light" || t === "dark" ? t : darkQuery.matches ? "dark" : "light";
   }
+  const THEME_ICON = {
+    system: `<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1.75" y="2.75" width="12.5" height="8.5" rx="1.5"/><path d="M5.5 14h5M8 11.5V14" stroke-linecap="round"/></svg>`,
+    light: `<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="8" cy="8" r="3"/><path d="M8 1.5v1.5M8 13v1.5M1.5 8H3M13 8h1.5M3.4 3.4l1.06 1.06M11.54 11.54l1.06 1.06M3.4 12.6l1.06-1.06M11.54 4.46l1.06-1.06"/></svg>`,
+    dark: `<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M13.5 9.6A5.75 5.75 0 016.4 2.5a5.75 5.75 0 107.1 7.1z"/></svg>`,
+  };
+  const themeRoot = $("theme");
+  const themeBtn = $("theme-btn");
   function updateFavicon() {
     const link = document.querySelector("link[rel='icon']");
     if (!link) return;
     const dark = effectiveTheme() === "dark";
-    const bg = dark ? "%23f4f4f5" : "%2318181b";
-    const fg = dark ? "%230b0b0d" : "%23fafafa";
-    const dot = dark ? "%233b82f6" : "%232563eb";
-    link.href = `data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 26 26'%3E%3Crect width='26' height='26' rx='7' fill='${bg}'/%3E%3Cpath d='M6 16.5l3.6-4 3.2 3 4.4-6.5' fill='none' stroke='${fg}' stroke-width='2.1' stroke-linecap='round' stroke-linejoin='round'/%3E%3Ccircle cx='19.6' cy='7.4' r='2.3' fill='${dot}'/%3E%3C/svg%3E`;
+    const bg = dark ? "%23f5f5f7" : "%231d1d1f";
+    const bar = dark ? "%230a0a0b" : "%23f5f5f7";
+    const hot = dark ? "%233b82f6" : "%232563eb";
+    link.href = `data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect width='24' height='24' rx='7' fill='${bg}'/%3E%3Crect x='6' y='12.5' width='3' height='5.5' rx='1.5' fill='${bar}'/%3E%3Crect x='10.5' y='9' width='3' height='9' rx='1.5' fill='${bar}'/%3E%3Crect x='15' y='5.5' width='3' height='12.5' rx='1.5' fill='${hot}'/%3E%3C/svg%3E`;
   }
   function applyTheme(choice) {
     if (choice === "light" || choice === "dark") document.documentElement.dataset.theme = choice;
     else delete document.documentElement.dataset.theme;
     prefSet("theme", choice);
-    document.querySelectorAll("[data-theme-choice]").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.themeChoice === choice)));
+    document.querySelectorAll("[data-theme-choice]").forEach((b) => b.setAttribute("aria-checked", String(b.dataset.themeChoice === choice)));
+    themeBtn.innerHTML = THEME_ICON[choice] || THEME_ICON.system;
+    themeBtn.title = `Theme: ${choice[0].toUpperCase()}${choice.slice(1)}`;
     updateFavicon();
     if (state.viewMode === "analytics") renderAnalytics();
   }
-  document.querySelectorAll("[data-theme-choice]").forEach((b) => b.addEventListener("click", () => applyTheme(b.dataset.themeChoice)));
+  const closeThemeMenu = () => {
+    themeRoot.classList.remove("open");
+    themeBtn.setAttribute("aria-expanded", "false");
+  };
+  themeBtn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    const open = !themeRoot.classList.contains("open");
+    themeRoot.classList.toggle("open", open);
+    themeBtn.setAttribute("aria-expanded", String(open));
+  });
+  document.addEventListener("click", (e) => {
+    if (!themeRoot.contains(e.target)) closeThemeMenu();
+  });
+  document.querySelectorAll("[data-theme-choice]").forEach((b) =>
+    b.addEventListener("click", () => {
+      applyTheme(b.dataset.themeChoice);
+      closeThemeMenu();
+      themeBtn.focus();
+    })
+  );
   darkQuery.addEventListener?.("change", () => {
     if (prefGet("theme", "system") === "system") applyTheme("system");
-  });
-
-  // ── Export ──────────────────────────────────────────────────────────
-  let exportFormat = "md";
-  function generateExportContent() {
-    const items = getFilteredItems();
-    if (exportFormat === "json") {
-      dom.exportContent.value = JSON.stringify(items.map(({ body, ...rest }) => rest), null, 2);
-      return;
-    }
-    let md = `# GitHub work for @${state.login}\n\n*Exported from ghtrack on ${isoDay(new Date())} · ${fmt(items.length)} items*\n\n`;
-    md += `| Type | Status | Involvement | Repository | Number | Title | Updated |\n| :--- | :--- | :--- | :--- | :--- | :--- | :--- |\n`;
-    for (const i of items) md += `| ${i.kind === "pr" ? "PR" : "Issue"} | ${i.statusLabel} | ${ROLE_TEXT[i.bucket] || ""} | \`${i.repo}\` | #${i.number} | [${i.title.replace(/\|/g, "\\|")}](${i.url}) | ${(i.updatedAt || "").slice(0, 10)} |\n`;
-    dom.exportContent.value = md;
-  }
-  function setExportFormat(f) {
-    exportFormat = f;
-    dom.tabExportMd.setAttribute("aria-pressed", String(f === "md"));
-    dom.tabExportJson.setAttribute("aria-pressed", String(f === "json"));
-    generateExportContent();
-  }
-  dom.btnExport.addEventListener("click", () => {
-    setExportFormat("md");
-    dom.modalExport.classList.add("open");
-  });
-  dom.modalExportClose.addEventListener("click", () => dom.modalExport.classList.remove("open"));
-  dom.modalExport.addEventListener("click", (e) => {
-    if (e.target === dom.modalExport) dom.modalExport.classList.remove("open");
-  });
-  dom.tabExportMd.addEventListener("click", () => setExportFormat("md"));
-  dom.tabExportJson.addEventListener("click", () => setExportFormat("json"));
-  dom.btnCopyExport.addEventListener("click", async () => {
-    try {
-      await navigator.clipboard.writeText(dom.exportContent.value);
-      dom.btnCopyExport.textContent = "Copied";
-    } catch {
-      dom.exportContent.select();
-      dom.btnCopyExport.textContent = "Press ⌘/Ctrl+C";
-    }
-    setTimeout(() => (dom.btnCopyExport.textContent = "Copy"), 1500);
-  });
-  dom.btnDownloadExport.addEventListener("click", () => {
-    const md = exportFormat === "md";
-    const blob = new Blob([dom.exportContent.value], { type: md ? "text/markdown" : "application/json" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `ghtrack-${state.login}-${isoDay(new Date())}.${md ? "md" : "json"}`;
-    a.click();
-    URL.revokeObjectURL(url);
   });
 
   // ── Keyboard ────────────────────────────────────────────────────────
@@ -2445,7 +2644,7 @@
       dom.filterText.focus();
     }
     if (e.key === "Escape") {
-      dom.modalExport.classList.remove("open");
+      closeThemeMenu();
       for (const d of openDropdowns) d.close();
     }
   });
