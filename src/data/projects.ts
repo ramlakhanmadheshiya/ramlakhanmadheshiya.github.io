@@ -70,6 +70,7 @@ export const games: Project[] = [
 
 export const webApps: Project[] = [
 	{ name: 'Bill Studio', year: '2026', blurb: 'Free, offline, multi-country billing. GST, VAT and sales-tax rules for 50+ countries, a drag-and-drop bill designer, ledgers, reports, payment QR codes and encrypted backups. Installable PWA, no server.', tags: ['JavaScript', 'PWA', 'IndexedDB'], links: [{ label: 'Live', href: '/projects/bill-studio/' }, gh('bill-studio')] },
+	{ name: 'ghtrack', year: '2026', blurb: 'Lifetime GitHub activity for any user: exact counts of pull requests, issues, reviews and comments in about two seconds, even for accounts with 48,000+ items. Filters count each item once, and previews show the whole conversation in place. No login, token or server.', tags: ['JavaScript', 'GitHub API', 'IndexedDB'], links: [{ label: 'Live', href: '/ghtrack/' }] },
 	{ name: 'Brainnova Studio', year: '2026', blurb: 'The games site: one JSON file drives every card, page and button, built with a small Python generator and published through GitHub Actions.', tags: ['Python', 'GitHub Actions'], links: [{ label: 'Live', href: '/BrainnovaStudio/games/' }, gh('BrainnovaStudio')] },
 ];
 
