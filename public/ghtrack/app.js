@@ -1134,14 +1134,19 @@
     return null;
   }
 
-  // An item is in range if it was opened or updated in that period
+  // An item is in range if the person's own involvement falls in that period
+  // (same date the charts use: opened date for their items, latest activity
+  // for threads they joined)
   function getItemsForCurrentDateRange() {
     const all = Array.from(state.itemsMap.values());
     const b = rangeBounds();
     if (!b) return all;
     const from = b.from.toISOString();
     const to = b.to.toISOString();
-    return all.filter((i) => (i.createdAt >= from && i.createdAt < to) || (i.updatedAt >= from && i.updatedAt < to));
+    return all.filter((i) => {
+      const t = actAt(i);
+      return t >= from && t < to;
+    });
   }
 
   function yearsAvailable() {
@@ -1176,7 +1181,7 @@
       value: r,
     });
     const b = rangeBounds();
-    dom.rangeNote.textContent = b ? `Showing items opened or updated in ${b.year ? b.year : `the last ${b.label}`}` : "";
+    dom.rangeNote.textContent = b ? `Showing their activity in ${b.year ? b.year : `the last ${b.label}`}` : "";
   }
 
   dom.timeframeSeg.addEventListener("click", (e) => {
