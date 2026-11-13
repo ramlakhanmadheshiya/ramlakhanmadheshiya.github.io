@@ -440,7 +440,10 @@
     const db = await openDB();
     if (!db) return;
     const items = Array.from(state.itemsMap.values()).map(({ body, ...rest }) => rest);
-    const rec = { login: state.login.toLowerCase(), items, syncedAt: state.syncStartedAt, savedAt: Date.now(), scopes: state.scopes || null };
+    const rec = {
+      login: state.login.toLowerCase(), items, syncedAt: state.syncStartedAt, savedAt: Date.now(), scopes: state.scopes || null,
+      selfCommented: Array.from(state.selfCommented), reviewState: Array.from(state.reviewState.entries()), latest: Array.from(state.latest.entries()),
+    };
     try {
       db.transaction(SNAP_STORE, "readwrite").objectStore(SNAP_STORE).put(rec);
     } catch {
@@ -539,6 +542,9 @@
     filters: { kind: "all", status: "all", role: "all", repo: "all", text: "" },
     expandedPreviews: new Set(),
     linkCache: new Map(),
+    selfCommented: new Set(),  // issues they opened AND commented on (also count as a discussion)
+    reviewState: new Map(),    // open PR id -> changes_requested | approved | required
+    latest: new Map(),         // id -> { updatedAt, text, tone, at } latest activity, fetched for recent items
     fatal: false,
   };
 
@@ -727,6 +733,9 @@
       harvestDone: false,
       fromSnapshot: false,
       scopes: null,
+      selfCommented: new Set(),
+      reviewState: new Map(),
+      latest: new Map(),
       dateRange: "30d",
       syncing: true,
       currentPage: 1,
@@ -761,6 +770,9 @@
     if (isStale()) return;
     if (snap && Array.isArray(snap.items) && snap.items.length) {
       for (const it of snap.items) state.itemsMap.set(it.id, it);
+      for (const id of snap.selfCommented || []) state.selfCommented.add(id);
+      for (const [id, v] of snap.reviewState || []) state.reviewState.set(id, v);
+      for (const [id, v] of snap.latest || []) state.latest.set(id, v);
       state.fromSnapshot = true;
       state.listReady = true;
       renderAll();
@@ -778,6 +790,7 @@
         }
         state.profile = p;
         renderProfile();
+        rememberSearch(p);
         renderRangeControls();
       })
       .catch((err) => {
@@ -845,6 +858,13 @@
     deriveCreatedCounts();
     loadExtraCounts(gen);
     renderAll();
+    // Review decisions + latest activity matter for daily use: fetch them right away
+    loadReviewStates(isStale).then(() => {
+      if (isStale()) return;
+      scheduleSnapshot();
+      renderAll();
+    });
+    loadLatestActivity(isStale);
 
     // 2. Everything else, 100 at a time, strongest link first
     for (const h of state.harvesters) {
@@ -858,6 +878,145 @@
     deriveCreatedCounts();
     flushSnapshotNow();
     renderAll();
+
+    // 3. Extra facts, quietly in the background
+    await loadSelfComments(isStale);
+    if (isStale()) return;
+    flushSnapshotNow();
+    renderAll();
+  }
+
+  function scopedQueries(q) {
+    return state.scopes ? state.scopes.map((sc) => `(${sc.map((r) => `repo:${r}`).join(" OR ")}) ${q}`) : [q];
+  }
+
+  // Issues they opened and also commented on (one discussion per issue)
+  async function loadSelfComments(isStale) {
+    const u = state.login;
+    const found = new Set();
+    try {
+      for (const q of scopedQueries(`author:${u} commenter:${u} is:issue`)) {
+        let extra = "";
+        let page = 0;
+        for (let guard = 0; guard < 60; guard++) {
+          page++;
+          const data = await apiGet(searchPath(extra ? `${q} ${extra}` : q, { page }), { priority: 3, isStale });
+          const raw = data.items || [];
+          for (const r of raw) found.add(r.html_url);
+          if (raw.length < API_PER_PAGE) break;
+          if (page * API_PER_PAGE >= SEARCH_WINDOW) {
+            extra = `updated:<=${raw[raw.length - 1].updated_at}`;
+            page = 0;
+          }
+        }
+      }
+      state.selfCommented = found;
+    } catch {
+      /* keep what we had */
+    }
+  }
+
+  // Review decision for their open PRs (3 searches cover all of them)
+  async function loadReviewStates(isStale) {
+    const u = state.login;
+    const next = new Map();
+    try {
+      for (const st of ["changes_requested", "approved", "required"]) {
+        for (const q of scopedQueries(`author:${u} is:pr is:open review:${st}`)) {
+          const data = await apiGet(searchPath(q), { priority: 2, isStale });
+          for (const r of data.items || []) next.set(r.html_url, st);
+        }
+      }
+      state.reviewState = next;
+    } catch {
+      /* keep what we had */
+    }
+  }
+
+  // Latest comment / review for their most recently updated open items.
+  // Uses GitHub's 60-per-hour budget sparingly and is cached until the item changes.
+  const LATEST_BATCH = 12;
+  async function loadLatestActivity(isStale) {
+    const candidates = Array.from(state.itemsMap.values())
+      .filter((i) => i.status === "open" || i.status === "draft")
+      .filter((i) => i.bucket === "created" || i.bucket === "assigned")
+      .filter((i) => state.latest.get(i.id)?.updatedAt !== i.updatedAt)
+      .sort((a, b) => (a.updatedAt < b.updatedAt ? 1 : -1))
+      .slice(0, LATEST_BATCH);
+    for (const item of candidates) {
+      if (isStale()) return;
+      try {
+        const info = await fetchLatest(item);
+        if (isStale()) return;
+        state.latest.set(item.id, { updatedAt: item.updatedAt, ...info });
+        refreshActivity([item]);
+        scheduleSnapshot();
+      } catch (err) {
+        if (err.rateLimited) return;
+      }
+    }
+  }
+
+  function plainSnippet(text, n = 90) {
+    const t = String(text || "")
+      .replace(/```[\s\S]*?```/g, " [code] ")
+      .replace(/<!--[\s\S]*?-->/g, " ")
+      .replace(/!\[[^\]]*\]\([^)]*\)/g, " [image] ")
+      .replace(/\[([^\]]+)\]\([^)]*\)/g, "$1")
+      .replace(/[#>*_`~|]/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+    return t.length > n ? `${t.slice(0, n - 1)}…` : t;
+  }
+
+  async function fetchLatest(item) {
+    const [owner, name] = item.repo.split("/");
+    const base = `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(name)}`;
+    const jobs = [];
+    if (item.commentsCount > 0) jobs.push(apiGet(`${base}/issues/${item.number}/comments?per_page=1&page=${item.commentsCount}`, { bucket: "core", priority: 2 }));
+    else jobs.push(Promise.resolve([]));
+    if (item.kind === "pr") jobs.push(apiGet(`${base}/pulls/${item.number}/reviews?per_page=100`, { bucket: "core", priority: 2 }));
+    else jobs.push(Promise.resolve([]));
+    const [comments, reviews] = await Promise.all(jobs);
+    const comment = (comments || [])[0];
+    const reviewsSorted = (reviews || []).filter((r) => r.submitted_at).sort((a, b) => (a.submitted_at < b.submitted_at ? -1 : 1));
+    const lastReview = reviewsSorted[reviewsSorted.length - 1];
+    const events = [];
+    if (comment) events.push({ at: comment.created_at, who: comment.user?.login, text: plainSnippet(comment.body), tone: "comment" });
+    if (lastReview) {
+      const st = lastReview.state;
+      const verb = st === "CHANGES_REQUESTED" ? "requested changes" : st === "APPROVED" ? "approved" : "reviewed";
+      events.push({ at: lastReview.submitted_at, who: lastReview.user?.login, text: plainSnippet(lastReview.body, 70), verb, tone: st === "CHANGES_REQUESTED" ? "changes" : st === "APPROVED" ? "approved" : "comment" });
+    }
+    events.sort((a, b) => (a.at < b.at ? 1 : -1));
+    return events[0] || { none: true };
+  }
+
+  // Row line: latest activity if known, otherwise review state / comment count
+  function activityHtml(item) {
+    const parts = [];
+    const rs = state.reviewState.get(item.id);
+    if (rs && (item.status === "open" || item.status === "draft")) {
+      const label = { changes_requested: "Changes requested", approved: "Approved", required: "Review required" }[rs];
+      parts.push(`<span class="review-chip ${rs}">${label}</span>`);
+    }
+    const l = state.latest.get(item.id);
+    if (l && !l.none && l.updatedAt === item.updatedAt) {
+      const who = l.who ? `<b>${escapeHtml(l.who)}</b>` : "Someone";
+      const what = l.verb ? `${who} ${l.verb}` : `${who}:`;
+      const quote = l.text ? ` <span class="act-text">“${escapeHtml(l.text)}”</span>` : "";
+      parts.push(`<span class="act-line act-${l.tone}" title="Latest activity · ${escapeHtml(new Date(l.at).toLocaleString())}">${what}${quote} <span class="act-when">· ${timeAgo(l.at)}</span></span>`);
+    } else {
+      parts.push(`<span>${item.commentsCount ? `${fmt(item.commentsCount)} comment${item.commentsCount === 1 ? "" : "s"}` : "No comments yet"}</span>`);
+    }
+    return parts.join("");
+  }
+
+  function refreshActivity(items) {
+    for (const item of items) {
+      const el = dom.listContainer.querySelector(`.item-row[data-id="${CSS.escape(item.id)}"] .act-slot`);
+      if (el) el.innerHTML = activityHtml(item);
+    }
   }
 
   // Find repositories a search-hidden account works in, from public sources:
@@ -1037,6 +1196,50 @@
     updatePagerUI(0);
   }
 
+  // ── Recent searches (this device only) ────────────────────────────
+  const RECENT_KEY = "recent";
+  function recentList() {
+    try {
+      const v = JSON.parse(prefGet(RECENT_KEY, "[]"));
+      return Array.isArray(v) ? v.filter((r) => r && r.login) : [];
+    } catch {
+      return [];
+    }
+  }
+  function saveRecent(list) {
+    prefSet(RECENT_KEY, JSON.stringify(list.slice(0, 8)));
+    renderRecent();
+  }
+  function rememberSearch(p) {
+    const list = recentList().filter((r) => r.login.toLowerCase() !== p.login.toLowerCase());
+    list.unshift({ login: p.login, name: p.name || "", avatar: p.avatar_url || "", at: Date.now() });
+    saveRecent(list);
+  }
+  function renderRecent() {
+    const el = $("recent");
+    if (!el) return;
+    const list = recentList();
+    el.hidden = !list.length;
+    if (!list.length) return;
+    el.innerHTML = `<div class="recent-head"><span>Recent</span><button type="button" class="recent-clear" data-clear-all>Clear all</button></div>
+      <div class="recent-list">${list
+        .map(
+          (r) => `<div class="recent-item"><button type="button" class="recent-open" data-login="${escapeHtml(r.login)}" title="Track @${escapeHtml(r.login)}">
+            <img src="${escapeHtml(r.avatar ? `${r.avatar}${r.avatar.includes("?") ? "&" : "?"}s=48` : `https://github.com/${encodeURIComponent(r.login)}.png?size=48`)}" alt="" width="22" height="22" loading="lazy" />
+            <span class="recent-name">${escapeHtml(r.name || r.login)}</span><span class="recent-login">@${escapeHtml(r.login)}</span></button>
+            <button type="button" class="recent-x" data-remove="${escapeHtml(r.login)}" aria-label="Remove @${escapeHtml(r.login)} from recent">
+              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4.5 4.5l7 7M11.5 4.5l-7 7"/></svg></button></div>`
+        )
+        .join("")}</div>`;
+  }
+  document.addEventListener("click", (e) => {
+    const open = e.target.closest(".recent-open");
+    if (open) return startTracking(open.dataset.login);
+    const rm = e.target.closest("[data-remove]");
+    if (rm) return saveRecent(recentList().filter((r) => r.login !== rm.dataset.remove));
+    if (e.target.closest("[data-clear-all]")) saveRecent([]);
+  });
+
   function renderProfile() {
     const p = state.profile;
     if (!p) return;
@@ -1078,7 +1281,7 @@
       dom.statIssues.textContent = fmt(issues.length);
       dom.statIssuesSub.textContent = `${fmt(open)} open · ${fmt(issues.length - open)} closed`;
       dom.statReviews.textContent = fmt(items.filter((i) => i.bucket === "reviewed").length);
-      dom.statComments.textContent = fmt(items.filter((i) => i.bucket === "commented").length);
+      dom.statComments.textContent = fmt(items.filter((i) => hasRole(i, "commented")).length);
       return;
     }
     const c = state.counts;
@@ -1090,7 +1293,7 @@
     dom.statIssues.textContent = fmt(issues);
     dom.statIssuesSub.textContent = issues !== undefined && c.openIssues !== undefined ? `${fmt(c.openIssues)} open · ${fmt(issues - c.openIssues)} closed` : " ";
     dom.statReviews.textContent = fmt(c.reviewed);
-    dom.statComments.textContent = fmt(c.commented);
+    dom.statComments.textContent = fmt(c.commented === undefined ? undefined : c.commented + state.selfCommented.size);
   }
 
   // ── Status banner (no countdowns, no rate-limit talk) ───────────────
@@ -1354,10 +1557,14 @@
 
   // Each filter's numbers = what you'd get if you picked that option,
   // given the time range and every OTHER active filter (faceted counts).
+  function hasRole(i, role) {
+    return i.bucket === role || (role === "commented" && state.selfCommented.has(i.id));
+  }
+
   function matchesFilters(i, f, skip) {
     if (skip !== "kind" && f.kind !== "all" && i.kind !== f.kind) return false;
     if (skip !== "status" && f.status !== "all" && i.status !== f.status) return false;
-    if (skip !== "role" && f.role !== "all" && i.bucket !== f.role) return false;
+    if (skip !== "role" && f.role !== "all" && !hasRole(i, f.role)) return false;
     if (skip !== "repo" && f.repo !== "all" && i.repo !== f.repo) return false;
     return true;
   }
@@ -1403,11 +1610,11 @@
     // While the full list is still loading, an unfiltered all-time view shows GitHub's exact totals
     const forRole = facet("role");
     const useGitHub = !loadedEverything() && !rangeBounds() && forRole.length === state.itemsMap.size && bucketTotalsKnown();
-    const rc = countBy(forRole, (i) => i.bucket);
+    const rc = new Map(REL_ORDER.map((b) => [b, forRole.filter((i) => hasRole(i, b)).length]));
     roleDd.set({
       options: [
         { value: "all", label: "Any role", short: "Any", count: useGitHub ? lifetimeTotal() : forRole.length },
-        ...REL_ORDER.map((b) => ({ value: b, label: ROLE_TEXT[b], dot: ROLE_COLOR[b], count: useGitHub ? state.counts[b] : rc.get(b) || 0 })),
+        ...REL_ORDER.map((b) => ({ value: b, label: ROLE_TEXT[b], dot: ROLE_COLOR[b], count: useGitHub ? state.counts[b] + (b === "commented" ? state.selfCommented.size : 0) : rc.get(b) || 0 })),
       ],
       value: f.role,
       defaultValue: "all",
@@ -1435,7 +1642,7 @@
     let items = getItemsForCurrentDateRange();
     if (f.kind !== "all") items = items.filter((i) => i.kind === f.kind);
     if (f.status !== "all") items = items.filter((i) => i.status === f.status);
-    if (f.role !== "all") items = items.filter((i) => i.bucket === f.role);
+    if (f.role !== "all") items = items.filter((i) => hasRole(i, f.role));
     if (f.repo !== "all") items = items.filter((i) => i.repo === f.repo);
     const q = f.text.toLowerCase().trim();
     if (q) {
@@ -1593,6 +1800,9 @@
   const LINK_LABEL = { created: "Created", assigned: "Assigned", reviewed: "Reviewed", commented: "Commented", mentioned: "Mentioned" };
 
   function roleTagHtml(item) {
+    if (item.bucket === "created" && state.selfCommented.has(item.id)) {
+      return `<span class="role-note role-commented" title="They opened this issue and joined the discussion">@${escapeHtml(state.login)} commented</span>`;
+    }
     if (item.bucket === "created" || !item.bucket) return "";
     const extra = state.linkCache.get(item.id);
     const verbs = [ROLE_VERB[item.bucket]];
@@ -1630,7 +1840,7 @@
             <span class="badge ${item.status}">${escapeHtml(item.statusLabel)}</span>
             <span class="repo">${escapeHtml(item.repo)}#${item.number}</span>
             <span>by <span class="author ${item.bucket === "created" ? "is-self" : ""}">${escapeHtml(item.author)}</span></span>
-            <span title="Comments">${fmt(item.commentsCount)} comment${item.commentsCount === 1 ? "" : "s"}</span>
+            <span class="act-slot">${activityHtml(item)}</span>
             <span class="role-slot">${roleTagHtml(item)}</span>
             ${(item.labels || []).slice(0, 3).map((l) => `<span class="label-pill" style="--l-color:#${escapeHtml(l.color || "888888")}">${escapeHtml(l.name)}</span>`).join("")}
           </div>
@@ -1758,6 +1968,23 @@
       }
       el.innerHTML = html || `<div class="conv-empty">No comments or activity yet.</div>`;
       noteLinksFromTimeline(item, events || [], el.closest(".preview-body"));
+      if (!(events || []).length || (events || []).length < 100) {
+        const last = [...(events || [])].reverse().find((e) => e.event === "commented" || e.event === "reviewed");
+        if (last) {
+          const isReview = last.event === "reviewed";
+          const st = (last.state || "").toLowerCase();
+          state.latest.set(item.id, {
+            updatedAt: item.updatedAt,
+            at: last.submitted_at || last.created_at,
+            who: last.user?.login || last.actor?.login,
+            text: plainSnippet((last.body_html || "").replace(/<[^>]+>/g, " ")),
+            verb: isReview ? (st === "changes_requested" ? "requested changes" : st === "approved" ? "approved" : "reviewed") : null,
+            tone: isReview ? (st === "changes_requested" ? "changes" : st === "approved" ? "approved" : "comment") : "comment",
+          });
+          refreshActivity([item]);
+          scheduleSnapshot();
+        }
+      }
     } catch (err) {
       if (err.rateLimited) {
         const mins = Math.max(1, Math.ceil((err.resetAt - Date.now()) / 60000));
@@ -2409,7 +2636,7 @@
     },
     involvement: {
       title: "Involvement", kind: "cat", def: "donut", colored: true, colLabel: "Role", sub: () => "Each item counted once, by strongest link",
-      data: (c) => { const m = countBy(c.items, (i) => i.bucket); return REL_ORDER.map((b) => ({ key: b, label: ROLE_TEXT[b], color: ROLE_COLOR[b], value: m.get(b) || 0 })).filter((r) => r.value); },
+      data: (c) => REL_ORDER.map((b) => ({ key: b, label: ROLE_TEXT[b], color: ROLE_COLOR[b], value: c.items.filter((i) => hasRole(i, b)).length })).filter((r) => r.value),
       onSelect: (k) => filterFeed({ role: k }),
     },
     repos: {
@@ -2681,6 +2908,7 @@
 
   async function init() {
     applyTheme(prefGet("theme", "system"));
+    renderRecent();
     const yearEl = $("year");
     if (yearEl) yearEl.textContent = String(new Date().getFullYear());
     initCharts();
