@@ -707,6 +707,7 @@ p.conv-empty { padding: 0; margin: 0; }
 .review-chip { display: inline-flex; align-items: center; height: 20px; padding: 0 8px; border-radius: 999px; font-size: 11.5px; font-weight: 600; white-space: nowrap; }
 .review-chip.changes_requested { color: var(--closed); background: color-mix(in srgb, var(--closed) 12%, transparent); }
 .review-chip.approved { color: var(--open); background: color-mix(in srgb, var(--open) 12%, transparent); }
+.review-chip.rereview { color: var(--text-2); background: color-mix(in srgb, var(--text-2) 12%, transparent); }
 .review-chip.required { color: var(--warn); background: color-mix(in srgb, var(--warn) 13%, transparent); }
 .act-line { min-width: 0; max-width: 520px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--text-2); }
 .act-line b { font-weight: 600; color: var(--text); }

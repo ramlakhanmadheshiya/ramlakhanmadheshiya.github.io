@@ -442,7 +442,7 @@
     const items = Array.from(state.itemsMap.values()).map(({ body, ...rest }) => rest);
     const rec = {
       login: state.login.toLowerCase(), items, syncedAt: state.syncStartedAt, savedAt: Date.now(), scopes: state.scopes || null,
-      selfCommented: Array.from(state.selfCommented), reviewState: Array.from(state.reviewState.entries()), latest: Array.from(state.latest.entries()),
+      selfCommented: Array.from(state.selfCommented), reviewState: Array.from(state.reviewState.entries()), reviewCheck: Array.from(state.reviewCheck.entries()), latest: Array.from(state.latest.entries()),
     };
     try {
       db.transaction(SNAP_STORE, "readwrite").objectStore(SNAP_STORE).put(rec);
@@ -544,6 +544,7 @@
     linkCache: new Map(),
     selfCommented: new Set(),  // issues they opened AND commented on (also count as a discussion)
     reviewState: new Map(),    // open PR id -> changes_requested | approved | required
+    reviewCheck: new Map(),    // PR id -> { updatedAt, addressed } were requested changes followed by new commits?
     latest: new Map(),         // id -> { updatedAt, text, tone, at } latest activity, fetched for recent items
     fatal: false,
   };
@@ -735,6 +736,7 @@
       scopes: null,
       selfCommented: new Set(),
       reviewState: new Map(),
+      reviewCheck: new Map(),
       latest: new Map(),
       dateRange: "30d",
       syncing: true,
@@ -772,6 +774,7 @@
       for (const it of snap.items) state.itemsMap.set(it.id, it);
       for (const id of snap.selfCommented || []) state.selfCommented.add(id);
       for (const [id, v] of snap.reviewState || []) state.reviewState.set(id, v);
+      for (const [id, v] of snap.reviewCheck || []) state.reviewCheck.set(id, v);
       for (const [id, v] of snap.latest || []) state.latest.set(id, v);
       state.fromSnapshot = true;
       state.listReady = true;
@@ -920,17 +923,66 @@
   async function loadReviewStates(isStale) {
     const u = state.login;
     const next = new Map();
+    const changed = new Map(); // id -> updated_at of PRs GitHub marks "changes requested"
     try {
       for (const st of ["changes_requested", "approved", "required"]) {
         for (const q of scopedQueries(`author:${u} is:pr is:open review:${st}`)) {
           const data = await apiGet(searchPath(q), { priority: 2, isStale });
-          for (const r of data.items || []) next.set(r.html_url, st);
+          for (const r of data.items || []) {
+            next.set(r.html_url, st);
+            if (st === "changes_requested") changed.set(r.html_url, r.updated_at);
+          }
         }
       }
       state.reviewState = next;
     } catch {
-      /* keep what we had */
+      return; /* keep what we had */
     }
+    await checkChangesAddressed(changed, isStale);
+  }
+
+  // GitHub keeps "changes requested" until the reviewer approves or re-reviews,
+  // even after the author pushed the fix. Check whether new commits came after
+  // every blocking review; if so the PR is waiting on the reviewer, not the author.
+  const REVIEW_CHECK_MAX = 15;
+  async function checkChangesAddressed(changed, isStale) {
+    const todo = Array.from(changed).filter(([id, at]) => state.reviewCheck.get(id)?.updatedAt !== at).slice(0, REVIEW_CHECK_MAX);
+    for (const [id, at] of todo) {
+      if (isStale()) return;
+      const m = id.match(/github\.com\/([^/]+)\/([^/]+)\/pull\/(\d+)/);
+      if (!m) continue;
+      const base = `/repos/${encodeURIComponent(m[1])}/${encodeURIComponent(m[2])}/pulls/${m[3]}`;
+      try {
+        const [pr, reviews] = await Promise.all([
+          apiGet(base, { bucket: "core", priority: 2 }),
+          apiGet(`${base}/reviews?per_page=100`, { bucket: "core", priority: 2 }),
+        ]);
+        if (isStale()) return;
+        const head = pr?.head?.sha;
+        // Each reviewer's latest deciding review (plain comments don't change a decision)
+        const last = new Map();
+        for (const r of (reviews || []).filter((r) => r.submitted_at).sort((a, b) => (a.submitted_at < b.submitted_at ? -1 : 1))) {
+          if (["APPROVED", "CHANGES_REQUESTED", "DISMISSED"].includes(r.state)) last.set(r.user?.login, r);
+        }
+        const blocking = Array.from(last.values()).filter((r) => r.state === "CHANGES_REQUESTED");
+        const addressed = !!head && blocking.every((r) => r.commit_id && r.commit_id !== head);
+        state.reviewCheck.set(id, { updatedAt: at, addressed });
+        const item = state.itemsMap.get(id);
+        if (item) refreshActivity([item]);
+        scheduleSnapshot();
+      } catch (err) {
+        if (err.rateLimited) return;
+      }
+    }
+  }
+
+  // Effective review label: "changes requested" only while the author still owes the fix
+  function reviewLabel(item) {
+    if (item.status !== "open" && item.status !== "draft") return null;
+    const rs = state.reviewState.get(item.id);
+    if (!rs) return null;
+    if (rs === "changes_requested" && state.reviewCheck.get(item.id)?.addressed) return "rereview";
+    return rs;
   }
 
   // Latest comment / review for their most recently updated open items.
@@ -995,17 +1047,24 @@
   // Row line: latest activity if known, otherwise review state / comment count
   function activityHtml(item) {
     const parts = [];
-    const rs = state.reviewState.get(item.id);
-    if (rs && (item.status === "open" || item.status === "draft")) {
-      const label = { changes_requested: "Changes requested", approved: "Approved", required: "Review required" }[rs];
-      parts.push(`<span class="review-chip ${rs}">${label}</span>`);
+    const rs = reviewLabel(item);
+    if (rs) {
+      const label = { changes_requested: "Changes requested", rereview: "Awaiting re-review", approved: "Approved", required: "Review required" }[rs];
+      const tip = {
+        changes_requested: "A reviewer asked for changes and no new commits have been pushed since",
+        rereview: "Changes were requested and new commits were pushed after that. Waiting for the reviewer to look again",
+        approved: "Approved by a reviewer",
+        required: "Waiting for a review",
+      }[rs];
+      parts.push(`<span class="review-chip ${rs}" title="${tip}">${label}</span>`);
     }
     const l = state.latest.get(item.id);
     if (l && !l.none && l.updatedAt === item.updatedAt) {
       const who = l.who ? `<b>${escapeHtml(l.who)}</b>` : "Someone";
       const what = l.verb ? `${who} ${l.verb}` : `${who}:`;
       const quote = l.text ? ` <span class="act-text">“${escapeHtml(l.text)}”</span>` : "";
-      parts.push(`<span class="act-line act-${l.tone}" title="Latest activity · ${escapeHtml(new Date(l.at).toLocaleString())}">${what}${quote} <span class="act-when">· ${timeAgo(l.at)}</span></span>`);
+      const tone = l.tone === "changes" && rs !== "changes_requested" ? "comment" : l.tone;
+      parts.push(`<span class="act-line act-${tone}" title="Latest activity · ${escapeHtml(new Date(l.at).toLocaleString())}">${what}${quote} <span class="act-when">· ${timeAgo(l.at)}</span></span>`);
     } else {
       parts.push(`<span>${item.commentsCount ? `${fmt(item.commentsCount)} comment${item.commentsCount === 1 ? "" : "s"}` : "No comments yet"}</span>`);
     }
