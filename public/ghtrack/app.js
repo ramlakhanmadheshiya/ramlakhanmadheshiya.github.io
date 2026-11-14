@@ -542,7 +542,7 @@
     filters: { kind: "all", status: "all", role: "all", repo: "all", text: "" },
     expandedPreviews: new Set(),
     linkCache: new Map(),
-    selfCommented: new Set(),  // issues they opened AND commented on (also count as a discussion)
+    selfCommented: new Set(),  // items they commented on that sit under a stronger role (created / assigned / reviewed)
     reviewState: new Map(),    // open PR id -> changes_requested | approved | required
     reviewCheck: new Map(),    // PR id -> { updatedAt, addressed } were requested changes followed by new commits?
     latest: new Map(),         // id -> { updatedAt, text, tone, at } latest activity, fetched for recent items
@@ -893,12 +893,13 @@
     return state.scopes ? state.scopes.map((sc) => `(${sc.map((r) => `repo:${r}`).join(" OR ")}) ${q}`) : [q];
   }
 
-  // Issues they opened and also commented on (one discussion per issue)
+  // Items they commented on that are listed under a stronger role (own PRs/issues,
+  // assigned or reviewed). Each item counts once, however many comments.
   async function loadSelfComments(isStale) {
     const u = state.login;
     const found = new Set();
     try {
-      for (const q of scopedQueries(`author:${u} commenter:${u} is:issue`)) {
+      for (const q of scopedQueries(`commenter:${u} (author:${u} OR assignee:${u} OR reviewed-by:${u})`)) {
         let extra = "";
         let page = 0;
         for (let guard = 0; guard < 60; guard++) {
@@ -1860,11 +1861,12 @@
 
   function roleTagHtml(item) {
     if (item.bucket === "created" && state.selfCommented.has(item.id)) {
-      return `<span class="role-note role-commented" title="They opened this issue and joined the discussion">@${escapeHtml(state.login)} commented</span>`;
+      return `<span class="role-note role-commented" title="They opened this and also commented">@${escapeHtml(state.login)} commented</span>`;
     }
     if (item.bucket === "created" || !item.bucket) return "";
     const extra = state.linkCache.get(item.id);
     const verbs = [ROLE_VERB[item.bucket]];
+    if (state.selfCommented.has(item.id) && !verbs.includes(ROLE_VERB.commented)) verbs.push(ROLE_VERB.commented);
     if (extra) for (const r of ["assigned", "reviewed", "commented", "mentioned"]) if (extra.has(r) && !verbs.includes(ROLE_VERB[r])) verbs.push(ROLE_VERB[r]);
     const text = item.bucket === "other" && !extra ? "mentioned" : verbs.join(", ");
     return `<span class="role-note role-${item.bucket}" title="How @${escapeHtml(state.login)} is involved">@${escapeHtml(state.login)} ${escapeHtml(text)}</span>`;
