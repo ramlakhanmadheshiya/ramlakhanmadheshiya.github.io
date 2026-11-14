@@ -93,7 +93,21 @@ body {
 		<link id="-gd-engine-icon" rel="icon" type="image/png" href="index.icon.png" />
 <link rel="apple-touch-icon" href="index.apple-touch-icon.png"/>
 <meta name="robots" content="noindex,nofollow"><meta name="theme-color" content="#f5f7fa">
-	<meta name="paytrack-build" content="b9f4f55fca04"></head>
+	<!-- paytrack-input-start --><!-- Godot's Web keyboard uses a real HTML input behind the canvas. -->
+<style>input, textarea { font-size: 16px; } canvas { touch-action: none; }</style>
+<script>
+document.addEventListener('focusin', function (event) {
+  const field = event.target;
+  if (field instanceof HTMLInputElement || field instanceof HTMLTextAreaElement) {
+    // The pinned engine assigns lowercase inputmode as a JS property.
+    // Reflect it to the HTML attribute understood by Android and iOS keyboards.
+    if (typeof field.inputmode === 'string') field.setAttribute('inputmode', field.inputmode);
+    field.setAttribute('enterkeyhint', 'done');
+    field.setAttribute('autocomplete', 'off');
+  }
+});
+</script>
+<!-- paytrack-input-end --><meta name="paytrack-build" content="672da60bd059"></head>
 	<body>
 		<canvas id="canvas">
 			Your browser does not support the canvas tag.
@@ -111,7 +125,7 @@ body {
 
 		<script src="index.js"></script>
 		<script>
-const GODOT_CONFIG = {"args":[],"canvasResizePolicy":2,"emscriptenPoolSize":8,"ensureCrossOriginIsolationHeaders":true,"executable":"index","experimentalVK":false,"fileSizes":{"index.wasm":39514754,"paytrack-b9f4f55fca04.pck":1467676},"focusCanvas":true,"gdextensionLibs":[],"godotPoolSize":4,"mainPack":"paytrack-b9f4f55fca04.pck"};
+const GODOT_CONFIG = {"args":[],"canvasResizePolicy":2,"emscriptenPoolSize":8,"ensureCrossOriginIsolationHeaders":true,"executable":"index","experimentalVK":true,"fileSizes":{"index.wasm":39514754,"paytrack-672da60bd059.pck":1471172},"focusCanvas":true,"gdextensionLibs":[],"godotPoolSize":4,"mainPack":"paytrack-672da60bd059.pck"};
 const GODOT_THREADS_ENABLED = false;
 const engine = new Engine(GODOT_CONFIG);
 
