@@ -542,6 +542,7 @@
     filters: { kind: "all", status: "all", role: "all", repo: "all", text: "" },
     expandedPreviews: new Set(),
     linkCache: new Map(),
+    feedCommented: new Set(),  // same, found in their recent activity feed (search can lag)
     selfCommented: new Set(),  // items they commented on that sit under a stronger role (created / assigned / reviewed)
     reviewState: new Map(),    // open PR id -> changes_requested | approved | required
     reviewCheck: new Map(),    // PR id -> { updatedAt, addressed } were requested changes followed by new commits?
@@ -735,6 +736,7 @@
       fromSnapshot: false,
       scopes: null,
       selfCommented: new Set(),
+      feedCommented: new Set(),
       reviewState: new Map(),
       reviewCheck: new Map(),
       latest: new Map(),
@@ -883,6 +885,9 @@
     renderAll();
 
     // 3. Extra facts, quietly in the background
+    await loadFeedComments(isStale);
+    if (isStale()) return;
+    renderAll();
     await loadSelfComments(isStale);
     if (isStale()) return;
     flushSnapshotNow();
@@ -914,10 +919,37 @@
           }
         }
       }
+      for (const id of state.feedCommented) found.add(id);
       state.selfCommented = found;
     } catch {
       /* keep what we had */
     }
+  }
+
+  // GitHub's search can take hours to index new comments. Their public activity
+  // feed (last ~90 days, up to 300 events) has them at once, so recent comments
+  // show under Commented straight away.
+  async function loadFeedComments(isStale) {
+    const u = encodeURIComponent(state.login);
+    for (let page = 1; page <= 3; page++) {
+      let events;
+      try {
+        events = await apiGet(`/users/${u}/events/public?per_page=100&page=${page}`, { bucket: "core", priority: 2 });
+      } catch {
+        return;
+      }
+      if (isStale()) return;
+      for (const e of events || []) {
+        if (e.type !== "IssueCommentEvent") continue;
+        const id = e.payload?.issue?.html_url;
+        const item = id && state.itemsMap.get(id);
+        if (!item || item.bucket === "commented") continue;
+        state.feedCommented.add(id);
+        state.selfCommented.add(id);
+      }
+      if (!events || events.length < 100) break;
+    }
+    scheduleSnapshot();
   }
 
   // Review decision for their open PRs (3 searches cover all of them)
