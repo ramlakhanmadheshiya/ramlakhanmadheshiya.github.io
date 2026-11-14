@@ -732,3 +732,14 @@ p.conv-empty { padding: 0; margin: 0; }
 .recent-x:hover { opacity: 1; background: var(--surface-2); color: var(--text); }
 .recent-x svg { width: 12px; height: 12px; }
 @media (max-width: 480px) { .recent-login { display: none; } }
+
+/* v2.6 fixed three-line rows: title / meta / latest activity, each one line */
+.row-title { flex-wrap: nowrap; min-width: 0; }
+.item-title-link { display: block; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; overflow-wrap: normal; }
+.row-meta { flex-wrap: nowrap; overflow: hidden; white-space: nowrap; min-width: 0; }
+.row-meta > * { flex: none; }
+.row-meta > .label-pill { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.row-activity { margin-top: 4px; height: 20px; align-items: center; display: flex; min-width: 0; overflow: hidden; white-space: nowrap; font-size: 12.5px; color: var(--text-3); }
+.row-activity .act-slot { min-width: 0; max-width: 100%; }
+.row-activity .act-line { max-width: none; flex: 1 1 auto; }
+.row-meta { height: 22px; align-items: center; }

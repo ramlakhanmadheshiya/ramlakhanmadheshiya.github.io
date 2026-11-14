@@ -1927,16 +1927,16 @@
         ${icon}
         <div class="row-content">
           <div class="row-title">
-            <a href="${escapeHtml(item.url)}" target="_blank" rel="noopener" class="item-title-link">${escapeHtml(item.title)}</a>
+            <a href="${escapeHtml(item.url)}" target="_blank" rel="noopener" class="item-title-link" title="${escapeHtml(item.title)}">${escapeHtml(item.title)}</a>
           </div>
           <div class="row-meta">
             <span class="badge ${item.status}">${escapeHtml(item.statusLabel)}</span>
             <span class="repo">${escapeHtml(item.repo)}#${item.number}</span>
             <span>by <span class="author ${item.bucket === "created" ? "is-self" : ""}">${escapeHtml(item.author)}</span></span>
-            <span class="act-slot">${activityHtml(item)}</span>
             <span class="role-slot">${roleTagHtml(item)}</span>
             ${(item.labels || []).slice(0, 3).map((l) => `<span class="label-pill" style="--l-color:#${escapeHtml(l.color || "888888")}">${escapeHtml(l.name)}</span>`).join("")}
           </div>
+          <div class="row-activity"><span class="act-slot">${activityHtml(item)}</span></div>
         </div>
         <div class="row-right">
           <span class="time-ago" title="Updated ${escapeHtml(new Date(item.updatedAt).toLocaleString())}">${timeAgo(item.updatedAt)}</span>
