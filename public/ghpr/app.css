@@ -1895,6 +1895,113 @@ input[type="range"] {
   gap: 12px;
 }
 
+/* ── Inline Rate Limit Helper Card ────────────────────────────────────────── */
+.rate-limit-helper {
+  margin: 20px auto 24px;
+  max-width: 480px;
+  text-align: left;
+}
+
+.token-helper-card {
+  background: var(--surface);
+  border: 1px solid var(--separator-strong);
+  border-radius: var(--radius-lg);
+  padding: 20px;
+  box-shadow: var(--shadow-card);
+}
+
+.token-helper-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--apple-blue);
+  margin-bottom: 8px;
+}
+
+.token-helper-header svg {
+  width: 18px;
+  height: 18px;
+}
+
+.token-helper-text {
+  font-size: 0.85rem;
+  color: var(--label-secondary);
+  line-height: 1.48;
+  margin-bottom: 14px;
+}
+
+.token-helper-input-row {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.token-helper-input-row input {
+  flex: 1;
+  padding: 9px 12px;
+  background: var(--surface-secondary);
+  border: 1px solid var(--separator);
+  border-radius: var(--radius-sm);
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+  color: var(--label-primary);
+  box-sizing: border-box;
+}
+
+.token-helper-input-row input:focus {
+  outline: none;
+  border-color: var(--apple-blue);
+  background: var(--surface);
+  box-shadow: 0 0 0 2px var(--apple-blue-tint);
+}
+
+.token-helper-link {
+  display: inline-block;
+  font-size: 0.8rem;
+  color: var(--apple-blue);
+  text-decoration: none;
+}
+
+.token-helper-link:hover {
+  text-decoration: underline;
+}
+
+/* ── Filter Repo Suggestion Hint ──────────────────────────────────────────── */
+.filter-search-box {
+  position: relative;
+}
+
+.filter-repo-hint {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 60;
+  padding: 8px 14px;
+  background: var(--surface);
+  border: 1px solid var(--apple-blue);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-float);
+  font-size: 0.85rem;
+  color: var(--label-primary);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+}
+
+.filter-repo-hint kbd {
+  background: var(--apple-blue);
+  color: #ffffff;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  font-family: var(--font-mono);
+  font-weight: 600;
+}
+
 /* ── Apple Pill Toasts ────────────────────────────────────────────────────── */
 .apple-toast-shelf {
   position: fixed;

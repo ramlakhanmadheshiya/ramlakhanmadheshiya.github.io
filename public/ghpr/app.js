@@ -1,5 +1,5 @@
 // ── ghpr — Apple Human Interface Guidelines PR Triage Engine ─────────────────
-// Zero dependencies — clean, performant, modern vanilla JavaScript.
+// Zero dependencies — 100% client-side, live GitHub API integration.
 
 (function () {
   "use strict";
@@ -45,1011 +45,6 @@
     }
   } catch (e) {}
 
-  // ── Embedded Featured Backlog (SciML/OrdinaryDiffEq.jl) ────────────────────
-  // Instant zero-cost offline cache for maintainers with real GitHub PRs
-  const SCIML_DEMO_BACKLOG = [
-  {
-    "number": 4893,
-    "title": "Add sixth-order ExpRK6s16 solver",
-    "url": "https://github.com/SciML/OrdinaryDiffEq.jl/pull/4893",
-    "body": "Adds ExpRK6s16, the sixth-order stiff exponential Runge–Kutta method from Luan and Alhsmy, with cached-operator and Krylov support.\n\nIncludes convergence coverage for both in-place and out-of-place problems, plus the reaction-diffusion problem from the paper's Example 5.1.\n\nTested the `OrdinaryDiffEqExponentialRK` Core group with `GROUP=Core julia --project -e 'using Pkg; Pkg.test()'` from `lib/Or",
-    "isDraft": false,
-    "createdAt": "2026-10-20T19:12:03Z",
-    "updatedAt": "2026-11-15T08:15:19Z",
-    "mergeable": "MERGEABLE",
-    "reviewDecision": "REVIEW_REQUIRED",
-    "additions": 320,
-    "deletions": 64,
-    "changedFiles": 2,
-    "author": {
-      "login": "Jayant-kernel"
-    },
-    "authorAssociation": "NONE",
-    "labels": {
-      "nodes": []
-    },
-    "commits": {
-      "nodes": [
-        {
-          "commit": {
-            "statusCheckRollup": {
-              "state": "SUCCESS"
-            }
-          }
-        }
-      ]
-    },
-    "files": {
-      "nodes": [
-        {
-          "path": "src/algorithms/exprk.jl",
-          "additions": 240,
-          "deletions": 50
-        },
-        {
-          "path": "test/exprk_convergence.jl",
-          "additions": 80,
-          "deletions": 14
-        }
-      ]
-    },
-    "comments": {
-      "totalCount": 0
-    },
-    "_enriched": true
-  },
-  {
-    "number": 4888,
-    "title": "Require current-step Newton convergence in FIRK solvers",
-    "url": "https://github.com/SciML/OrdinaryDiffEq.jl/pull/4888",
-    "body": "> 🚧 **UNREVIEWED — awaiting review by @ChrisRackauckas.**\n> Ignore this draft until reviewed by @ChrisRackauckas.\n> AI-generated change; independent review is pending.\n\nFIRK solvers can accept a nonzero first Newton correction using a contraction estimate from an earlier step, allowing a stale Jacobian to produce an inaccurate accepted solution. Require a contraction estimate from the current ste",
-    "isDraft": false,
-    "createdAt": "2026-10-18T07:10:15Z",
-    "updatedAt": "2026-11-14T19:37:54Z",
-    "mergeable": "MERGEABLE",
-    "reviewDecision": "REVIEW_REQUIRED",
-    "additions": 320,
-    "deletions": 64,
-    "changedFiles": 2,
-    "author": {
-      "login": "ChrisRackauckas-Claude"
-    },
-    "authorAssociation": "MEMBER",
-    "labels": {
-      "nodes": []
-    },
-    "commits": {
-      "nodes": [
-        {
-          "commit": {
-            "statusCheckRollup": {
-              "state": "SUCCESS"
-            }
-          }
-        }
-      ]
-    },
-    "files": {
-      "nodes": [
-        {
-          "path": "src/algorithms/exprk.jl",
-          "additions": 240,
-          "deletions": 50
-        },
-        {
-          "path": "test/exprk_convergence.jl",
-          "additions": 80,
-          "deletions": 14
-        }
-      ]
-    },
-    "comments": {
-      "totalCount": 0
-    },
-    "_enriched": true
-  },
-  {
-    "number": 4882,
-    "title": "Balance the stale-W Newton rescale for ODE DIRK stages; replace chaotic ROBER step-count test",
-    "url": "https://github.com/SciML/OrdinaryDiffEq.jl/pull/4882",
-    "body": "**Draft for a decision by @ChrisRackauckas: please ignore until he has reviewed it.** This PR changes default `NLNewton` behaviour for DIRK methods and needs a work-precision benchmark sweep before it can merge.\n\n## What and why\n\n`W` is assembled as `J - I/W_γdt`, but the stage right-hand side is scaled by the *current* `1/γdt` (`invγdt` is reset in `initialize!`). On an eigenmode `λ`, the stale i",
-    "isDraft": false,
-    "createdAt": "2026-10-16T17:29:12Z",
-    "updatedAt": "2026-11-14T19:28:14Z",
-    "mergeable": "MERGEABLE",
-    "reviewDecision": "REVIEW_REQUIRED",
-    "additions": 95,
-    "deletions": 38,
-    "changedFiles": 2,
-    "author": {
-      "login": "ChrisRackauckas-Claude"
-    },
-    "authorAssociation": "MEMBER",
-    "labels": {
-      "nodes": []
-    },
-    "commits": {
-      "nodes": [
-        {
-          "commit": {
-            "statusCheckRollup": {
-              "state": "PENDING"
-            }
-          }
-        }
-      ]
-    },
-    "files": {
-      "nodes": [
-        {
-          "path": "src/nlsolve/newton.jl",
-          "additions": 70,
-          "deletions": 30
-        },
-        {
-          "path": "test/stiff_tests.jl",
-          "additions": 25,
-          "deletions": 8
-        }
-      ]
-    },
-    "comments": {
-      "totalCount": 0
-    },
-    "_enriched": true
-  },
-  {
-    "number": 4986,
-    "title": "Restart the Newton convergence rate on a new W",
-    "url": "https://github.com/SciML/OrdinaryDiffEq.jl/pull/4986",
-    "body": "Fixes #4983.\n\n`nlsolve!` accepts a Newton solve after one iteration when `θ / (1 - θ) * ndz < κ`, with `θ = prev_θ` remembered from an earlier solve. Only solves with two or more iterations update `prev_θ`, and nothing made it expire. This PR resets `prev_θ` to one when a Newton solve gets a new W, as CVODE does (`crate = ONE` in `cvNlsLSetup`), so the rate is measured again.\n\n## What goes wrong o",
-    "isDraft": false,
-    "createdAt": "2026-11-09T20:41:41Z",
-    "updatedAt": "2026-11-14T19:07:41Z",
-    "mergeable": "MERGEABLE",
-    "reviewDecision": "REVIEW_REQUIRED",
-    "additions": 95,
-    "deletions": 38,
-    "changedFiles": 2,
-    "author": {
-      "login": "visr"
-    },
-    "authorAssociation": "CONTRIBUTOR",
-    "labels": {
-      "nodes": []
-    },
-    "commits": {
-      "nodes": [
-        {
-          "commit": {
-            "statusCheckRollup": {
-              "state": "FAILURE"
-            }
-          }
-        }
-      ]
-    },
-    "files": {
-      "nodes": [
-        {
-          "path": "src/nlsolve/newton.jl",
-          "additions": 70,
-          "deletions": 30
-        },
-        {
-          "path": "test/stiff_tests.jl",
-          "additions": 25,
-          "deletions": 8
-        }
-      ]
-    },
-    "comments": {
-      "totalCount": 0
-    },
-    "_enriched": true
-  },
-  {
-    "number": 5000,
-    "title": "Give components added by addat! a value",
-    "url": "https://github.com/SciML/OrdinaryDiffEq.jl/pull/5000",
-    "body": "New components from `addat!` start at `val` (default zero) in `u` and the step history.\n`idxs` must be the next indices, since the state buffers only append.\nThe default solver now resizes its stiff sub-caches too.\n\n```julia\nusing StochasticDiffEq\nf!(du, u, p, t) = (du .= -0.5 .* u; nothing)\ng!(du, u, p, t) = (du .= 0.1 .* u; nothing)\ninteg = init(SDEProblem(f!, g!, [1.0, 2.0], (0.0, 1.0)), EM(); ",
-    "isDraft": false,
-    "createdAt": "2026-11-14T08:30:49Z",
-    "updatedAt": "2026-11-14T13:30:58Z",
-    "mergeable": "MERGEABLE",
-    "reviewDecision": "REVIEW_REQUIRED",
-    "additions": 85,
-    "deletions": 82,
-    "changedFiles": 2,
-    "author": {
-      "login": "ramlakhanmadheshiya"
-    },
-    "authorAssociation": "CONTRIBUTOR",
-    "labels": {
-      "nodes": []
-    },
-    "commits": {
-      "nodes": [
-        {
-          "commit": {
-            "statusCheckRollup": {
-              "state": "SUCCESS"
-            }
-          }
-        }
-      ]
-    },
-    "files": {
-      "nodes": [
-        {
-          "path": "src/integrators/interface.jl",
-          "additions": 85,
-          "deletions": 82
-        },
-        {
-          "path": "test/runtests.jl",
-          "additions": 12,
-          "deletions": 4
-        }
-      ]
-    },
-    "comments": {
-      "totalCount": 0
-    },
-    "_enriched": true
-  },
-  {
-    "number": 4894,
-    "title": "Report non-descent BackTracking directions as a failed Newton step instead of crashing",
-    "url": "https://github.com/SciML/OrdinaryDiffEq.jl/pull/4894",
-    "body": "> 🚧 **UNREVIEWED — awaiting review by @ChrisRackauckas.** Filed by an AI agent running as @ChrisRackauckas; Chris has not seen this.\n> Harness: Claude Code · Model: claude-sonnet-5-5\n> Conversation: local session 3878b54e-28f2-4a01-a176-a8f5468d1997 (no session URL)\n\nPlease ignore until reviewed by @ChrisRackauckas.\n\n**Update (round 7, new head `1bac2e20e97bd940ae7df6bf60c932e120de3eae`)**: round",
-    "isDraft": false,
-    "createdAt": "2026-10-21T03:24:09Z",
-    "updatedAt": "2026-11-14T09:06:25Z",
-    "mergeable": "MERGEABLE",
-    "reviewDecision": "REVIEW_REQUIRED",
-    "additions": 95,
-    "deletions": 38,
-    "changedFiles": 2,
-    "author": {
-      "login": "ChrisRackauckas-Claude"
-    },
-    "authorAssociation": "MEMBER",
-    "labels": {
-      "nodes": []
-    },
-    "commits": {
-      "nodes": [
-        {
-          "commit": {
-            "statusCheckRollup": {
-              "state": "SUCCESS"
-            }
-          }
-        }
-      ]
-    },
-    "files": {
-      "nodes": [
-        {
-          "path": "src/nlsolve/newton.jl",
-          "additions": 70,
-          "deletions": 30
-        },
-        {
-          "path": "test/stiff_tests.jl",
-          "additions": 25,
-          "deletions": 8
-        }
-      ]
-    },
-    "comments": {
-      "totalCount": 0
-    },
-    "_enriched": true
-  },
-  {
-    "number": 4724,
-    "title": "Fix NonlinearSolveAlg false Convergence for Broyden/Klement (#4283)",
-    "url": "https://github.com/SciML/OrdinaryDiffEq.jl/pull/4724",
-    "body": "Please ignore until reviewed by @ChrisRackauckas.\n\n`NonlinearSolveAlg` with quasi-Newton inners could accept stages on displacement alone (θ ≈ 1 / η·ndz) while the residual still missed the stage equation. This keeps **only** the maintainer-approved residual veto on Convergence for non-deferred inner caches. Newton deferred-residual evaluation is left alone (`defers_residual` → no veto refresh).\n\n",
-    "isDraft": true,
-    "createdAt": "2026-10-02T07:32:15Z",
-    "updatedAt": "2026-11-14T09:05:01Z",
-    "mergeable": "MERGEABLE",
-    "reviewDecision": "REVIEW_REQUIRED",
-    "additions": 119,
-    "deletions": 61,
-    "changedFiles": 2,
-    "author": {
-      "login": "ChrisRackauckas-Claude"
-    },
-    "authorAssociation": "MEMBER",
-    "labels": {
-      "nodes": []
-    },
-    "commits": {
-      "nodes": [
-        {
-          "commit": {
-            "statusCheckRollup": {
-              "state": "PENDING"
-            }
-          }
-        }
-      ]
-    },
-    "files": {
-      "nodes": [
-        {
-          "path": "src/integrators/interface.jl",
-          "additions": 119,
-          "deletions": 61
-        },
-        {
-          "path": "test/runtests.jl",
-          "additions": 12,
-          "deletions": 4
-        }
-      ]
-    },
-    "comments": {
-      "totalCount": 0
-    },
-    "_enriched": true
-  },
-  {
-    "number": 4998,
-    "title": "Specialize the IMEX tableau builders on their element types",
-    "url": "https://github.com/SciML/OrdinaryDiffEq.jl/pull/4998",
-    "body": "The tableau builders took `(T, T2)` untyped, and Julia does not specialize a method on a `Type` argument that is only passed on.\nSo their `zeros` and `setindex!` calls were dispatched at run time and compiled on the first solve instead of in the package image.\nThis is the #3621 step of #4827.\nThe first solve after FBDF goes from 42 to 32 ms for TRBDF2, 46 to 39 ms for KenCarp4, and 43 to 33 ms for",
-    "isDraft": false,
-    "createdAt": "2026-11-14T05:49:21Z",
-    "updatedAt": "2026-11-14T08:50:02Z",
-    "mergeable": "CONFLICTING",
-    "reviewDecision": "REVIEW_REQUIRED",
-    "additions": 180,
-    "deletions": 42,
-    "changedFiles": 2,
-    "author": {
-      "login": "ramlakhanmadheshiya"
-    },
-    "authorAssociation": "CONTRIBUTOR",
-    "labels": {
-      "nodes": []
-    },
-    "commits": {
-      "nodes": [
-        {
-          "commit": {
-            "statusCheckRollup": {
-              "state": "SUCCESS"
-            }
-          }
-        }
-      ]
-    },
-    "files": {
-      "nodes": [
-        {
-          "path": "src/tableaus/imex.jl",
-          "additions": 140,
-          "deletions": 35
-        },
-        {
-          "path": "test/imex_tests.jl",
-          "additions": 40,
-          "deletions": 7
-        }
-      ]
-    },
-    "comments": {
-      "totalCount": 0
-    },
-    "_enriched": true
-  },
-  {
-    "number": 4999,
-    "title": "Reject the Rosenbrock step when a linear solve fails",
-    "url": "https://github.com/SciML/OrdinaryDiffEq.jl/pull/4999",
-    "body": "Fixes #4877\n\nA failed linear solve now rejects the step, as the [Newton solve](https://github.com/SciML/OrdinaryDiffEq.jl/blob/535e41fa0db0f651d5792962f0599d08d3e5d158/lib/OrdinaryDiffEqNonlinearSolve/src/newton.jl#L805-L808) does.\nThis also catches a W that is finite but singular.\nIt uses `force_stepfail` instead of `EEst = 2`, because `EEst` is ignored with `adaptive = false` and accepted under ",
-    "isDraft": false,
-    "createdAt": "2026-11-14T06:01:29Z",
-    "updatedAt": "2026-11-14T08:12:24Z",
-    "mergeable": "MERGEABLE",
-    "reviewDecision": "REVIEW_REQUIRED",
-    "additions": 55,
-    "deletions": 18,
-    "changedFiles": 2,
-    "author": {
-      "login": "ramlakhanmadheshiya"
-    },
-    "authorAssociation": "CONTRIBUTOR",
-    "labels": {
-      "nodes": []
-    },
-    "commits": {
-      "nodes": [
-        {
-          "commit": {
-            "statusCheckRollup": {
-              "state": "SUCCESS"
-            }
-          }
-        }
-      ]
-    },
-    "files": {
-      "nodes": [
-        {
-          "path": "src/algorithms/rosenbrock.jl",
-          "additions": 40,
-          "deletions": 12
-        },
-        {
-          "path": "test/rosenbrock_tests.jl",
-          "additions": 15,
-          "deletions": 6
-        }
-      ]
-    },
-    "comments": {
-      "totalCount": 0
-    },
-    "_enriched": true
-  },
-  {
-    "number": 4725,
-    "title": "Fix NLNewton BackTracking under calc_dt_propose! clock alignment",
-    "url": "https://github.com/SciML/OrdinaryDiffEq.jl/pull/4725",
-    "body": "> 🚧 **UNREVIEWED — awaiting review by @ChrisRackauckas.** Filed by an AI agent running as @ChrisRackauckas; Chris has not seen this.\n> Harness: Claude Code 2.1.323 · Model: claude-opus-5-5 (risk-block revision; earlier sections name their own harness and model)\n> Conversation: local fixer job SciML__OrdinaryDiffEq.jl__4725 (no session URL)\n\nPlease ignore until reviewed by @ChrisRackauckas.\n\n## Ro",
-    "isDraft": true,
-    "createdAt": "2026-10-02T07:38:00Z",
-    "updatedAt": "2026-11-13T20:24:22Z",
-    "mergeable": "MERGEABLE",
-    "reviewDecision": "REVIEW_REQUIRED",
-    "additions": 95,
-    "deletions": 38,
-    "changedFiles": 2,
-    "author": {
-      "login": "ChrisRackauckas-Claude"
-    },
-    "authorAssociation": "MEMBER",
-    "labels": {
-      "nodes": []
-    },
-    "commits": {
-      "nodes": [
-        {
-          "commit": {
-            "statusCheckRollup": {
-              "state": "SUCCESS"
-            }
-          }
-        }
-      ]
-    },
-    "files": {
-      "nodes": [
-        {
-          "path": "src/nlsolve/newton.jl",
-          "additions": 70,
-          "deletions": 30
-        },
-        {
-          "path": "test/stiff_tests.jl",
-          "additions": 25,
-          "deletions": 8
-        }
-      ]
-    },
-    "comments": {
-      "totalCount": 0
-    },
-    "_enriched": true
-  },
-  {
-    "number": 4904,
-    "title": "docs: Fix OrdinaryDiffEq ODEProblem example parameters in documentation",
-    "url": "https://github.com/SciML/OrdinaryDiffEq.jl/pull/4904",
-    "body": "Fixes the Enzyme part of SciML/SciMLSensitivity.jl#1714: under Enzyme, a parameter that enters the loss only through the returned solution (e.g. an observed variable, `sol[sym]` / `getsym(prob, sym)(sol)`) gets a zero gradient.\n\n## Cause\n\n`solve_up`'s Enzyme rule builds the solution shadow with `Enzyme.make_zero(res[1])`, so it includes a zeroed `prob.p`. When the caller evaluates an observed vari",
-    "isDraft": false,
-    "createdAt": "2026-10-22T17:42:32Z",
-    "updatedAt": "2026-11-13T20:14:09Z",
-    "mergeable": "MERGEABLE",
-    "reviewDecision": "APPROVED",
-    "additions": 5,
-    "deletions": 2,
-    "changedFiles": 2,
-    "author": {
-      "login": "SebastianM-C"
-    },
-    "authorAssociation": "MEMBER",
-    "labels": {
-      "nodes": []
-    },
-    "commits": {
-      "nodes": [
-        {
-          "commit": {
-            "statusCheckRollup": {
-              "state": "SUCCESS"
-            }
-          }
-        }
-      ]
-    },
-    "files": {
-      "nodes": [
-        {
-          "path": "src/integrators/interface.jl",
-          "additions": 299,
-          "deletions": 71
-        },
-        {
-          "path": "test/runtests.jl",
-          "additions": 12,
-          "deletions": 4
-        }
-      ]
-    },
-    "comments": {
-      "totalCount": 0
-    },
-    "_enriched": true
-  },
-  {
-    "number": 4683,
-    "title": "typo: Correct typo in interpolator docstrings",
-    "url": "https://github.com/SciML/OrdinaryDiffEq.jl/pull/4683",
-    "body": "## Summary\n\nBuilt on #4663 (now merged via merge commit f61e4996; this branch is based on its head `669ce01` and adds one commit on top).\n\nDesign credited to @hexaeder's comment on #4663: for a CPU `SparseMatrixCSC` `W` with a non-scalar mass matrix, `W` is assembled via `@.. W = muladd(-mass_matrix, invdtgamma, J)`, and sparse broadcast drops exact zeros. Whenever a Jacobian entry becomes `0.0`, ",
-    "isDraft": false,
-    "createdAt": "2026-09-28T16:10:32Z",
-    "updatedAt": "2026-11-13T14:38:14Z",
-    "mergeable": "MERGEABLE",
-    "reviewDecision": "APPROVED",
-    "additions": 3,
-    "deletions": 3,
-    "changedFiles": 2,
-    "author": {
-      "login": "ChrisRackauckas-Claude"
-    },
-    "authorAssociation": "MEMBER",
-    "labels": {
-      "nodes": []
-    },
-    "commits": {
-      "nodes": [
-        {
-          "commit": {
-            "statusCheckRollup": {
-              "state": "SUCCESS"
-            }
-          }
-        }
-      ]
-    },
-    "files": {
-      "nodes": [
-        {
-          "path": "src/integrators/interface.jl",
-          "additions": 78,
-          "deletions": 20
-        },
-        {
-          "path": "test/runtests.jl",
-          "additions": 12,
-          "deletions": 4
-        }
-      ]
-    },
-    "comments": {
-      "totalCount": 0
-    },
-    "_enriched": true
-  },
-  {
-    "number": 4820,
-    "title": "Make ArrayPartition UNITLESS_ABS2 and INFINITE_OR_GIANT type-stable",
-    "url": "https://github.com/SciML/OrdinaryDiffEq.jl/pull/4820",
-    "body": "> 🚧 **UNREVIEWED — awaiting review by @ChrisRackauckas.** Filed by an AI agent running as @ChrisRackauckas; Chris has not seen this.\n> Harness: Cursor Agent CLI · Model: auto\n> Conversation: local session (no session URL; id not recorded)\n\n## Summary\n\n`UNITLESS_ABS2(::ArrayPartition)` used `mapreduce` over the partition tuple with `init`, which is not inferred for homogeneous or mixed partition e",
-    "isDraft": false,
-    "createdAt": "2026-10-08T14:20:45Z",
-    "updatedAt": "2026-11-13T14:17:12Z",
-    "mergeable": "MERGEABLE",
-    "reviewDecision": "APPROVED",
-    "additions": 215,
-    "deletions": 72,
-    "changedFiles": 2,
-    "author": {
-      "login": "ChrisRackauckas-Claude"
-    },
-    "authorAssociation": "MEMBER",
-    "labels": {
-      "nodes": []
-    },
-    "commits": {
-      "nodes": [
-        {
-          "commit": {
-            "statusCheckRollup": {
-              "state": "SUCCESS"
-            }
-          }
-        }
-      ]
-    },
-    "files": {
-      "nodes": [
-        {
-          "path": "src/integrators/interface.jl",
-          "additions": 215,
-          "deletions": 72
-        },
-        {
-          "path": "test/runtests.jl",
-          "additions": 12,
-          "deletions": 4
-        }
-      ]
-    },
-    "comments": {
-      "totalCount": 0
-    },
-    "_enriched": true
-  },
-  {
-    "number": 4900,
-    "title": "Fix DFBDF startup predictors after rejected steps",
-    "url": "https://github.com/SciML/OrdinaryDiffEq.jl/pull/4900",
-    "body": "> 🚧 **UNREVIEWED — Ignore this PR until reviewed by @ChrisRackauckas.**\n> 🤖 **This PR was prepared by an AI agent; Chris has not reviewed it.**\n\nDFBDF can repeatedly reject its startup step and return `Unstable` at t=0 for a consistent nonlinear DAE. Its startup predictor uses the rejected trial state as the timestep shrinks. Use the accepted state for both in-place and out-of-place startup pred",
-    "isDraft": false,
-    "createdAt": "2026-10-21T13:29:50Z",
-    "updatedAt": "2026-11-13T14:16:44Z",
-    "mergeable": "MERGEABLE",
-    "reviewDecision": "REVIEW_REQUIRED",
-    "additions": 295,
-    "deletions": 67,
-    "changedFiles": 2,
-    "author": {
-      "login": "ChrisRackauckas-Claude"
-    },
-    "authorAssociation": "MEMBER",
-    "labels": {
-      "nodes": []
-    },
-    "commits": {
-      "nodes": [
-        {
-          "commit": {
-            "statusCheckRollup": {
-              "state": "SUCCESS"
-            }
-          }
-        }
-      ]
-    },
-    "files": {
-      "nodes": [
-        {
-          "path": "src/integrators/interface.jl",
-          "additions": 295,
-          "deletions": 67
-        },
-        {
-          "path": "test/runtests.jl",
-          "additions": 12,
-          "deletions": 4
-        }
-      ]
-    },
-    "comments": {
-      "totalCount": 0
-    },
-    "_enriched": true
-  },
-  {
-    "number": 4465,
-    "title": "Reduce PDIRK statistics after worker joins without a global lock",
-    "url": "https://github.com/SciML/OrdinaryDiffEq.jl/pull/4465",
-    "body": "> 🚧 **UNREVIEWED — awaiting review by @ChrisRackauckas.** Filed by an AI agent running as @ChrisRackauckas; Chris has not seen this.\n> Harness: Codex CLI 0.164.0 · Model: gpt-6.1-sol\n> Conversation: local fixer job SciML__OrdinaryDiffEq.jl__4465 (no session URL)\n\nPDIRK workers can lose statistics and overwrite shared failure/Jacobian state. Give each concurrent nonlinear solver a typed private `S",
-    "isDraft": false,
-    "createdAt": "2026-09-05T11:28:40Z",
-    "updatedAt": "2026-11-13T14:16:25Z",
-    "mergeable": "MERGEABLE",
-    "reviewDecision": "REVIEW_REQUIRED",
-    "additions": 170,
-    "deletions": 57,
-    "changedFiles": 2,
-    "author": {
-      "login": "ChrisRackauckas-Claude"
-    },
-    "authorAssociation": "MEMBER",
-    "labels": {
-      "nodes": []
-    },
-    "commits": {
-      "nodes": [
-        {
-          "commit": {
-            "statusCheckRollup": {
-              "state": "PENDING"
-            }
-          }
-        }
-      ]
-    },
-    "files": {
-      "nodes": [
-        {
-          "path": "src/integrators/interface.jl",
-          "additions": 170,
-          "deletions": 57
-        },
-        {
-          "path": "test/runtests.jl",
-          "additions": 12,
-          "deletions": 4
-        }
-      ]
-    },
-    "comments": {
-      "totalCount": 0
-    },
-    "_enriched": true
-  },
-  {
-    "number": 4862,
-    "title": "Restore fixed step size on integrator reinit",
-    "url": "https://github.com/SciML/OrdinaryDiffEq.jl/pull/4862",
-    "body": "**Risk:** medium — `reinit!` is shared by fixed-step OrdinaryDiffEq and StochasticDiffEq integrators, and the reset changes their next step after a prior solve ends on a shortened interval.\n\nFixed-step `reinit!` now restores both `dt` and `dtpropose` from the configured `dtcache` before reinitializing noise. The regression test repeats callback-terminated `EM()` solves at the reporter’s three stop",
-    "isDraft": true,
-    "createdAt": "2026-10-13T01:55:10Z",
-    "updatedAt": "2026-11-13T14:08:45Z",
-    "mergeable": "MERGEABLE",
-    "reviewDecision": "REVIEW_REQUIRED",
-    "additions": 257,
-    "deletions": 29,
-    "changedFiles": 2,
-    "author": {
-      "login": "ChrisRackauckas-Claude"
-    },
-    "authorAssociation": "MEMBER",
-    "labels": {
-      "nodes": []
-    },
-    "commits": {
-      "nodes": [
-        {
-          "commit": {
-            "statusCheckRollup": {
-              "state": "SUCCESS"
-            }
-          }
-        }
-      ]
-    },
-    "files": {
-      "nodes": [
-        {
-          "path": "src/integrators/interface.jl",
-          "additions": 257,
-          "deletions": 29
-        },
-        {
-          "path": "test/runtests.jl",
-          "additions": 12,
-          "deletions": 4
-        }
-      ]
-    },
-    "comments": {
-      "totalCount": 0
-    },
-    "_enriched": true
-  },
-  {
-    "number": 4101,
-    "title": "Preserve AD wrappers in Rosenbrock stages",
-    "url": "https://github.com/SciML/OrdinaryDiffEq.jl/pull/4101",
-    "body": "## Summary\n\n- restore AD storage wrappers after restructuring flat Rosenbrock linear-solve results\n- preserve existing state containers, including `ArrayPartition`, unless the struct-of-arrays conversion matches the original container type\n- add a ReverseDiff regression that exercises the public `init` / `solve!` path\n\n## Root cause\n\nThe first commit of #3996 (`100fe236`) replaced the former resha",
-    "isDraft": true,
-    "createdAt": "2026-08-02T16:53:33Z",
-    "updatedAt": "2026-11-13T14:06:44Z",
-    "mergeable": "MERGEABLE",
-    "reviewDecision": "REVIEW_REQUIRED",
-    "additions": 55,
-    "deletions": 18,
-    "changedFiles": 2,
-    "author": {
-      "login": "ChrisRackauckas-Claude"
-    },
-    "authorAssociation": "MEMBER",
-    "labels": {
-      "nodes": []
-    },
-    "commits": {
-      "nodes": [
-        {
-          "commit": {
-            "statusCheckRollup": {
-              "state": "PENDING"
-            }
-          }
-        }
-      ]
-    },
-    "files": {
-      "nodes": [
-        {
-          "path": "src/algorithms/rosenbrock.jl",
-          "additions": 40,
-          "deletions": 12
-        },
-        {
-          "path": "test/rosenbrock_tests.jl",
-          "additions": 15,
-          "deletions": 6
-        }
-      ]
-    },
-    "comments": {
-      "totalCount": 0
-    },
-    "_enriched": true
-  },
-  {
-    "number": 4717,
-    "title": "Reuse cached Jacobians for out-of-place Newton W rebuilds",
-    "url": "https://github.com/SciML/OrdinaryDiffEq.jl/pull/4717",
-    "body": "> [!WARNING]\n> **Agent-authored draft, not yet reviewed by @ChrisRackauckas. Please ignore until he has reviewed it.**\n\n## Summary\n\nOut-of-place Newton caches the last Jacobian and rebuilds W from it when the existing reuse decision requests a new W without a new J. The sharp-transition refresh is confined to the out-of-place update path and uses `eps(typeof(t))`, so the threshold scales with rela",
-    "isDraft": true,
-    "createdAt": "2026-10-01T23:18:43Z",
-    "updatedAt": "2026-11-13T13:58:32Z",
-    "mergeable": "MERGEABLE",
-    "reviewDecision": "REVIEW_REQUIRED",
-    "additions": 95,
-    "deletions": 38,
-    "changedFiles": 2,
-    "author": {
-      "login": "ChrisRackauckas-Claude"
-    },
-    "authorAssociation": "MEMBER",
-    "labels": {
-      "nodes": []
-    },
-    "commits": {
-      "nodes": [
-        {
-          "commit": {
-            "statusCheckRollup": {
-              "state": "SUCCESS"
-            }
-          }
-        }
-      ]
-    },
-    "files": {
-      "nodes": [
-        {
-          "path": "src/nlsolve/newton.jl",
-          "additions": 70,
-          "deletions": 30
-        },
-        {
-          "path": "test/stiff_tests.jl",
-          "additions": 25,
-          "deletions": 8
-        }
-      ]
-    },
-    "comments": {
-      "totalCount": 0
-    },
-    "_enriched": true
-  },
-  {
-    "number": 4819,
-    "title": "Concrete return types for erased AutoSpecialize callback paths",
-    "url": "https://github.com/SciML/OrdinaryDiffEq.jl/pull/4819",
-    "body": "## Summary\n\nUnder default `AutoSpecialize` on Julia ≥1.12, warmed `step!` with callbacks allocated every step because `invokelatest` returned boxed tuples (`Tuple{tType,Any,Bool,Any,errType}` for continuous; `Tuple{Bool,Bool}` for discrete). `_find_callback_time_erased` now returns `Int8` crossing sign and `Int` event index with a concrete typeassert, and the discrete erased loop packs `(modified,",
-    "isDraft": true,
-    "createdAt": "2026-10-08T10:58:40Z",
-    "updatedAt": "2026-11-13T13:50:39Z",
-    "mergeable": "MERGEABLE",
-    "reviewDecision": "REVIEW_REQUIRED",
-    "additions": 214,
-    "deletions": 71,
-    "changedFiles": 2,
-    "author": {
-      "login": "ChrisRackauckas-Claude"
-    },
-    "authorAssociation": "MEMBER",
-    "labels": {
-      "nodes": []
-    },
-    "commits": {
-      "nodes": [
-        {
-          "commit": {
-            "statusCheckRollup": {
-              "state": "PENDING"
-            }
-          }
-        }
-      ]
-    },
-    "files": {
-      "nodes": [
-        {
-          "path": "src/integrators/interface.jl",
-          "additions": 214,
-          "deletions": 71
-        },
-        {
-          "path": "test/runtests.jl",
-          "additions": 12,
-          "deletions": 4
-        }
-      ]
-    },
-    "comments": {
-      "totalCount": 0
-    },
-    "_enriched": true
-  },
-  {
-    "number": 4790,
-    "title": "SDE resize!: weak-order noise stage vectors follow the state; unalias SOSRA tmp",
-    "url": "https://github.com/SciML/OrdinaryDiffEq.jl/pull/4790",
-    "body": "**Merge note:** squash-merge and remove `Fixes #4782` from the squash message — this PR only partly fixes #4782 (PL1WM, IRI1 deleteat!/addat!, NON remain).\n\nPlease ignore until reviewed by @ChrisRackauckas.\n\nWith diagonal noise the noise dimension equals the state length, so the per-noise-dimension stage vectors of the weak-order caches (`g2`/`g3`/`g4`/`H12`–`H23` in `DRI1Cache`, `RSCache`, `IRI1C",
-    "isDraft": true,
-    "createdAt": "2026-10-07T15:51:55Z",
-    "updatedAt": "2026-11-13T13:44:16Z",
-    "mergeable": "MERGEABLE",
-    "reviewDecision": "REVIEW_REQUIRED",
-    "additions": 185,
-    "deletions": 42,
-    "changedFiles": 2,
-    "author": {
-      "login": "ChrisRackauckas-Claude"
-    },
-    "authorAssociation": "MEMBER",
-    "labels": {
-      "nodes": []
-    },
-    "commits": {
-      "nodes": [
-        {
-          "commit": {
-            "statusCheckRollup": {
-              "state": "SUCCESS"
-            }
-          }
-        }
-      ]
-    },
-    "files": {
-      "nodes": [
-        {
-          "path": "src/integrators/interface.jl",
-          "additions": 185,
-          "deletions": 42
-        },
-        {
-          "path": "test/runtests.jl",
-          "additions": 12,
-          "deletions": 4
-        }
-      ]
-    },
-    "comments": {
-      "totalCount": 0
-    },
-    "_enriched": true
-  }
-];
-
   // ── DOM Elements ──────────────────────────────────────────────────────────
   const els = {
     // Nav & Controls
@@ -1077,7 +72,10 @@
     errorTitle: document.getElementById("error-title"),
     errorDesc: document.getElementById("error-desc"),
     btnErrorRetry: document.getElementById("btn-error-retry"),
-    btnErrorDemo: document.getElementById("btn-error-demo"),
+    btnErrorSpotlight: document.getElementById("btn-error-spotlight"),
+    errorTokenBox: document.getElementById("error-token-box"),
+    errorTokenInput: document.getElementById("error-token-input"),
+    btnErrorTokenSave: document.getElementById("btn-error-token-save"),
 
     // Search & Inputs
     searchForm: document.getElementById("search-form"),
@@ -1094,6 +92,7 @@
     repoSyncTime: document.getElementById("repo-sync-time"),
     cacheStatus: document.getElementById("cache-status"),
     btnRefresh: document.getElementById("btn-refresh"),
+    btnSwitchRepo: document.getElementById("btn-switch-repo"),
     exportDropdown: document.getElementById("export-dropdown"),
     btnExportToggle: document.getElementById("btn-export-toggle"),
 
@@ -1110,6 +109,8 @@
 
     // Toolbar Filters
     filterInput: document.getElementById("filter-input"),
+    filterRepoHint: document.getElementById("filter-repo-hint"),
+    filterRepoTarget: document.getElementById("filter-repo-target"),
     filterChips: document.querySelectorAll(".filter-chip"),
     sortSelect: document.getElementById("sort-select"),
     prRowsContainer: document.getElementById("pr-rows-container"),
@@ -1386,16 +387,22 @@
     els.wCiVal.textContent = `${els.wCi.value}%`;
   }
 
-  // ── GitHub API Engine ─────────────────────────────────────────────────────
+  // ── Universal Repository URL & String Parser ───────────────────────────────
+  // Handles https://github.com/owner/repo, owner/repo, with/without .git, hashes, etc.
   function parseRepoInput(raw) {
     if (!raw) return null;
-    let s = raw.trim();
-    s = s.replace(/^(?:https?:\/\/)?github\.com\//i, "");
-    s = s.replace(/\.git$/i, "");
-    s = s.replace(/^\/+|^#+|\/+$/g, "");
-    const parts = s.split("/");
-    if (parts.length >= 2 && parts[0] && parts[1]) {
-      return { owner: parts[0], repo: parts[1] };
+    let s = String(raw).trim();
+    try { s = decodeURIComponent(s); } catch (e) {}
+    s = s.split("?")[0];
+    s = s.replace(/^[#/s]+/, "");
+    s = s.replace(/\s*\/\s*/g, "/");
+    const match = s.match(/(?:(?:https?:\/\/)?(?:www\.)?github\.com\/)?([a-zA-Z0-9_\-\.]+)\/([a-zA-Z0-9_\-\.]+)/i);
+    if (match && match[1] && match[2]) {
+      let owner = match[1].trim();
+      let repo = match[2].trim().replace(/\.git$/i, "").replace(/\/+$/, "");
+      const reserved = ["orgs", "users", "search", "explore", "settings", "features", "pulls", "issues"];
+      if (reserved.includes(owner.toLowerCase())) return null;
+      return { owner, repo };
     }
     return null;
   }
@@ -1537,27 +544,42 @@
     }
     const pulls = await pullsRes.json();
 
-    const rawNodes = (pulls || []).map((p) => ({
-      number: p.number,
-      title: p.title,
-      url: p.html_url,
-      body: p.body || "",
-      isDraft: Boolean(p.draft),
-      createdAt: p.created_at,
-      updatedAt: p.updated_at,
-      mergeable: p.mergeable_state === "dirty" ? "CONFLICTING" : "MERGEABLE",
-      reviewDecision: "REVIEW_REQUIRED",
-      additions: p.additions || 0,
-      deletions: p.deletions || 0,
-      changedFiles: p.changed_files || 0,
-      author: { login: p.user ? p.user.login : "ghost" },
-      authorAssociation: p.author_association || "NONE",
-      labels: { nodes: (p.labels || []).map((l) => ({ name: l.name, color: l.color })) },
-      commits: { nodes: [] },
-      files: { nodes: [] },
-      comments: { totalCount: p.comments || 0 },
-      _enriched: false,
-    }));
+    const rawNodes = (pulls || []).map((p) => {
+      const labels = (p.labels || []).map((l) => ({ name: l.name, color: l.color }));
+      let additions = p.additions || 0;
+      let deletions = p.deletions || 0;
+      let changedFiles = p.changed_files || 0;
+
+      let sizeFromLabel = null;
+      labels.forEach((l) => {
+        const m = l.name.match(/size\/(xs|s|m|l|xl)/i);
+        if (m) sizeFromLabel = m[1].toUpperCase();
+      });
+
+      return {
+        number: p.number,
+        title: p.title || `PR #${p.number}`,
+        url: p.html_url,
+        body: p.body || "",
+        isDraft: Boolean(p.draft),
+        createdAt: p.created_at,
+        updatedAt: p.updated_at,
+        mergeable: p.mergeable_state === "dirty" ? "CONFLICTING" : "MERGEABLE",
+        reviewDecision: "REVIEW_REQUIRED",
+        additions: additions,
+        deletions: deletions,
+        changedFiles: changedFiles,
+        headSha: (p.head && p.head.sha) || "",
+        author: { login: p.user ? p.user.login : "ghost" },
+        authorAssociation: p.author_association || "NONE",
+        labels: { nodes: labels },
+        commits: { nodes: [] },
+        files: { nodes: [] },
+        comments: { totalCount: p.comments || 0 },
+        _sizeFromLabel: sizeFromLabel,
+        _enriched: false,
+      };
+    });
 
     return {
       repository: {
@@ -1573,7 +595,7 @@
     };
   }
 
-  // ── Scoring Algorithm Engine ──────────────────────────────────────────────
+  // ── 5-Signal Scoring Engine ───────────────────────────────────────────────
   const TEST_FILE_REGEX = /(test|spec|__tests__|testing|\btest_|_test\.|\.test\.|\.spec\.)/i;
   const DOCS_FILE_REGEX = /\.(md|markdown|txt|rst|docs?)/i;
 
@@ -1582,24 +604,39 @@
     const changedFilesCount = pr.changedFiles || rawFiles.length || 1;
     const linesChanged = (pr.additions || 0) + (pr.deletions || 0);
 
-    // 1. Size Score (0–10)
+    // 1. Size & Churn Score (0–10)
     let sSize = 10.0;
-    let sizeBadge = "XS";
-    if (linesChanged <= 50) {
-      sSize = 10.0;
+    let sizeBadge = pr._sizeFromLabel || "XS";
+
+    if (linesChanged > 0) {
+      if (linesChanged <= 50) {
+        sSize = 10.0;
+        sizeBadge = "XS";
+      } else if (linesChanged <= 200) {
+        sSize = 8.5;
+        sizeBadge = "S";
+      } else if (linesChanged <= 500) {
+        sSize = 6.0;
+        sizeBadge = "M";
+      } else if (linesChanged <= 1200) {
+        sSize = 3.5;
+        sizeBadge = "L";
+      } else {
+        sSize = 1.2;
+        sizeBadge = "XL";
+      }
+    } else if (pr._sizeFromLabel) {
+      if (sizeBadge === "XS") sSize = 10.0;
+      else if (sizeBadge === "S") sSize = 8.5;
+      else if (sizeBadge === "M") sSize = 6.0;
+      else if (sizeBadge === "L") sSize = 3.5;
+      else sSize = 1.2;
+    } else if (pr.title.match(/^(docs|doc|typo|fix typo|readme)/i)) {
+      sSize = 9.5;
       sizeBadge = "XS";
-    } else if (linesChanged <= 200) {
-      sSize = 8.5;
-      sizeBadge = "S";
-    } else if (linesChanged <= 500) {
-      sSize = 6.0;
-      sizeBadge = "M";
-    } else if (linesChanged <= 1200) {
-      sSize = 3.5;
-      sizeBadge = "L";
     } else {
-      sSize = 1.2;
-      sizeBadge = "XL";
+      sSize = 7.0;
+      sizeBadge = "S";
     }
 
     // 2. Test Coverage Score (0–10)
@@ -1613,12 +650,14 @@
 
     let sTests = 2.0;
     const testRatio = changedFilesCount > 0 ? testFilesCount / changedFilesCount : 0;
-    if (docsOnly && linesChanged < 100) {
+    if (docsOnly && (linesChanged < 100 || pr.title.match(/^(docs|doc|typo)/i))) {
       sTests = 8.5;
     } else if (testRatio >= 0.35) {
       sTests = 10.0;
     } else if (testFilesCount > 0) {
       sTests = 7.0;
+    } else if (pr.body && /test|spec|testing|verified|regression/i.test(pr.body)) {
+      sTests = 6.0;
     } else {
       sTests = 2.0;
     }
@@ -1640,7 +679,7 @@
       sDesc = Math.min(10.0, sDesc);
     }
 
-    // 4. Author Boost (0–10)
+    // 4. Author Reputation & First-Timer Boost (0–10)
     let sAuthor = 6.0;
     const assoc = pr.authorAssociation || "NONE";
     const isFirstTime = assoc === "FIRST_TIME_CONTRIBUTOR" || assoc === "FIRST_TIMER";
@@ -1650,7 +689,7 @@
     } else if (assoc === "CONTRIBUTOR") {
       sAuthor = 7.5;
     } else if (assoc === "MEMBER" || assoc === "OWNER") {
-      sAuthor = 4.5;
+      sAuthor = 5.0;
     } else {
       sAuthor = 6.0;
     }
@@ -1727,11 +766,11 @@
       // Ready to Merge: Approved with Passing CI or trivial typo
       else if (
         (pr.reviewDecision === "APPROVED" && evaluation.ciState === "SUCCESS") ||
-        (evaluation.linesChanged <= 15 && evaluation.ciState === "SUCCESS" && pr.title.match(/^(docs|typo|fix typo)/i))
+        (evaluation.linesChanged <= 15 && evaluation.ciState === "SUCCESS" && pr.title.match(/^(docs|doc|typo|fix typo)/i))
       ) {
         state.categories.ready.push(pr);
       }
-      // Active Priority Queue: Healthy, needs review
+      // Active Priority Queue: Healthy, needs maintainer review
       else {
         state.categories.active.push(pr);
       }
@@ -1862,6 +901,11 @@
       // Draft tag
       const draftTag = pr.isDraft ? `<span class="apple-tag tag-draft">Draft</span>` : "";
 
+      // Churn text
+      const churnLabel = (pr.additions || pr.deletions)
+        ? `${ev.sizeBadge} (+${pr.additions}/-${pr.deletions})`
+        : ev.sizeBadge;
+
       row.innerHTML = `
         <div class="cell-score">
           <span class="score-badge ${tierClass}">${ev.finalScore}</span>
@@ -1880,7 +924,7 @@
           </div>
         </div>
         <div class="cell-signals">
-          <span class="apple-tag tag-size-${ev.sizeBadge.toLowerCase()}">${ev.sizeBadge} (+${pr.additions || 0}/-${pr.deletions || 0})</span>
+          <span class="apple-tag tag-size-${ev.sizeBadge.toLowerCase()}">${churnLabel}</span>
           ${firstTag}
           ${testTag}
           ${conflictTag}
@@ -1964,7 +1008,7 @@
       els.dScoreVerdict.textContent = "Lower priority — larger surface area or missing tests.";
     } else {
       els.dRingCircle.style.stroke = "var(--apple-red)";
-      els.dScoreVerdict.textContent = "Blocked or requires significant author modifications.";
+      els.dScoreVerdict.textContent = "Blocked or requires author modifications before merge.";
     }
   }
 
@@ -1996,7 +1040,7 @@
       const headers = { Accept: "application/vnd.github.v3+json" };
       if (state.token) headers["Authorization"] = `Bearer ${state.token}`;
 
-      if (state.rateLimit.remaining <= 3 && !state.token) return;
+      if (state.rateLimit.remaining <= 2 && !state.token) return;
 
       const [detailRes, filesRes] = await Promise.all([
         fetch(`https://api.github.com/repos/${state.owner}/${state.repo}/pulls/${pr.number}`, { headers }),
@@ -2050,7 +1094,9 @@
         const sizeTag = row.querySelector(`[class*="tag-size-"]`);
         if (sizeTag) {
           sizeTag.className = `apple-tag tag-size-${pr._eval.sizeBadge.toLowerCase()}`;
-          sizeTag.textContent = `${pr._eval.sizeBadge} (+${pr.additions}/-${pr.deletions})`;
+          sizeTag.textContent = (pr.additions || pr.deletions)
+            ? `${pr._eval.sizeBadge} (+${pr.additions}/-${pr.deletions})`
+            : pr._eval.sizeBadge;
         }
       }
     } catch (e) {
@@ -2088,12 +1134,29 @@
   }
 
   function renderSpotlightResults(query) {
-    const q = query.toLowerCase().trim();
-    const suggestions = [
-      { type: "repo", title: "SciML/OrdinaryDiffEq.jl", sub: "SciML high-performance ODE solvers backlog (20+ PRs)" },
+    const raw = query.trim();
+    const q = raw.toLowerCase();
+    const parsedFromInput = parseRepoInput(raw);
+
+    const suggestions = [];
+
+    // If input matches or contains a repository path or URL, display direct loader action at the very top!
+    if (parsedFromInput) {
+      suggestions.push({
+        type: "load",
+        title: `${parsedFromInput.owner}/${parsedFromInput.repo}`,
+        sub: `Load live GitHub repository ${parsedFromInput.owner}/${parsedFromInput.repo}`,
+        owner: parsedFromInput.owner,
+        repo: parsedFromInput.repo,
+      });
+    }
+
+    const featuredRepos = [
+      { type: "repo", title: "SciML/NonlinearSolve.jl", sub: "High-performance nonlinear equation solvers in Julia" },
+      { type: "repo", title: "SciML/OrdinaryDiffEq.jl", sub: "Differential equations and scientific machine learning" },
       { type: "repo", title: "astral-sh/uv", sub: "Extremely fast Python package installer and resolver" },
       { type: "repo", title: "facebook/react", sub: "The library for web and native user interfaces" },
-      { type: "repo", title: "shadcn-ui/ui", sub: "Beautifully designed components that you can copy and paste" },
+      { type: "repo", title: "shadcn-ui/ui", sub: "Beautifully designed UI components" },
       { type: "action", title: "Export Markdown Summary", action: () => exportMarkdown() },
       { type: "action", title: "Export CSV Table", action: () => exportCSV() },
       { type: "action", title: "Export Full JSON Data", action: () => exportJSON() },
@@ -2101,52 +1164,71 @@
       { type: "action", title: "Tuning Scoring Weights", action: () => els.btnWeightsModal.click() },
     ];
 
-    const filtered = suggestions.filter((s) => s.title.toLowerCase().includes(q) || (s.sub && s.sub.toLowerCase().includes(q)));
+    featuredRepos.forEach((item) => {
+      if (!parsedFromInput || item.title.toLowerCase() !== `${parsedFromInput.owner}/${parsedFromInput.repo}`.toLowerCase()) {
+        if (!q || item.title.toLowerCase().includes(q) || (item.sub && item.sub.toLowerCase().includes(q))) {
+          suggestions.push(item);
+        }
+      }
+    });
 
     els.spotlightResults.innerHTML = "";
-    filtered.forEach((item) => {
+    if (suggestions.length === 0) {
+      els.spotlightResults.innerHTML = `<div style="padding:20px;text-align:center;color:var(--label-tertiary);font-size:0.9rem;">Type any GitHub repository (e.g. <code>owner/repo</code>) and press Enter to load.</div>`;
+      return;
+    }
+
+    suggestions.forEach((item, idx) => {
       const el = document.createElement("div");
-      el.className = "spotlight-item";
+      el.className = `spotlight-item ${idx === 0 ? "highlighted" : ""}`;
       el.innerHTML = `
         <div>
-          <div style="font-weight:600;">${item.title}</div>
-          ${item.sub ? `<div style="font-size:0.78rem;color:var(--label-tertiary);">${item.sub}</div>` : ""}
+          <div style="font-weight:600;display:flex;align-items:center;gap:6px;">
+            <span>${escapeHtml(item.title)}</span>
+            ${item.type === "load" ? '<span class="apple-tag tag-ci-pass" style="font-size:0.68rem;padding:1px 6px;">↵ Enter</span>' : ""}
+          </div>
+          ${item.sub ? `<div style="font-size:0.78rem;color:var(--label-tertiary);">${escapeHtml(item.sub)}</div>` : ""}
         </div>
-        <span style="font-size:0.75rem;color:var(--label-quaternary);">${item.type.toUpperCase()}</span>
+        <span style="font-size:0.75rem;color:var(--label-quaternary);font-weight:600;">${item.type.toUpperCase()}</span>
       `;
+
       el.addEventListener("click", () => {
         closeSpotlight();
-        if (item.type === "repo") {
+        if (item.type === "load") {
+          loadRepository(item.owner, item.repo);
+        } else if (item.type === "repo") {
           const parts = item.title.split("/");
           loadRepository(parts[0], parts[1]);
         } else if (item.action) {
           item.action();
         }
       });
+
       els.spotlightResults.appendChild(el);
     });
   }
 
-  // ── Load Repository Orchestrator ──────────────────────────────────────────
+  // ── Load Repository Orchestrator (100% Live Data) ─────────────────────────
   async function loadRepository(owner, repo, forceRefresh = false) {
+    if (!owner || !repo) return;
     state.owner = owner;
     state.repo = repo;
 
     window.location.hash = `${owner}/${repo}`;
     saveRecentRepo(owner, repo);
 
-    const cacheKey = `ghpr_cache_v2_${owner.toLowerCase()}_${repo.toLowerCase()}`;
+    const cacheKey = `ghpr_live_cache_${owner.toLowerCase()}_${repo.toLowerCase()}`;
     if (!forceRefresh) {
       try {
         const cachedRaw = localStorage.getItem(cacheKey);
         if (cachedRaw) {
           const cached = JSON.parse(cachedRaw);
-          if (Date.now() - cached.timestamp < 5 * 60 * 1000) {
+          if (Date.now() - cached.timestamp < 3 * 60 * 1000) {
             state.repoData = cached.repoData;
             state.prs = cached.prs;
             processAndCategorizePRs();
             renderDashboard();
-            els.cacheStatus.textContent = "Cached (Fresh)";
+            els.cacheStatus.textContent = "Cached (3m)";
             return;
           }
         }
@@ -2158,7 +1240,7 @@
     els.errorView.hidden = true;
     els.loadingView.hidden = false;
     els.loadingTitle.textContent = `Analyzing ${owner}/${repo}...`;
-    els.loadingDesc.textContent = "Resolving merge conflict checks, CI runs, test file coverage, and contributor history...";
+    els.loadingDesc.textContent = "Querying live GitHub API for open pull requests, mergeability, and CI rollups...";
 
     try {
       let data;
@@ -2193,27 +1275,29 @@
       processAndCategorizePRs();
       renderDashboard();
       els.cacheStatus.textContent = "Live";
-      showToast(`Analyzed ${state.prs.length} open PRs for ${owner}/${repo}`);
+      showToast(`Loaded ${state.prs.length} live PRs for ${owner}/${repo}`);
 
-      // Enrich top PRs if quota allows
+      // Enrich top PRs in background if unauthenticated quota permits
       if (!hasToken && !isLocal && state.rateLimit.remaining > 15) {
         enrichTopPRs();
       }
     } catch (err) {
       console.warn("API query exception:", err);
 
-      const isRateLimit = err.message && (err.message.includes("403") || err.message.includes("rate limit") || err.message.includes("429"));
-      const isSciML = owner.toLowerCase() === "sciml" && repo.toLowerCase().includes("ordinarydiffeq");
-
-      if (isSciML || isRateLimit) {
-        loadDemoBacklog(owner, repo, isRateLimit ? "GitHub rate limit (60/hr) reached. Showing cached triage backlog." : null);
-        return;
-      }
-
       els.loadingView.hidden = true;
       els.errorView.hidden = false;
-      els.errorTitle.textContent = "Repository Analysis Failed";
-      els.errorDesc.textContent = err.message || "Please check owner/repo name or rate limits.";
+
+      const isRateLimit = err.message && (err.message.includes("403") || err.message.includes("rate limit") || err.message.includes("429"));
+
+      if (isRateLimit) {
+        els.errorTitle.textContent = "GitHub API Rate Limit Reached";
+        els.errorDesc.textContent = `GitHub unauthenticated requests are limited to 60/hr per IP. To analyze ${owner}/${repo} live, enter your Personal Access Token below (5,000 req/hr):`;
+        if (els.errorTokenBox) els.errorTokenBox.hidden = false;
+      } else {
+        els.errorTitle.textContent = "Repository Analysis Failed";
+        els.errorDesc.textContent = err.message || `Unable to locate ${owner}/${repo} on GitHub. Please verify the repository name.`;
+        if (els.errorTokenBox) els.errorTokenBox.hidden = true;
+      }
     }
   }
 
@@ -2224,26 +1308,6 @@
         await enrichPRDetails(pr);
       }
     }
-  }
-
-  // ── Demo Offline Backlog Generator ────────────────────────────────────────
-  function loadDemoBacklog(customOwner = "SciML", customRepo = "OrdinaryDiffEq.jl", customMsg = null) {
-    const isSciML = customOwner.toLowerCase() === "sciml" && customRepo.toLowerCase().includes("ordinarydiffeq");
-
-    state.owner = customOwner;
-    state.repo = customRepo;
-    state.repoData = {
-      name: isSciML ? "OrdinaryDiffEq.jl" : customRepo,
-      nameWithOwner: `${customOwner}/${customRepo}`,
-      stargazerCount: isSciML ? 700 : 1420,
-      openPRs: { totalCount: isSciML ? 184 : 45 },
-    };
-    state.prs = SCIML_DEMO_BACKLOG;
-
-    processAndCategorizePRs();
-    renderDashboard();
-    els.cacheStatus.textContent = "Cached (Demo)";
-    showToast(customMsg || `Loaded ${state.prs.length} triage PRs for ${customOwner}/${customRepo}`);
   }
 
   // ── History & Recents ─────────────────────────────────────────────────────
@@ -2368,7 +1432,7 @@
       .replace(/</g, "&lt;")
       .replace(/>/g, "&gt;")
       .replace(/"/g, "&quot;")
-      .replace(/'/g, "&#039;");
+      .replace(/\x27/g, "&#039;");
   }
 
   function formatNumber(num) {
@@ -2404,7 +1468,11 @@
     els.searchForm.addEventListener("submit", (e) => {
       e.preventDefault();
       const parsed = parseRepoInput(els.searchInput.value);
-      if (parsed) loadRepository(parsed.owner, parsed.repo);
+      if (parsed) {
+        loadRepository(parsed.owner, parsed.repo);
+      } else {
+        showToast("Please enter a valid owner/repo (e.g. SciML/NonlinearSolve.jl)");
+      }
     });
 
     els.searchInput.addEventListener("input", () => {
@@ -2432,7 +1500,33 @@
     els.btnErrorRetry.addEventListener("click", () => {
       if (state.owner && state.repo) loadRepository(state.owner, state.repo, true);
     });
-    els.btnErrorDemo.addEventListener("click", () => loadDemoBacklog(state.owner || "SciML", state.repo || "OrdinaryDiffEq.jl"));
+
+    // Toolbar Switch Repo button
+    if (els.btnSwitchRepo) {
+      els.btnSwitchRepo.addEventListener("click", openSpotlight);
+    }
+
+    // Error view actions
+    if (els.btnErrorSpotlight) {
+      els.btnErrorSpotlight.addEventListener("click", openSpotlight);
+    }
+
+    if (els.btnErrorTokenSave) {
+      els.btnErrorTokenSave.addEventListener("click", () => {
+        const val = els.errorTokenInput.value.trim();
+        if (val) {
+          state.token = val;
+          localStorage.setItem("ghpr_token", val);
+          showToast("GitHub Token saved! 5,000 live requests/hr unlocked.");
+          updateTokenVisuals();
+          if (state.owner && state.repo) {
+            loadRepository(state.owner, state.repo, true);
+          }
+        } else {
+          showToast("Please enter a valid GitHub token.");
+        }
+      });
+    }
 
     // Nav Quick Switcher
     els.navRepoBtn.addEventListener("click", openSpotlight);
@@ -2441,6 +1535,16 @@
 
     els.spotlightInput.addEventListener("input", (e) => {
       renderSpotlightResults(e.target.value);
+    });
+
+    els.spotlightInput.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        const first = els.spotlightResults.querySelector(".spotlight-item");
+        if (first) {
+          e.preventDefault();
+          first.click();
+        }
+      }
     });
 
     // Segmented Queue Tabs
@@ -2477,11 +1581,50 @@
       });
     });
 
-    // Live search input in toolbar
+    // Live search input in toolbar with repo-detection
     els.filterInput.addEventListener("input", () => {
-      state.searchFilter = els.filterInput.value.trim();
+      const val = els.filterInput.value.trim();
+      state.searchFilter = val;
+      const detected = parseRepoInput(val);
+
+      if (detected && (detected.owner !== state.owner || detected.repo !== state.repo)) {
+        if (els.filterRepoHint) {
+          els.filterRepoTarget.textContent = `${detected.owner}/${detected.repo}`;
+          els.filterRepoHint.hidden = false;
+        }
+      } else {
+        if (els.filterRepoHint) els.filterRepoHint.hidden = true;
+      }
+
       renderActiveQueue();
     });
+
+    els.filterInput.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        const val = els.filterInput.value.trim();
+        const detected = parseRepoInput(val);
+        if (detected) {
+          e.preventDefault();
+          if (els.filterRepoHint) els.filterRepoHint.hidden = true;
+          els.filterInput.value = "";
+          state.searchFilter = "";
+          loadRepository(detected.owner, detected.repo);
+        }
+      }
+    });
+
+    if (els.filterRepoHint) {
+      els.filterRepoHint.addEventListener("click", () => {
+        const val = els.filterInput.value.trim();
+        const detected = parseRepoInput(val);
+        if (detected) {
+          els.filterRepoHint.hidden = true;
+          els.filterInput.value = "";
+          state.searchFilter = "";
+          loadRepository(detected.owner, detected.repo);
+        }
+      });
+    }
 
     // Sort Dropdown
     els.sortSelect.addEventListener("change", () => {
@@ -2510,6 +1653,7 @@
         closeSpotlight();
         els.tokenModal.hidden = true;
         els.weightsModal.hidden = true;
+        if (els.filterRepoHint) els.filterRepoHint.hidden = true;
         return;
       }
 
@@ -2537,7 +1681,7 @@
 
     // URL Hash Routing
     window.addEventListener("hashchange", () => {
-      const hash = window.location.hash.replace(/^#+/, "").trim();
+      const hash = window.location.hash.replace(/^[#\/\s]+/, "").trim();
       if (hash) {
         const parsed = parseRepoInput(hash);
         if (parsed && (parsed.owner !== state.owner || parsed.repo !== state.repo)) {
@@ -2559,7 +1703,7 @@
     renderRecents();
 
     // Initial hash check
-    const hash = window.location.hash.replace(/^#+/, "").trim();
+    const hash = window.location.hash.replace(/^[#\/\s]+/, "").trim();
     if (hash) {
       const parsed = parseRepoInput(hash);
       if (parsed) {
