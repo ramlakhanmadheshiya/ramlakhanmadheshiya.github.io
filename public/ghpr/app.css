@@ -126,6 +126,11 @@
 }
 
 /* ── Base & Typography ─────────────────────────────────────────────────────── */
+/* Crucial: Ensure [hidden] always hides elements regardless of other display rules */
+[hidden] {
+  display: none !important;
+}
+
 *, *::before, *::after {
   box-sizing: border-box;
   margin: 0;
@@ -1237,11 +1242,13 @@ button, input, select {
   display: flex;
   justify-content: flex-end;
   visibility: hidden;
+  pointer-events: none;
   transition: visibility 0.25s ease;
 }
 
 .quicklook-drawer.open {
   visibility: visible;
+  pointer-events: auto;
 }
 
 .drawer-scrim {
@@ -1582,6 +1589,10 @@ button, input, select {
   padding-top: 100px;
 }
 
+.spotlight-modal[hidden] {
+  display: none !important;
+}
+
 .spotlight-scrim {
   position: absolute;
   inset: 0;
@@ -1674,6 +1685,10 @@ button, input, select {
   align-items: center;
   justify-content: center;
   padding: 20px;
+}
+
+.apple-modal[hidden] {
+  display: none !important;
 }
 
 .modal-scrim {
