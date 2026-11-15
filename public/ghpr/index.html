@@ -1,0 +1,677 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>ghpr — Pull Request Triage & Review Priority for Maintainers</title>
+  <meta name="description" content="Instant PR priority scoring, health triage, and review queue ranking for any GitHub repository. 100% free, zero cost, no sign-in." />
+  <meta name="theme-color" content="#f5f5f7" media="(prefers-color-scheme: light)" />
+  <meta name="theme-color" content="#000000" media="(prefers-color-scheme: dark)" />
+  
+  <!-- Apple Touch & Favicon -->
+  <link rel="icon" type="image/svg+xml" href="./favicon.svg" />
+  <link rel="apple-touch-icon" href="./favicon.svg" />
+
+  <!-- Preload fonts / system typography script -->
+  <script>
+    try {
+      var t = localStorage.getItem("ghpr_theme");
+      if (t === "light" || t === "dark") document.documentElement.dataset.theme = t;
+    } catch (e) {}
+  </script>
+  <link rel="stylesheet" href="./app.css?v=ceee1ae4af" />
+</head>
+<body>
+  <!-- Apple-Style Translucent Frosted Navigation Bar -->
+  <header class="app-nav">
+    <div class="nav-content wrap">
+      <div class="nav-left">
+        <a href="./" class="nav-brand" aria-label="ghpr home">
+          <svg class="brand-glyph" viewBox="0 0 32 32" aria-hidden="true">
+            <defs>
+              <linearGradient id="apple-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" stop-color="#0071e3"/>
+                <stop offset="100%" stop-color="#5856d6"/>
+              </linearGradient>
+            </defs>
+            <rect width="32" height="32" rx="9" fill="url(#apple-grad)"/>
+            <circle cx="10" cy="9" r="2.5" fill="#fff" opacity="0.95"/>
+            <circle cx="10" cy="23" r="2.5" fill="#fff" opacity="0.95"/>
+            <circle cx="22" cy="16" r="2.5" fill="#fff" opacity="0.95"/>
+            <path d="M10 11.5v9M10 14c3 0 5 2 8 2h1.5" stroke="#fff" stroke-width="2" stroke-linecap="round" fill="none"/>
+            <circle cx="23" cy="8" r="3" fill="#34c759"/>
+          </svg>
+          <span class="brand-title">ghpr</span>
+          <span class="brand-badge">PRO</span>
+        </a>
+
+        <!-- Quick Switcher in Nav (Hidden on landing) -->
+        <button type="button" class="nav-repo-btn" id="nav-repo-btn" hidden>
+          <span class="nav-repo-name" id="nav-repo-name">owner/repo</span>
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6l4 4 4-4"/></svg>
+        </button>
+      </div>
+
+      <!-- Spotlight / Search Trigger (Cmd+K) -->
+      <div class="nav-center">
+        <button type="button" class="spotlight-trigger" id="btn-spotlight" aria-label="Open Spotlight search">
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="6.5" cy="6.5" r="4.5"/><path d="M10 10l3.8 3.8" stroke-linecap="round"/></svg>
+          <span class="spotlight-placeholder">Search repository or PR...</span>
+          <kbd class="shortcut-pill"><span class="cmd-icon">⌘</span>K</kbd>
+        </button>
+      </div>
+
+      <div class="nav-right">
+        <!-- Rate Limit Pill -->
+        <div class="rate-pill" id="rate-pill" title="GitHub API Quota (Remaining/Hourly Limit)" hidden>
+          <span class="pulse-dot"></span>
+          <span id="rate-text">--/--</span>
+        </div>
+
+        <!-- Token Settings Icon -->
+        <button type="button" class="icon-control" id="btn-token-modal" title="GitHub Token & Quotas" aria-label="GitHub Token Settings">
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M9.5 2.5a4 4 0 1 0 4 4 4 4 0 0 0-4-4zm0 2.5a1.5 1.5 0 1 1-1.5 1.5A1.5 1.5 0 0 1 9.5 5zM6.5 9.5l-4.7 4.7a.8.8 0 0 0 0 1.1l.4.4a.8.8 0 0 0 1.1 0l1.2-1.2 1.5 1.5.7-.7-1.5-1.5 1.3-1.3"/>
+          </svg>
+          <span class="status-indicator-dot" id="token-status-dot"></span>
+        </button>
+
+        <!-- Scoring Weights Tuner -->
+        <button type="button" class="icon-control" id="btn-weights-modal" title="Tuning & Weights" aria-label="Scoring Weights">
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round">
+            <path d="M2.5 4h11M5 2v4M2.5 12h11M11 10v4M2.5 8h11M8 6v4"/>
+          </svg>
+        </button>
+
+        <!-- Apple Theme Switcher -->
+        <div class="theme-dropdown" id="theme-dropdown">
+          <button type="button" class="icon-control" id="theme-btn" aria-haspopup="menu" aria-expanded="false" aria-label="Change Theme">
+            <!-- Dynamic SVG injected -->
+          </button>
+          <div class="theme-popover" role="menu">
+            <button type="button" role="menuitemradio" data-theme="system">
+              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1.75" y="2.75" width="12.5" height="8.5" rx="1.5"/><path d="M5.5 14h5M8 11.5V14" stroke-linecap="round"/></svg>
+              Auto (System)
+              <svg class="check-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M3.5 8.5l3 3 6-7"/></svg>
+            </button>
+            <button type="button" role="menuitemradio" data-theme="light">
+              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="3.2"/><path d="M8 1.5v1.5M8 13v1.5M1.5 8H3M13 8h1.5M3.4 3.4l1.1 1.1M11.5 11.5l1.1 1.1M3.4 12.6l1.1-1.1M11.5 4.5l1.1-1.1"/></svg>
+              Light
+              <svg class="check-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M3.5 8.5l3 3 6-7"/></svg>
+            </button>
+            <button type="button" role="menuitemradio" data-theme="dark">
+              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M13.5 9.6A5.75 5.75 0 016.4 2.5a5.75 5.75 0 107.1 7.1z"/></svg>
+              Dark
+              <svg class="check-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M3.5 8.5l3 3 6-7"/></svg>
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main View Area -->
+  <main class="app-main">
+    <!-- ═════════════════════════════════════════════════════════════════════════
+         1. HERO / LANDING VIEW
+    ══════════════════════════════════════════════════════════════════════════ -->
+    <section class="landing-section wrap" id="hero-view">
+      <div class="hero-content">
+        <div class="apple-pill-badge">
+          <span class="badge-sparkle">✦</span>
+          Maintainer Intelligence Studio
+        </div>
+
+        <h1 class="hero-headline">
+          Triage pull requests with<br />
+          <span class="gradient-text">effortless clarity.</span>
+        </h1>
+        <p class="hero-subheadline">
+          Instant multi-factor review scoring, conflict detection, and queue ranking for any GitHub repository. 100% client-side, zero cost, no sign-in required.
+        </p>
+
+        <!-- Main Input Form -->
+        <form class="main-search-form" id="search-form" autocomplete="off" role="search">
+          <div class="search-input-shell">
+            <svg class="search-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8">
+              <circle cx="8.5" cy="8.5" r="5.5"/>
+              <path d="M12.5 12.5L17 17" stroke-linecap="round"/>
+            </svg>
+            <input 
+              id="search-input" 
+              class="search-input" 
+              type="text" 
+              placeholder="owner/repo or github.com/owner/repo" 
+              spellcheck="false" 
+              autocapitalize="off" 
+              autocomplete="off" 
+              aria-label="Repository name" 
+              required 
+            />
+            <button type="button" id="input-clear" class="btn-clear" aria-label="Clear input" hidden>✕</button>
+          </div>
+          <button type="submit" id="btn-search" class="apple-btn apple-btn-primary">
+            <span>Triage Backlog</span>
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 3l5 5-5 5"/></svg>
+          </button>
+        </form>
+
+        <!-- Demo Repositories (One-Click Test Drive) -->
+        <div class="demo-pills-bar">
+          <span class="demo-caption">Explore featured backlogs:</span>
+          <div class="chips-flex">
+            <button type="button" class="demo-chip" data-repo="SciML/OrdinaryDiffEq.jl">
+              <span class="chip-dot dot-purple"></span>
+              SciML/OrdinaryDiffEq.jl <small>180+ PRs</small>
+            </button>
+            <button type="button" class="demo-chip" data-repo="astral-sh/uv">
+              <span class="chip-dot dot-blue"></span>
+              astral-sh/uv
+            </button>
+            <button type="button" class="demo-chip" data-repo="facebook/react">
+              <span class="chip-dot dot-cyan"></span>
+              facebook/react
+            </button>
+            <button type="button" class="demo-chip" data-repo="shadcn-ui/ui">
+              <span class="chip-dot dot-emerald"></span>
+              shadcn-ui/ui
+            </button>
+          </div>
+        </div>
+
+        <!-- Recent Repos -->
+        <div class="recent-bar" id="recent-bar" hidden></div>
+
+        <!-- HIG Feature Grid -->
+        <div class="hig-cards-grid">
+          <div class="hig-card">
+            <div class="card-icon icon-emerald">
+              <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3.5 10l4.5 4.5L16.5 5.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </div>
+            <h3>14 Health Signals</h3>
+            <p>Inspects mergeability, CI rollups, test file ratios, line churn, description context, and contributor history.</p>
+          </div>
+
+          <div class="hig-card">
+            <div class="card-icon icon-blue">
+              <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="4" width="14" height="12" rx="3"/><path d="M7 8h6M7 12h4"/></svg>
+            </div>
+            <h3>3 Smart Queues</h3>
+            <p>Instantly segments PRs into Ready to Merge, Active Priority Queue, and Blocked (conflicts or red CI).</p>
+          </div>
+
+          <div class="hig-card">
+            <div class="card-icon icon-purple">
+              <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="10" cy="10" r="7"/><path d="M10 6.5v3.5l2.5 2.5"/></svg>
+            </div>
+            <h3>180+ PR Scalability</h3>
+            <p>GraphQL single-query engine pulls deep PR metadata in parallel with 94% fewer rate-limit points.</p>
+          </div>
+
+          <div class="hig-card">
+            <div class="card-icon icon-orange">
+              <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="4" y="8" width="12" height="9" rx="2"/><path d="M7 8V6a3 3 0 0 1 6 0v2"/></svg>
+            </div>
+            <h3>100% Private & Free</h3>
+            <p>Zero cloud servers. Runs entirely in your browser; tokens stay strictly in your device's keychain storage.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ═════════════════════════════════════════════════════════════════════════
+         2. DASHBOARD / TRIAGE QUEUE VIEW
+    ══════════════════════════════════════════════════════════════════════════ -->
+    <section class="dashboard-section wrap" id="dashboard-view" hidden>
+      <!-- Glassmorphic Repository Overview Header -->
+      <div class="repo-card-surface">
+        <div class="repo-info-cluster">
+          <img class="repo-avatar-img" id="repo-avatar" src="" alt="Repository avatar" width="48" height="48" />
+          <div class="repo-titles">
+            <div class="repo-heading-row">
+              <h1 class="repo-display-title">
+                <a id="repo-link" href="#" target="_blank" rel="noopener"></a>
+              </h1>
+              <span class="cache-badge" id="cache-status">Live</span>
+            </div>
+            <div class="repo-meta-row">
+              <span class="meta-item" id="repo-stars">★ --</span>
+              <span class="meta-separator">•</span>
+              <span class="meta-item" id="repo-open-prs">-- open PRs</span>
+              <span class="meta-separator">•</span>
+              <span class="meta-item" id="repo-sync-time">Just synced</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="repo-toolbar">
+          <button type="button" class="apple-btn apple-btn-secondary" id="btn-refresh" title="Refetch latest data from GitHub">
+            <svg class="refresh-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M2.5 8a5.5 5.5 0 1 0 1.6-3.9L2 6"/><path d="M2 2v4h4"/></svg>
+            <span>Refresh</span>
+          </button>
+
+          <!-- Export Actions Menu -->
+          <div class="popover-dropdown" id="export-dropdown">
+            <button type="button" class="apple-btn apple-btn-secondary" id="btn-export-toggle">
+              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M8 2.5v8M4.5 7.5L8 11l3.5-3.5M2.5 13.5h11"/></svg>
+              <span>Export</span>
+            </button>
+            <div class="popover-menu" id="export-menu">
+              <button type="button" data-export="markdown">
+                <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="2" y="3" width="12" height="10" rx="1.5"/><path d="M5 10V6l2 2.5L9 6v4M12 9l-1.5 1.5M10.5 7.5L12 9"/></svg>
+                Copy Markdown Table
+              </button>
+              <button type="button" data-export="csv">
+                <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M3 3h10v10H3zM3 6.5h10M3 10h10M7 3v10"/></svg>
+                Download CSV Spreadsheet
+              </button>
+              <button type="button" data-export="json">
+                <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M5 4.5C4 4.5 3.5 5 3.5 6v1c0 .8-.5 1.2-1.5 1.5 1 .3 1.5.7 1.5 1.5v1c0 1 .5 1.5 1.5 1.5M11 4.5c1 0 1.5.5 1.5 1.5v1c0 .8.5 1.2 1.5 1.5-1 .3-1.5.7-1.5 1.5v1c0 1-.5 1.5-1.5 1.5"/></svg>
+                Download Full JSON Data
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- HIG Metric Summary Cards -->
+      <div class="metrics-row">
+        <div class="metric-card card-ready" data-tab-switch="ready">
+          <div class="metric-top">
+            <span class="metric-icon">🟢</span>
+            <span class="metric-number" id="count-ready">0</span>
+          </div>
+          <div class="metric-title">Ready to Merge</div>
+          <div class="metric-subtitle">Approved with passing CI checks</div>
+        </div>
+
+        <div class="metric-card card-active active-metric" data-tab-switch="active">
+          <div class="metric-top">
+            <span class="metric-icon">⚡</span>
+            <span class="metric-number" id="count-active">0</span>
+          </div>
+          <div class="metric-title">Active Review Queue</div>
+          <div class="metric-subtitle">Prioritized by multi-factor score</div>
+        </div>
+
+        <div class="metric-card card-blocked" data-tab-switch="blocked">
+          <div class="metric-top">
+            <span class="metric-icon">🚫</span>
+            <span class="metric-number" id="count-blocked">0</span>
+          </div>
+          <div class="metric-title">Needs Action</div>
+          <div class="metric-subtitle">Drafts, conflicts, or failing CI</div>
+        </div>
+      </div>
+
+      <!-- Apple-Style Segmented Navigation Bar -->
+      <div class="segmented-control-shell">
+        <div class="segmented-control" role="tablist">
+          <button type="button" class="seg-btn active" role="tab" id="tab-active" data-queue="active">
+            <span>⚡ Active Queue</span>
+            <span class="seg-badge" id="badge-active">0</span>
+          </button>
+          <button type="button" class="seg-btn" role="tab" id="tab-ready" data-queue="ready">
+            <span>🟢 Ready to Merge</span>
+            <span class="seg-badge" id="badge-ready">0</span>
+          </button>
+          <button type="button" class="seg-btn" role="tab" id="tab-blocked" data-queue="blocked">
+            <span>🚫 Needs Action</span>
+            <span class="seg-badge" id="badge-blocked">0</span>
+          </button>
+          <button type="button" class="seg-btn" role="tab" id="tab-all" data-queue="all">
+            <span>All PRs</span>
+            <span class="seg-badge" id="badge-all">0</span>
+          </button>
+        </div>
+
+        <!-- Filter & Search Inline Controls -->
+        <div class="queue-toolbar">
+          <div class="filter-search-box">
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="6.5" cy="6.5" r="4.5"/><path d="M10 10l3.8 3.8" stroke-linecap="round"/></svg>
+            <input type="text" id="filter-input" placeholder="Filter title, author, or #..." aria-label="Filter pull requests" />
+          </div>
+
+          <div class="filter-pills-row">
+            <button type="button" class="filter-chip active" data-filter="all">All</button>
+            <button type="button" class="filter-chip" data-filter="tests">Has Tests</button>
+            <button type="button" class="filter-chip" data-filter="first-time">1st Timers</button>
+            <button type="button" class="filter-chip" data-filter="small">XS / S</button>
+          </div>
+
+          <div class="sort-picker">
+            <label for="sort-select">Sort:</label>
+            <select id="sort-select" class="apple-select">
+              <option value="score">Score (High → Low)</option>
+              <option value="size-asc">Smallest Churn (Quick Wins)</option>
+              <option value="size-desc">Largest Churn</option>
+              <option value="updated">Recently Updated</option>
+              <option value="created">Oldest First</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <!-- Main PR Queue Container -->
+      <div class="queue-card-surface">
+        <div class="queue-table-header">
+          <div class="th-rank">Rank / Score</div>
+          <div class="th-main">Pull Request</div>
+          <div class="th-stats">Signals & Health</div>
+          <div class="th-action">Action</div>
+        </div>
+        <div class="pr-rows-container" id="pr-rows-container">
+          <!-- Dynamically populated rows -->
+        </div>
+      </div>
+    </section>
+
+    <!-- ═════════════════════════════════════════════════════════════════════════
+         3. LOADING & ERROR STATES
+    ══════════════════════════════════════════════════════════════════════════ -->
+    <div class="state-container wrap" id="loading-view" hidden>
+      <div class="apple-spinner"></div>
+      <h2 class="state-title" id="loading-title">Analyzing Backlog...</h2>
+      <p class="state-desc" id="loading-desc">Inspecting merge conflict state, CI rollups, test files, and author history...</p>
+    </div>
+
+    <div class="state-container wrap" id="error-view" hidden>
+      <div class="state-icon-circle">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 8v5M12 16h.01"/></svg>
+      </div>
+      <h2 class="state-title" id="error-title">Unable to Load Repository</h2>
+      <p class="state-desc" id="error-desc">Please verify the repository name and public availability.</p>
+      <div class="state-actions">
+        <button type="button" class="apple-btn apple-btn-primary" id="btn-error-retry">Try Again</button>
+        <button type="button" class="apple-btn apple-btn-secondary" id="btn-error-demo">Load Demo Repository</button>
+      </div>
+    </div>
+  </main>
+
+  <!-- ═════════════════════════════════════════════════════════════════════════
+       4. QUICK LOOK DETAIL SLIDE-OVER DRAWER (APPLE HIG)
+  ══════════════════════════════════════════════════════════════════════════ -->
+  <aside class="quicklook-drawer" id="pr-drawer" aria-hidden="true">
+    <div class="drawer-scrim" id="drawer-backdrop"></div>
+    <div class="drawer-container">
+      <div class="drawer-header-bar">
+        <div class="drawer-identity">
+          <span class="drawer-pr-tag" id="d-pr-number">#--</span>
+          <span class="drawer-pr-author" id="d-pr-author">by @author</span>
+        </div>
+        <div class="drawer-header-actions">
+          <a id="d-github-link" href="#" target="_blank" rel="noopener" class="apple-btn apple-btn-secondary btn-sm" title="Open on GitHub">
+            <span>GitHub ↗</span>
+          </a>
+          <button type="button" class="icon-control close-btn" id="drawer-close" aria-label="Close detail view">
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4l8 8M12 4l-8 8"/></svg>
+          </button>
+        </div>
+      </div>
+
+      <div class="drawer-scroll-content">
+        <h2 class="drawer-pr-title" id="d-pr-title">Pull Request Title</h2>
+
+        <!-- Circular Score Ring Card -->
+        <div class="score-ring-card">
+          <div class="score-ring-shell">
+            <svg class="score-ring-svg" viewBox="0 0 100 100">
+              <circle class="ring-bg" cx="50" cy="50" r="42"/>
+              <circle class="ring-val" id="d-ring-circle" cx="50" cy="50" r="42"/>
+            </svg>
+            <div class="score-ring-center">
+              <span class="ring-number" id="d-score-large">--</span>
+              <span class="ring-label">SCORE</span>
+            </div>
+          </div>
+          <div class="score-ring-meta">
+            <h3 class="ring-headline" id="d-score-tagline">Priority Score: -- / 10</h3>
+            <p class="ring-rank" id="d-score-rank">Rank #-- in review queue</p>
+            <p class="ring-verdict" id="d-score-verdict">Calculated across 5 code-aware dimensions.</p>
+          </div>
+        </div>
+
+        <!-- 5-Factor Gauge Breakdown -->
+        <div class="inspector-card">
+          <h3 class="inspector-title">Score Breakdown</h3>
+
+          <div class="gauge-unit">
+            <div class="gauge-header">
+              <span class="gauge-name">📏 Size & Churn Impact</span>
+              <span class="gauge-score" id="d-val-size">--/10</span>
+            </div>
+            <div class="gauge-track"><div class="gauge-fill" id="d-bar-size"></div></div>
+            <span class="gauge-sub" id="d-hint-size">-- lines changed</span>
+          </div>
+
+          <div class="gauge-unit">
+            <div class="gauge-header">
+              <span class="gauge-name">🧪 Test Suite Coverage</span>
+              <span class="gauge-score" id="d-val-tests">--/10</span>
+            </div>
+            <div class="gauge-track"><div class="gauge-fill" id="d-bar-tests"></div></div>
+            <span class="gauge-sub" id="d-hint-tests">-- test files</span>
+          </div>
+
+          <div class="gauge-unit">
+            <div class="gauge-header">
+              <span class="gauge-name">📝 Description Completeness</span>
+              <span class="gauge-score" id="d-val-desc">--/10</span>
+            </div>
+            <div class="gauge-track"><div class="gauge-fill" id="d-bar-desc"></div></div>
+            <span class="gauge-sub" id="d-hint-desc">Summary & issue references</span>
+          </div>
+
+          <div class="gauge-unit">
+            <div class="gauge-header">
+              <span class="gauge-name">👤 Contributor Boost</span>
+              <span class="gauge-score" id="d-val-author">--/10</span>
+            </div>
+            <div class="gauge-track"><div class="gauge-fill" id="d-bar-author"></div></div>
+            <span class="gauge-sub" id="d-hint-author">Community association</span>
+          </div>
+
+          <div class="gauge-unit">
+            <div class="gauge-header">
+              <span class="gauge-name">✅ CI & Branch Health</span>
+              <span class="gauge-score" id="d-val-ci">--/10</span>
+            </div>
+            <div class="gauge-track"><div class="gauge-fill" id="d-bar-ci"></div></div>
+            <span class="gauge-sub" id="d-hint-ci">Status checks rollup</span>
+          </div>
+        </div>
+
+        <!-- Health Checklist -->
+        <div class="inspector-card">
+          <h3 class="inspector-title">Health Checklist</h3>
+          <div class="checklist-grid">
+            <div class="check-item">
+              <span class="ci-label">Merge Conflicts</span>
+              <span class="ci-badge" id="d-sig-conflict">--</span>
+            </div>
+            <div class="check-item">
+              <span class="ci-label">CI Rollup</span>
+              <span class="ci-badge" id="d-sig-ci">--</span>
+            </div>
+            <div class="check-item">
+              <span class="ci-label">Review State</span>
+              <span class="ci-badge" id="d-sig-review">--</span>
+            </div>
+            <div class="check-item">
+              <span class="ci-label">Draft Status</span>
+              <span class="ci-badge" id="d-sig-draft">--</span>
+            </div>
+            <div class="check-item">
+              <span class="ci-label">Author Type</span>
+              <span class="ci-badge" id="d-sig-assoc">--</span>
+            </div>
+            <div class="check-item">
+              <span class="ci-label">Last Activity</span>
+              <span class="ci-badge" id="d-sig-age">--</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Changed Files List -->
+        <div class="inspector-card">
+          <div class="files-card-header">
+            <h3 class="inspector-title">Changed Files (<span id="d-files-count">0</span>)</h3>
+            <span class="files-legend"><span class="legend-dot"></span> Test file</span>
+          </div>
+          <div class="file-tree-list" id="d-files-list"></div>
+        </div>
+
+        <!-- Description Preview -->
+        <div class="inspector-card">
+          <h3 class="inspector-title">PR Description</h3>
+          <div class="markdown-preview" id="d-desc-content"></div>
+        </div>
+      </div>
+
+      <div class="drawer-action-footer">
+        <a id="d-github-btn" href="#" target="_blank" rel="noopener" class="apple-btn apple-btn-primary btn-block">
+          Open Pull Request on GitHub ↗
+        </a>
+      </div>
+    </div>
+  </aside>
+
+  <!-- ═════════════════════════════════════════════════════════════════════════
+       5. SPOTLIGHT / COMMAND PALETTE (CMD+K)
+  ══════════════════════════════════════════════════════════════════════════ -->
+  <div class="spotlight-modal" id="spotlight-modal" hidden>
+    <div class="spotlight-scrim" id="spotlight-scrim"></div>
+    <div class="spotlight-palette">
+      <div class="spotlight-search-row">
+        <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2"><circle cx="8.5" cy="8.5" r="5.5"/><path d="M12.5 12.5L17 17" stroke-linecap="round"/></svg>
+        <input type="text" id="spotlight-input" placeholder="Type a repository name (owner/repo) or filter..." autocomplete="off" spellcheck="false" />
+        <kbd class="esc-pill">ESC</kbd>
+      </div>
+      <div class="spotlight-results" id="spotlight-results">
+        <!-- Suggestions list -->
+      </div>
+    </div>
+  </div>
+
+  <!-- ═════════════════════════════════════════════════════════════════════════
+       6. TOKEN SETTINGS MODAL
+  ══════════════════════════════════════════════════════════════════════════ -->
+  <div class="apple-modal" id="token-modal" hidden>
+    <div class="modal-scrim" id="token-backdrop"></div>
+    <div class="modal-sheet">
+      <div class="modal-top">
+        <h3 class="modal-heading">GitHub API Quota & Access</h3>
+        <button type="button" class="modal-x" id="token-modal-close" aria-label="Close">✕</button>
+      </div>
+      <div class="modal-scroll-body">
+        <p class="modal-paragraph">
+          Provide a GitHub Personal Access Token to raise your quota from <strong>60 to 5,000 requests/hour</strong> and enable instant single-query GraphQL resolution.
+        </p>
+
+        <div class="apple-callout">
+          <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="4" y="8" width="12" height="9" rx="2"/><path d="M7 8V6a3 3 0 0 1 6 0v2"/></svg>
+          <div>
+            <strong>100% Client-Side Keychain:</strong> Your token is stored exclusively in your browser's local sandbox storage and dispatched only to <code>api.github.com</code>. It never touches any intermediary server.
+          </div>
+        </div>
+
+        <div class="apple-field-group">
+          <label for="token-input">Personal Access Token (classic or fine-grained):</label>
+          <input type="password" id="token-input" placeholder="ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" spellcheck="false" autocomplete="off" />
+        </div>
+
+        <p class="modal-footnote">
+          Requires only read-only or <code>public_repo</code> scope.
+          <a href="https://github.com/settings/tokens/new?scopes=public_repo&description=ghpr-pr-triage" target="_blank" rel="noopener">Generate token on GitHub ↗</a>
+        </p>
+      </div>
+      <div class="modal-bottom-bar">
+        <button type="button" class="apple-btn apple-btn-secondary" id="btn-token-clear">Remove Token</button>
+        <button type="button" class="apple-btn apple-btn-primary" id="btn-token-save">Save Token</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═════════════════════════════════════════════════════════════════════════
+       7. SCORING WEIGHTS TUNING MODAL
+  ══════════════════════════════════════════════════════════════════════════ -->
+  <div class="apple-modal" id="weights-modal" hidden>
+    <div class="modal-scrim" id="weights-backdrop"></div>
+    <div class="modal-sheet">
+      <div class="modal-top">
+        <h3 class="modal-heading">Priority Weights Tuning</h3>
+        <button type="button" class="modal-x" id="weights-modal-close" aria-label="Close">✕</button>
+      </div>
+      <div class="modal-scroll-body">
+        <p class="modal-paragraph">
+          Adjust the relative influence of each dimension. Scores and queue order re-calculate instantly in real time.
+        </p>
+
+        <div class="range-card">
+          <div class="range-label-row">
+            <span>📏 PR Size & Churn (Favor small PRs / Quick Wins)</span>
+            <span class="range-val" id="w-size-val">25%</span>
+          </div>
+          <input type="range" id="w-size" min="0" max="50" value="25" />
+        </div>
+
+        <div class="range-card">
+          <div class="range-label-row">
+            <span>🧪 Test Coverage (Reward PRs with test additions)</span>
+            <span class="range-val" id="w-tests-val">20%</span>
+          </div>
+          <input type="range" id="w-tests" min="0" max="50" value="20" />
+        </div>
+
+        <div class="range-card">
+          <div class="range-label-row">
+            <span>📝 Description Completeness</span>
+            <span class="range-val" id="w-desc-val">15%</span>
+          </div>
+          <input type="range" id="w-desc" min="0" max="50" value="15" />
+        </div>
+
+        <div class="range-card">
+          <div class="range-label-row">
+            <span>👤 Author Boost (Prioritize first-time contributors)</span>
+            <span class="range-val" id="w-author-val">15%</span>
+          </div>
+          <input type="range" id="w-author" min="0" max="50" value="15" />
+        </div>
+
+        <div class="range-card">
+          <div class="range-label-row">
+            <span>✅ CI Status & Conflict Safety</span>
+            <span class="range-val" id="w-ci-val">25%</span>
+          </div>
+          <input type="range" id="w-ci" min="0" max="50" value="25" />
+        </div>
+      </div>
+      <div class="modal-bottom-bar">
+        <button type="button" class="apple-btn apple-btn-secondary" id="btn-weights-reset">Reset Defaults</button>
+        <button type="button" class="apple-btn apple-btn-primary" id="btn-weights-save">Apply Weights</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Apple Pill Toast Container -->
+  <div class="apple-toast-shelf" id="toast-container" aria-live="polite"></div>
+
+  <!-- App Footer -->
+  <footer class="app-footer wrap">
+    <div class="footer-wrap">
+      <div class="footer-info">
+        <span class="footer-copy"><strong>ghpr</strong> — Crafted with Apple design principles by <a href="https://theramlakhan.com/" target="_blank">Ramlakhan Madheshiya</a>.</span>
+      </div>
+      <div class="footer-links">
+        <a href="https://github.com/ramlakhanmadheshiya" target="_blank" rel="noopener">GitHub</a>
+        <a href="https://theramlakhan.com/ghtrack/">ghtrack</a>
+        <a href="https://theramlakhan.com/projects/bill-studio/">Bill Studio</a>
+        <a href="https://theramlakhan.com/cv">CV</a>
+      </div>
+    </div>
+  </footer>
+
+  <script src="./app.js?v=ceee1ae4af"></script>
+</body>
+</html>
