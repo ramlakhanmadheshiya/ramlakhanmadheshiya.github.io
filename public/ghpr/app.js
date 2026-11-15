@@ -2314,9 +2314,17 @@
       md += `| ${i + 1} | [#${pr.number}](${pr.url}) | ${pr.title.replace(/\|/g, "\\|")} | @${pr.author ? pr.author.login : "ghost"} | ${ev.sizeBadge} | ${testText} | ${ciText} | **${ev.finalScore}** |\n`;
     });
 
-    navigator.clipboard.writeText(md).then(() => {
-      showToast("Markdown queue copied to clipboard!");
-    });
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(md).then(() => {
+        showToast("Markdown queue copied to clipboard!");
+      }).catch(() => {
+        downloadBlob(md, `ghpr_${state.owner}_${state.repo}_queue.md`, "text/markdown");
+        showToast("Markdown queue downloaded.");
+      });
+    } else {
+      downloadBlob(md, `ghpr_${state.owner}_${state.repo}_queue.md`, "text/markdown");
+      showToast("Markdown queue downloaded.");
+    }
   }
 
   function exportCSV() {
