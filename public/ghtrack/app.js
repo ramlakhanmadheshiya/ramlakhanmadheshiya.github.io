@@ -1097,7 +1097,7 @@
     refreshActivity(Array.from(found, (id) => state.itemsMap.get(id)).filter(Boolean));
     scheduleSnapshot();
     const todo = Array.from(found, (id) => state.itemsMap.get(id))
-      .filter((i) => i && state.linkedPr.get(i.id)?.updatedAt !== i.updatedAt)
+      .filter((i) => i && (state.linkedPr.get(i.id)?.v !== 2 || state.linkedPr.get(i.id)?.updatedAt !== i.updatedAt))
       .sort((a, b) => (a.updatedAt < b.updatedAt ? 1 : -1))
       .slice(0, LINKED_DETAIL_MAX);
     for (const item of todo) {
@@ -1119,18 +1119,37 @@
     return src.draft ? "draft" : "open";
   }
 
-  // Pull requests that point at this issue, from its timeline (open ones first)
+  // Does this PR close the issue? GitHub links a PR to an issue when its description
+  // uses a closing keyword: "Fixes #12", "closes owner/repo#12", "resolves <issue URL>".
+  function prClosesIssue(src, issueRepo, issueNumber) {
+    // Plain text when available; the preview's HTML response has body_html instead
+    const body = String(src?.body || src?.body_text || (src?.body_html || "").replace(/<[^>]+>/g, " ").replace(/&amp;/g, "&").replace(/&#39;|&quot;/g, "") || "");
+    if (!body) return false;
+    const srcRepo = (src.repository?.full_name || "").toLowerCase();
+    const repo = issueRepo.toLowerCase();
+    const re = /\b(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?)\s*:?\s+(?:https?:\/\/github\.com\/([\w.-]+\/[\w.-]+)\/issues\/(\d+)|([\w.-]+\/[\w.-]+)?#(\d+))/gi;
+    let m;
+    while ((m = re.exec(body))) {
+      const r = (m[1] || m[3] || srcRepo).toLowerCase();
+      const n = Number(m[2] || m[4]);
+      if (r === repo && n === issueNumber) return true;
+    }
+    return false;
+  }
+
+  // Pull requests that will close this issue, from its timeline (open ones first).
+  // PRs that only mention the issue are not counted.
   function noteLinkedPrs(item, events) {
     if (item.kind !== "issue") return;
     const seen = new Map();
     for (const e of events) {
       const src = e.event === "cross-referenced" ? e.source?.issue : null;
-      if (!src || !src.pull_request) continue;
+      if (!src || !src.pull_request || !prClosesIssue(src, item.repo, item.number)) continue;
       seen.set(src.html_url, { url: src.html_url, number: src.number, repo: src.repository?.full_name || "", title: src.title || "", state: prStateOf(src) });
     }
     const rank = { open: 0, draft: 1, merged: 2, closed: 3 };
     const prs = Array.from(seen.values()).sort((a, b) => rank[a.state] - rank[b.state]);
-    state.linkedPr.set(item.id, { updatedAt: item.updatedAt, prs });
+    state.linkedPr.set(item.id, { v: 2, updatedAt: item.updatedAt, prs });
     refreshActivity([item]);
     scheduleSnapshot();
   }
@@ -1138,14 +1157,15 @@
   function linkedPrHtml(item) {
     if (item.kind !== "issue" || item.status !== "open") return "";
     const info = state.linkedPr.get(item.id);
-    const prs = (info?.prs || []).filter((p) => p.state !== "closed");
+    const prs = info?.v === 2 ? info.prs.filter((p) => p.state !== "closed") : [];
     if (!state.linkedIssues.has(item.id) && !prs.length) return "";
     if (!prs.length) return `<span class="pr-chip open" title="A pull request is linked to this issue">${ICON_PR}PR linked</span>`;
     const p = prs[0];
     const same = p.repo === item.repo;
     const label = { open: "Open", draft: "Draft", merged: "Merged" }[p.state];
     const more = prs.length > 1 ? ` +${prs.length - 1}` : "";
-    return `<a class="pr-chip ${p.state}" href="${escapeHtml(p.url)}" target="_blank" rel="noopener" title="${escapeHtml(`${label} pull request: ${p.title}`)}">${ICON_PR}${same ? "" : escapeHtml(p.repo)}#${p.number} · ${label}${more}</a>`;
+    const tip = prs.map((x) => `#${x.number} (${x.state}) ${x.title}`).join("\n");
+    return `<a class="pr-chip ${p.state}" href="${escapeHtml(p.url)}" target="_blank" rel="noopener" title="${escapeHtml(`${prs.length > 1 ? `${prs.length} pull requests will close this issue` : "Pull request that will close this issue"}:\n${tip}`)}">${ICON_PR}${same ? "" : escapeHtml(p.repo)}#${p.number} · ${label}${more}</a>`;
   }
 
   // Latest comment / review for their most recently updated open items.
@@ -2179,7 +2199,7 @@
     const base = `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(name)}/issues/${item.number}`;
     try {
       const events = await apiGet(`${base}/timeline?per_page=100`, { bucket: "core", priority: 0, html: true });
-      let html = renderTimeline(events || []);
+      let html = renderTimeline(events || [], item);
       if ((events || []).length >= 100 && item.commentsCount > 30) {
         // Long thread: also show the most recent comments
         const lastPage = Math.ceil(item.commentsCount / 30);
@@ -2251,7 +2271,7 @@
     return `<strong>${escapeHtml(obj?.login || "someone")}</strong>`;
   }
 
-  function renderTimeline(events) {
+  function renderTimeline(events, item) {
     const out = [];
     let commits = [];
     const flushCommits = () => {
@@ -2307,9 +2327,10 @@
           const link = `<a href="${escapeHtml(src.html_url)}" target="_blank" rel="noopener">${escapeHtml(src.title || "")} <span class="conv-ref-num">${escapeHtml(src.repository?.full_name || "")}#${src.number}</span></a>`;
           if (src.pull_request) {
             const st = prStateOf(src);
-            const own = (src.user?.login || "").toLowerCase() === (e.actor?.login || "").toLowerCase();
+            const closes = item?.kind === "issue" && prClosesIssue(src, item.repo, item.number);
+            const verb = closes ? (st === "merged" ? "linked a pull request that closed this issue" : "linked a pull request that will close this issue") : "mentioned this in a pull request";
             const badge = `<span class="badge ${st}">${{ open: "Open", draft: "Draft", merged: "Merged", closed: "Closed" }[st]}</span>`;
-            out.push(convEvent(`<span class="conv-ref-icon ${st}">${ICON_PR}</span>`, `${who(e.actor)} ${own ? "opened a pull request" : "referenced this in a pull request"} ${link} ${badge}`, e.created_at));
+            out.push(convEvent(`<span class="conv-ref-icon ${st}">${ICON_PR}</span>`, `${who(e.actor)} ${verb} ${link} ${badge}`, e.created_at));
           } else {
             out.push(convEvent(`<span class="conv-ref-icon">${ICON_ISSUE}</span>`, `${who(e.actor)} mentioned this in ${link}`, e.created_at));
           }
