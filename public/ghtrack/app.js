@@ -442,7 +442,7 @@
     const items = Array.from(state.itemsMap.values()).map(({ body, ...rest }) => rest);
     const rec = {
       login: state.login.toLowerCase(), items, syncedAt: state.syncStartedAt, savedAt: Date.now(), scopes: state.scopes || null,
-      selfCommented: Array.from(state.selfCommented), reviewState: Array.from(state.reviewState.entries()), reviewCheck: Array.from(state.reviewCheck.entries()), latest: Array.from(state.latest.entries()),
+      selfCommented: Array.from(state.selfCommented), reviewState: Array.from(state.reviewState.entries()), reviewCheck: Array.from(state.reviewCheck.entries()), linkedIssues: Array.from(state.linkedIssues), linkedPr: Array.from(state.linkedPr.entries()), latest: Array.from(state.latest.entries()),
     };
     try {
       db.transaction(SNAP_STORE, "readwrite").objectStore(SNAP_STORE).put(rec);
@@ -545,6 +545,8 @@
     feedCommented: new Set(),  // same, found in their recent activity feed (search can lag)
     selfCommented: new Set(),  // items they commented on that sit under a stronger role (created / assigned / reviewed)
     reviewState: new Map(),    // open PR id -> changes_requested | approved | required
+    linkedIssues: new Set(),   // open issues GitHub reports as having a linked pull request
+    linkedPr: new Map(),       // issue id -> { updatedAt, prs: [{ url, number, repo, title, state }] }
     reviewCheck: new Map(),    // PR id -> { updatedAt, addressed } were requested changes followed by new commits?
     latest: new Map(),         // id -> { updatedAt, text, tone, at } latest activity, fetched for recent items
     fatal: false,
@@ -689,6 +691,48 @@
       }
       if (el.tagName === "IMG") el.setAttribute("loading", "lazy");
     });
+    // GitHub code permalinks: a table whose line numbers live in data attributes.
+    // Rebuild as a compact file header + numbered code block.
+    root.querySelectorAll("table.highlight").forEach((table) => {
+      const rows = Array.from(table.querySelectorAll("tr"));
+      if (!rows.length) return;
+      const pre = doc.createElement("pre");
+      pre.className = "code-snippet";
+      for (const tr of rows) {
+        const num = tr.querySelector("[data-line-number]")?.getAttribute("data-line-number") || "";
+        const code = tr.querySelector(".blob-code");
+        const line = doc.createElement("span");
+        line.className = "cs-line";
+        const n = doc.createElement("span");
+        n.className = "cs-num";
+        n.textContent = num;
+        const c = doc.createElement("span");
+        c.className = "cs-code";
+        if (code) c.innerHTML = code.innerHTML.replace(/^\s/, "");
+        line.append(n, c);
+        pre.append(line);
+      }
+      const box = table.closest(".Box") || table;
+      const head = box.querySelector(".Box-header");
+      const wrap = doc.createElement("div");
+      wrap.className = "code-embed";
+      if (head) {
+        const h = doc.createElement("div");
+        h.className = "code-embed-head";
+        const file = head.querySelector("a");
+        if (file) h.append(file.cloneNode(true));
+        const meta = head.querySelectorAll("p")[1];
+        if (meta) {
+          const m = doc.createElement("span");
+          m.className = "code-embed-meta";
+          m.textContent = meta.textContent.replace(/\s+/g, " ").trim();
+          h.append(m);
+        }
+        wrap.append(h);
+      }
+      wrap.append(pre);
+      box.replaceWith(wrap);
+    });
     return root.innerHTML;
   }
 
@@ -739,6 +783,8 @@
       feedCommented: new Set(),
       reviewState: new Map(),
       reviewCheck: new Map(),
+      linkedIssues: new Set(),
+      linkedPr: new Map(),
       latest: new Map(),
       dateRange: "30d",
       syncing: true,
@@ -777,6 +823,8 @@
       for (const id of snap.selfCommented || []) state.selfCommented.add(id);
       for (const [id, v] of snap.reviewState || []) state.reviewState.set(id, v);
       for (const [id, v] of snap.reviewCheck || []) state.reviewCheck.set(id, v);
+      for (const id of snap.linkedIssues || []) state.linkedIssues.add(id);
+      for (const [id, v] of snap.linkedPr || []) state.linkedPr.set(id, v);
       for (const [id, v] of snap.latest || []) state.latest.set(id, v);
       state.fromSnapshot = true;
       state.listReady = true;
@@ -870,6 +918,7 @@
       renderAll();
     });
     loadLatestActivity(isStale);
+    loadLinkedPrs(isStale);
 
     // 2. Everything else, 100 at a time, strongest link first
     for (const h of state.harvesters) {
@@ -1018,6 +1067,87 @@
     return rs;
   }
 
+  // Open issues that already have a pull request linked (GitHub's "Development" link).
+  // One search finds them all; the PR number/state comes from each issue's timeline.
+  const LINKED_DETAIL_MAX = 10;
+  async function loadLinkedPrs(isStale) {
+    const u = state.login;
+    const found = new Set();
+    try {
+      for (const q of scopedQueries(`involves:${u} is:issue is:open linked:pr`)) {
+        let extra = "";
+        let page = 0;
+        for (let guard = 0; guard < 30; guard++) {
+          page++;
+          const data = await apiGet(searchPath(extra ? `${q} ${extra}` : q, { page }), { priority: 2, isStale });
+          const raw = data.items || [];
+          for (const r of raw) found.add(r.html_url);
+          if (raw.length < API_PER_PAGE) break;
+          if (page * API_PER_PAGE >= SEARCH_WINDOW) {
+            extra = `updated:<=${raw[raw.length - 1].updated_at}`;
+            page = 0;
+          }
+        }
+      }
+    } catch {
+      return; /* keep what we had */
+    }
+    if (isStale()) return;
+    state.linkedIssues = found;
+    refreshActivity(Array.from(found, (id) => state.itemsMap.get(id)).filter(Boolean));
+    scheduleSnapshot();
+    const todo = Array.from(found, (id) => state.itemsMap.get(id))
+      .filter((i) => i && state.linkedPr.get(i.id)?.updatedAt !== i.updatedAt)
+      .sort((a, b) => (a.updatedAt < b.updatedAt ? 1 : -1))
+      .slice(0, LINKED_DETAIL_MAX);
+    for (const item of todo) {
+      if (isStale()) return;
+      const [owner, name] = item.repo.split("/");
+      try {
+        const events = await apiGet(`/repos/${encodeURIComponent(owner)}/${encodeURIComponent(name)}/issues/${item.number}/timeline?per_page=100`, { bucket: "core", priority: 2 });
+        if (isStale()) return;
+        noteLinkedPrs(item, events || []);
+      } catch (err) {
+        if (err.rateLimited) return;
+      }
+    }
+  }
+
+  function prStateOf(src) {
+    if (src.pull_request?.merged_at) return "merged";
+    if (src.state === "closed") return "closed";
+    return src.draft ? "draft" : "open";
+  }
+
+  // Pull requests that point at this issue, from its timeline (open ones first)
+  function noteLinkedPrs(item, events) {
+    if (item.kind !== "issue") return;
+    const seen = new Map();
+    for (const e of events) {
+      const src = e.event === "cross-referenced" ? e.source?.issue : null;
+      if (!src || !src.pull_request) continue;
+      seen.set(src.html_url, { url: src.html_url, number: src.number, repo: src.repository?.full_name || "", title: src.title || "", state: prStateOf(src) });
+    }
+    const rank = { open: 0, draft: 1, merged: 2, closed: 3 };
+    const prs = Array.from(seen.values()).sort((a, b) => rank[a.state] - rank[b.state]);
+    state.linkedPr.set(item.id, { updatedAt: item.updatedAt, prs });
+    refreshActivity([item]);
+    scheduleSnapshot();
+  }
+
+  function linkedPrHtml(item) {
+    if (item.kind !== "issue" || item.status !== "open") return "";
+    const info = state.linkedPr.get(item.id);
+    const prs = (info?.prs || []).filter((p) => p.state !== "closed");
+    if (!state.linkedIssues.has(item.id) && !prs.length) return "";
+    if (!prs.length) return `<span class="pr-chip open" title="A pull request is linked to this issue">${ICON_PR}PR linked</span>`;
+    const p = prs[0];
+    const same = p.repo === item.repo;
+    const label = { open: "Open", draft: "Draft", merged: "Merged" }[p.state];
+    const more = prs.length > 1 ? ` +${prs.length - 1}` : "";
+    return `<a class="pr-chip ${p.state}" href="${escapeHtml(p.url)}" target="_blank" rel="noopener" title="${escapeHtml(`${label} pull request: ${p.title}`)}">${ICON_PR}${same ? "" : escapeHtml(p.repo)}#${p.number} · ${label}${more}</a>`;
+  }
+
   // Latest comment / review for their most recently updated open items.
   // Uses GitHub's 60-per-hour budget sparingly and is cached until the item changes.
   const LATEST_BATCH = 12;
@@ -1080,6 +1210,8 @@
   // Row line: latest activity if known, otherwise review state / comment count
   function activityHtml(item) {
     const parts = [];
+    const linked = linkedPrHtml(item);
+    if (linked) parts.push(linked);
     const rs = reviewLabel(item);
     if (rs) {
       const label = { changes_requested: "Changes requested", rereview: "Awaiting re-review", approved: "Approved", required: "Review required" }[rs];
@@ -2061,6 +2193,7 @@
       }
       el.innerHTML = html || `<div class="conv-empty">No comments or activity yet.</div>`;
       noteLinksFromTimeline(item, events || [], el.closest(".preview-body"));
+      if (item.kind === "issue") noteLinkedPrs(item, events || []);
       if (!(events || []).length || (events || []).length < 100) {
         const last = [...(events || [])].reverse().find((e) => e.event === "commented" || e.event === "reviewed");
         if (last) {
@@ -2170,7 +2303,16 @@
           break;
         case "cross-referenced": {
           const src = e.source?.issue;
-          if (src) out.push(convEvent("↗", `${who(e.actor)} mentioned this in <a href="${escapeHtml(src.html_url)}" target="_blank" rel="noopener">${escapeHtml(src.repository?.full_name || "")}#${src.number} ${escapeHtml(src.title || "")}</a>`, e.created_at));
+          if (!src) break;
+          const link = `<a href="${escapeHtml(src.html_url)}" target="_blank" rel="noopener">${escapeHtml(src.title || "")} <span class="conv-ref-num">${escapeHtml(src.repository?.full_name || "")}#${src.number}</span></a>`;
+          if (src.pull_request) {
+            const st = prStateOf(src);
+            const own = (src.user?.login || "").toLowerCase() === (e.actor?.login || "").toLowerCase();
+            const badge = `<span class="badge ${st}">${{ open: "Open", draft: "Draft", merged: "Merged", closed: "Closed" }[st]}</span>`;
+            out.push(convEvent(`<span class="conv-ref-icon ${st}">${ICON_PR}</span>`, `${who(e.actor)} ${own ? "opened a pull request" : "referenced this in a pull request"} ${link} ${badge}`, e.created_at));
+          } else {
+            out.push(convEvent(`<span class="conv-ref-icon">${ICON_ISSUE}</span>`, `${who(e.actor)} mentioned this in ${link}`, e.created_at));
+          }
           break;
         }
         case "renamed":
