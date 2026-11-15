@@ -22,6 +22,8 @@
     sortBy: "score",          // "score" | "size-asc" | "size-desc" | "updated" | "created"
     selectedPR: null,
     selectedIndex: -1,
+    currentFilteredList: [],
+    currentDrawerIndex: -1,
     token: localStorage.getItem("ghpr_token") || "",
     weights: {
       size: 0.25,
@@ -58,6 +60,7 @@
     tokenDot: document.getElementById("token-status-dot"),
     btnTokenModal: document.getElementById("btn-token-modal"),
     btnWeightsModal: document.getElementById("btn-weights-modal"),
+    btnShortcutsModal: document.getElementById("btn-shortcuts-modal"),
     themeDropdown: document.getElementById("theme-dropdown"),
     themeBtn: document.getElementById("theme-btn"),
     themeButtons: document.querySelectorAll("[data-theme]"),
@@ -119,11 +122,17 @@
     drawer: document.getElementById("pr-drawer"),
     drawerBackdrop: document.getElementById("drawer-backdrop"),
     drawerClose: document.getElementById("drawer-close"),
+    drawerPrev: document.getElementById("drawer-prev"),
+    drawerNext: document.getElementById("drawer-next"),
+    drawerPos: document.getElementById("drawer-pos"),
     dPrNumber: document.getElementById("d-pr-number"),
     dPrAuthor: document.getElementById("d-pr-author"),
     dPrTitle: document.getElementById("d-pr-title"),
     dGithubLink: document.getElementById("d-github-link"),
     dGithubBtn: document.getElementById("d-github-btn"),
+    dCliCmd: document.getElementById("d-cli-cmd"),
+    btnCopyCli: document.getElementById("btn-copy-cli"),
+    btnCopyCliText: document.getElementById("btn-copy-cli-text"),
     dScoreLarge: document.getElementById("d-score-large"),
     dScoreTagline: document.getElementById("d-score-tagline"),
     dScoreRank: document.getElementById("d-score-rank"),
@@ -188,6 +197,12 @@
     wCiVal: document.getElementById("w-ci-val"),
     btnWeightsSave: document.getElementById("btn-weights-save"),
     btnWeightsReset: document.getElementById("btn-weights-reset"),
+
+    // Shortcuts Modal
+    shortcutsModal: document.getElementById("shortcuts-modal"),
+    shortcutsBackdrop: document.getElementById("shortcuts-backdrop"),
+    shortcutsModalClose: document.getElementById("shortcuts-modal-close"),
+    btnShortcutsClose: document.getElementById("btn-shortcuts-close"),
 
     // Toasts
     toastContainer: document.getElementById("toast-container"),
@@ -789,14 +804,24 @@
     list.sort((a, b) => {
       if (state.sortBy === "score") {
         return b._eval.finalScore - a._eval.finalScore;
+      } else if (state.sortBy === "comments-desc") {
+        const ca = (a.comments && a.comments.totalCount) || 0;
+        const cb = (b.comments && b.comments.totalCount) || 0;
+        return cb - ca;
+      } else if (state.sortBy === "comments-asc") {
+        const ca = (a.comments && a.comments.totalCount) || 0;
+        const cb = (b.comments && b.comments.totalCount) || 0;
+        return ca - cb;
       } else if (state.sortBy === "size-asc") {
         return a._eval.linesChanged - b._eval.linesChanged;
       } else if (state.sortBy === "size-desc") {
         return b._eval.linesChanged - a._eval.linesChanged;
       } else if (state.sortBy === "updated") {
         return new Date(b.updatedAt) - new Date(a.updatedAt);
-      } else if (state.sortBy === "created") {
+      } else if (state.sortBy === "created-asc" || state.sortBy === "created") {
         return new Date(a.createdAt) - new Date(b.createdAt);
+      } else if (state.sortBy === "created-desc") {
+        return new Date(b.createdAt) - new Date(a.createdAt);
       }
       return 0;
     });
@@ -848,7 +873,7 @@
         const num = String(pr.number);
         const title = (pr.title || "").toLowerCase();
         const author = (pr.author ? pr.author.login : "").toLowerCase();
-        const labels = ((pr.labels && pr.labels.nodes) || []).map((l) => (l.name || "").toLowerCase()).join(" ");
+        const labels = getPrLabels(pr).map((l) => (l.name || "").toLowerCase()).join(" ");
         if (!num.includes(q) && !title.includes(q) && !author.includes(q) && !labels.includes(q)) {
           return false;
         }
@@ -860,6 +885,11 @@
 
       return true;
     });
+
+    state.currentFilteredList = filtered;
+    if (state.selectedIndex >= filtered.length) {
+      state.selectedIndex = filtered.length - 1;
+    }
 
     if (filtered.length === 0) {
       els.prRowsContainer.innerHTML = `
@@ -874,6 +904,9 @@
       const ev = pr._eval;
       const row = document.createElement("div");
       row.className = "pr-row";
+      if (idx === state.selectedIndex) {
+        row.classList.add("selected-row");
+      }
       row.dataset.prNumber = pr.number;
       row.dataset.index = idx;
 
@@ -906,6 +939,18 @@
         ? `${ev.sizeBadge} (+${pr.additions}/-${pr.deletions})`
         : ev.sizeBadge;
 
+      // Labels chips
+      const prLabels = getPrLabels(pr);
+      let labelsHtml = "";
+      if (prLabels.length > 0) {
+        const visibleLabels = prLabels.slice(0, 4);
+        const remaining = prLabels.length - visibleLabels.length;
+        labelsHtml = visibleLabels.map((l) => renderLabelChip(l)).join("");
+        if (remaining > 0) {
+          labelsHtml += `<span class="github-label-more">+${remaining} more</span>`;
+        }
+      }
+
       row.innerHTML = `
         <div class="cell-score">
           <span class="score-badge ${tierClass}">${ev.finalScore}</span>
@@ -922,6 +967,7 @@
             <span>${timeAgo(new Date(pr.updatedAt))}</span>
             ${pr.comments && pr.comments.totalCount > 0 ? `<span>• 💬 ${pr.comments.totalCount}</span>` : ""}
           </div>
+          ${labelsHtml ? `<div class="pr-labels-row">${labelsHtml}</div>` : ""}
         </div>
         <div class="cell-signals">
           <span class="apple-tag tag-size-${ev.sizeBadge.toLowerCase()}">${churnLabel}</span>
@@ -936,15 +982,54 @@
         </div>
       `;
 
-      row.addEventListener("click", () => openDrawer(pr, idx + 1));
+      row.querySelectorAll(".github-label-chip").forEach((chip) => {
+        chip.addEventListener("click", (e) => {
+          e.stopPropagation();
+          const labelName = chip.dataset.labelName;
+          if (labelName) {
+            state.searchFilter = labelName;
+            els.filterInput.value = labelName;
+            renderActiveQueue();
+          }
+        });
+      });
+
+      row.addEventListener("click", () => {
+        state.selectedIndex = idx;
+        updateRowHighlight();
+        openDrawer(pr, idx + 1);
+      });
+
       els.prRowsContainer.appendChild(row);
     });
   }
 
   // ── Quick Look Drawer (Apple HIG) ─────────────────────────────────────────
-  function openDrawer(pr, rank) {
+  function openDrawer(pr, rankOrIdx) {
     state.selectedPR = pr;
     const ev = pr._eval;
+
+    let currentIdx = state.currentFilteredList.findIndex((item) => item.number === pr.number);
+    if (currentIdx === -1 && typeof rankOrIdx === "number") currentIdx = rankOrIdx - 1;
+    state.currentDrawerIndex = currentIdx;
+
+    const totalInList = state.currentFilteredList.length;
+    if (els.drawerPos) {
+      els.drawerPos.textContent = currentIdx >= 0 ? `${currentIdx + 1} of ${totalInList}` : `-- / ${totalInList}`;
+    }
+    if (els.drawerPrev) {
+      els.drawerPrev.disabled = currentIdx <= 0;
+    }
+    if (els.drawerNext) {
+      els.drawerNext.disabled = currentIdx < 0 || currentIdx >= totalInList - 1;
+    }
+
+    if (els.dCliCmd) {
+      els.dCliCmd.textContent = `gh pr checkout ${pr.number}`;
+    }
+    if (els.btnCopyCliText) {
+      els.btnCopyCliText.textContent = "Copy";
+    }
 
     els.dPrNumber.textContent = `#${pr.number}`;
     els.dPrAuthor.textContent = `by @${pr.author ? pr.author.login : "ghost"} (${pr.authorAssociation || "CONTRIBUTOR"})`;
@@ -953,7 +1038,7 @@
     els.dGithubBtn.href = pr.url;
 
     // Score Ring
-    renderScoreRing(ev.finalScore, rank);
+    renderScoreRing(ev.finalScore, currentIdx >= 0 ? currentIdx + 1 : rankOrIdx);
 
     // Gauges
     setGauge(els.dValSize, els.dBarSize, ev.scores.size, 10, `${ev.linesChanged} lines churn (${ev.sizeBadge})`);
@@ -973,15 +1058,15 @@
     // Changed Files
     renderDrawerFiles(pr);
 
-    // PR Description
-    els.dDescContent.textContent = pr.body || "No description provided.";
+    // PR Description with Safe Rich Markdown
+    els.dDescContent.innerHTML = renderMarkdown(pr.body, state.owner, state.repo);
 
     els.drawer.classList.add("open");
     els.drawer.setAttribute("aria-hidden", "false");
 
     // Asynchronously enrich PR details from GitHub REST if files/additions are missing
     if (!pr._enriched && state.owner && state.repo && ((pr.files && pr.files.nodes.length === 0) || pr.additions === 0)) {
-      enrichPRDetails(pr, rank);
+      enrichPRDetails(pr, currentIdx >= 0 ? currentIdx + 1 : rankOrIdx);
     }
   }
 
@@ -1357,6 +1442,7 @@
       btn.addEventListener("click", () => {
         const type = btn.dataset.export;
         if (type === "markdown") exportMarkdown();
+        else if (type === "full-report") exportFullReport();
         else if (type === "csv") exportCSV();
         else if (type === "json") exportJSON();
         els.exportDropdown.classList.remove("open");
@@ -1388,6 +1474,69 @@
     } else {
       downloadBlob(md, `ghpr_${state.owner}_${state.repo}_queue.md`, "text/markdown");
       showToast("Markdown queue downloaded.");
+    }
+  }
+
+  function exportFullReport() {
+    const ready = state.categories.ready;
+    const active = state.categories.active;
+    const blocked = state.categories.blocked;
+
+    let md = `# 📋 Pull Request Triage Report: ${state.owner}/${state.repo}\n\n`;
+    md += `*Generated by [ghpr](https://theramlakhan.com/ghpr/) on ${new Date().toLocaleDateString()}*\n\n`;
+
+    md += `## 🟢 Ready to Merge (${ready.length})\n\n`;
+    if (ready.length === 0) {
+      md += `*No pull requests currently ready to merge.*\n\n`;
+    } else {
+      md += `| PR | Title | Author | Size | CI |\n`;
+      md += `|:--:|:------|:-------|:----:|:--:|\n`;
+      ready.forEach((pr) => {
+        const ev = pr._eval;
+        md += `| [#${pr.number}](${pr.url}) | ${pr.title.replace(/\|/g, "\\|")} | @${pr.author ? pr.author.login : "ghost"} | ${ev.sizeBadge} | ✓ Pass |\n`;
+      });
+      md += `\n`;
+    }
+
+    md += `## 🟡 Priority Review Queue (${active.length})\n\n`;
+    if (active.length === 0) {
+      md += `*No pull requests currently in active queue.*\n\n`;
+    } else {
+      md += `| Rank | PR | Title | Author | Size | Tests | CI | Score |\n`;
+      md += `|:----:|:--:|:------|:-------|:----:|:-----:|:--:|:-----:|\n`;
+      active.forEach((pr, i) => {
+        const ev = pr._eval;
+        const ciText = ev.ciState === "SUCCESS" ? "✓ Pass" : ev.ciState === "FAILURE" ? "✕ Fail" : "● Wait";
+        const testText = ev.testFilesCount > 0 ? `+${ev.testFilesCount}` : "None";
+        md += `| ${i + 1} | [#${pr.number}](${pr.url}) | ${pr.title.replace(/\|/g, "\\|")} | @${pr.author ? pr.author.login : "ghost"} | ${ev.sizeBadge} | ${testText} | ${ciText} | **${ev.finalScore}** |\n`;
+      });
+      md += `\n`;
+    }
+
+    md += `## 🔴 Blocked / Needs Work (${blocked.length})\n\n`;
+    if (blocked.length === 0) {
+      md += `*No pull requests currently blocked.*\n\n`;
+    } else {
+      md += `| PR | Title | Author | Issue |\n`;
+      md += `|:--:|:------|:-------|:------|\n`;
+      blocked.forEach((pr) => {
+        const ev = pr._eval;
+        const reason = ev.isConflicting ? "Merge Conflict" : ev.ciState === "FAILURE" ? "CI Failing" : pr.isDraft ? "Draft" : "Review Required";
+        md += `| [#${pr.number}](${pr.url}) | ${pr.title.replace(/\|/g, "\\|")} | @${pr.author ? pr.author.login : "ghost"} | ⚠️ ${reason} |\n`;
+      });
+      md += `\n`;
+    }
+
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(md).then(() => {
+        showToast("Full triage report copied to clipboard!");
+      }).catch(() => {
+        downloadBlob(md, `ghpr_${state.owner}_${state.repo}_triage_report.md`, "text/markdown");
+        showToast("Triage report downloaded.");
+      });
+    } else {
+      downloadBlob(md, `ghpr_${state.owner}_${state.repo}_triage_report.md`, "text/markdown");
+      showToast("Triage report downloaded.");
     }
   }
 
@@ -1425,6 +1574,128 @@
   }
 
   // ── Utilities ─────────────────────────────────────────────────────────────
+  function getPrLabels(pr) {
+    if (pr.labels && Array.isArray(pr.labels.nodes)) return pr.labels.nodes;
+    if (Array.isArray(pr.labels)) return pr.labels;
+    return [];
+  }
+
+  function renderLabelChip(label) {
+    const hex = (label.color || "6b7280").replace(/^#/, "");
+    const r = parseInt(hex.substring(0, 2), 16) || 0;
+    const g = parseInt(hex.substring(2, 4), 16) || 0;
+    const b = parseInt(hex.substring(4, 6), 16) || 0;
+    const brightness = (r * 299 + g * 587 + b * 114) / 1000;
+    const textColor = brightness > 145 ? "#0f172a" : "#ffffff";
+    return `<button type="button" class="github-label-chip" style="background-color: #${hex}; color: ${textColor};" data-label-name="${escapeHtml(label.name)}" title="Filter by label: ${escapeHtml(label.name)}">${escapeHtml(label.name)}</button>`;
+  }
+
+  function renderMarkdown(rawMd, owner, repo) {
+    if (!rawMd || !rawMd.trim()) {
+      return `<p class="md-empty">No description provided by author.</p>`;
+    }
+
+    // 1. First escape raw HTML characters
+    let text = rawMd
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;");
+
+    // 2. Extract fenced code blocks
+    const codeBlocks = [];
+    text = text.replace(/```([a-zA-Z0-9_\-\.\+]*)\n([\s\S]*?)```/g, (match, lang, code) => {
+      const id = `%%MDCODEBLOCK${codeBlocks.length}%%`;
+      codeBlocks.push({ lang: lang ? lang.trim() : "code", code: code.trim() });
+      return id;
+    });
+
+    // 3. Extract inline code
+    const inlineCodes = [];
+    text = text.replace(/`([^`\n]+)`/g, (match, code) => {
+      const id = `%%MDINLINECODE${inlineCodes.length}%%`;
+      inlineCodes.push(code);
+      return id;
+    });
+
+    // 4. Headings
+    text = text.replace(/^######\s+(.+)$/gm, '<h6 class="md-h6">$1</h6>');
+    text = text.replace(/^#####\s+(.+)$/gm, '<h5 class="md-h5">$1</h5>');
+    text = text.replace(/^####\s+(.+)$/gm, '<h4 class="md-h4">$1</h4>');
+    text = text.replace(/^###\s+(.+)$/gm, '<h3 class="md-h3">$1</h3>');
+    text = text.replace(/^##\s+(.+)$/gm, '<h2 class="md-h2">$1</h2>');
+    text = text.replace(/^#\s+(.+)$/gm, '<h1 class="md-h1">$1</h1>');
+
+    // 5. Blockquotes
+    text = text.replace(/^>\s+(.+)$/gm, '<blockquote class="md-quote">$1</blockquote>');
+
+    // 6. Horizontal Rules
+    text = text.replace(/^(?:---|\*\*\*|___)\s*$/gm, '<hr class="md-hr" />');
+
+    // 7. Checkboxes
+    text = text.replace(/^[-*]\s+\[ \]\s+(.+)$/gm, '<div class="md-task-item"><input type="checkbox" disabled /> <span>$1</span></div>');
+    text = text.replace(/^[-*]\s+\[[xX]\]\s+(.+)$/gm, '<div class="md-task-item is-checked"><input type="checkbox" checked disabled /> <span>$1</span></div>');
+
+    // 8. Bullet lists
+    text = text.replace(/^[-*]\s+(.+)$/gm, '<li class="md-li">$1</li>');
+
+    // 9. Bold, Italic, Strikethrough
+    text = text.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+    text = text.replace(/__([^_]+)__/g, '<strong>$1</strong>');
+    text = text.replace(/\*([^*]+)\*/g, '<em>$1</em>');
+    text = text.replace(/_([^_]+)_/g, '<em>$1</em>');
+    text = text.replace(/~~([^~]+)~~/g, '<del>$1</del>');
+
+    // 10. Auto-link URLs
+    text = text.replace(/(https?:\/\/[^\s<]+[^<.,:;"')\]\s])/g, '<a href="$1" target="_blank" rel="noopener" class="md-link">$1</a>');
+
+    // 11. Auto-link GitHub Issue / PR numbers (#123)
+    if (owner && repo) {
+      text = text.replace(/(^|[\s(])#(\d+)\b/g, `$1<a href="https://github.com/${owner}/${repo}/issues/$2" target="_blank" rel="noopener" class="md-issue-tag">#$2</a>`);
+    }
+
+    // 12. Paragraph breaks
+    text = text.replace(/\n{2,}/g, '</p><p class="md-p">');
+    text = `<p class="md-p">${text}</p>`;
+
+    // 13. Restore inline code
+    inlineCodes.forEach((code, idx) => {
+      text = text.replace(`%%MDINLINECODE${idx}%%`, `<code class="md-inline-code">${code}</code>`);
+    });
+
+    // 14. Restore fenced code blocks
+    codeBlocks.forEach((cb, idx) => {
+      const blockHtml = `<div class="md-code-card">
+        <div class="md-code-bar">
+          <span class="md-code-lang">${escapeHtml(cb.lang)}</span>
+        </div>
+        <pre class="md-pre"><code>${cb.code}</code></pre>
+      </div>`;
+      text = text.replace(`%%MDCODEBLOCK${idx}%%`, blockHtml);
+    });
+
+    return text;
+  }
+
+  function updateRowHighlight() {
+    const rows = els.prRowsContainer.querySelectorAll(".pr-row");
+    rows.forEach((r, idx) => {
+      if (idx === state.selectedIndex) {
+        r.classList.add("selected-row");
+        r.scrollIntoView({ block: "nearest", behavior: "smooth" });
+      } else {
+        r.classList.remove("selected-row");
+      }
+    });
+  }
+
+  function openShortcutsModal() {
+    if (els.shortcutsModal) els.shortcutsModal.hidden = false;
+  }
+
+  function closeShortcutsModal() {
+    if (els.shortcutsModal) els.shortcutsModal.hidden = true;
+  }
+
   function escapeHtml(str) {
     if (!str) return "";
     return str
@@ -1633,11 +1904,80 @@
       renderActiveQueue();
     });
 
+    // Rate Limit Pill Click to open Token Settings
+    if (els.ratePill) {
+      els.ratePill.style.cursor = "pointer";
+      els.ratePill.addEventListener("click", openTokenModal);
+    }
+
+    // QuickLook Drawer Stepper & CLI Actions
+    if (els.drawerPrev) {
+      els.drawerPrev.addEventListener("click", () => {
+        if (state.currentDrawerIndex > 0) {
+          const prevIdx = state.currentDrawerIndex - 1;
+          const prevPr = state.currentFilteredList[prevIdx];
+          if (prevPr) {
+            state.selectedIndex = prevIdx;
+            updateRowHighlight();
+            openDrawer(prevPr, prevIdx + 1);
+          }
+        }
+      });
+    }
+
+    if (els.drawerNext) {
+      els.drawerNext.addEventListener("click", () => {
+        if (state.currentDrawerIndex >= 0 && state.currentDrawerIndex < state.currentFilteredList.length - 1) {
+          const nextIdx = state.currentDrawerIndex + 1;
+          const nextPr = state.currentFilteredList[nextIdx];
+          if (nextPr) {
+            state.selectedIndex = nextIdx;
+            updateRowHighlight();
+            openDrawer(nextPr, nextIdx + 1);
+          }
+        }
+      });
+    }
+
+    if (els.btnCopyCli) {
+      els.btnCopyCli.addEventListener("click", () => {
+        if (!state.selectedPR) return;
+        const cmd = `gh pr checkout ${state.selectedPR.number}`;
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(cmd).then(() => {
+            if (els.btnCopyCliText) els.btnCopyCliText.textContent = "✓ Copied";
+            showToast(`Copied: ${cmd}`);
+            setTimeout(() => {
+              if (els.btnCopyCliText) els.btnCopyCliText.textContent = "Copy";
+            }, 1800);
+          }).catch(() => {
+            showToast(`Command: ${cmd}`);
+          });
+        } else {
+          showToast(`Command: ${cmd}`);
+        }
+      });
+    }
+
+    // Shortcuts Modal Controls
+    if (els.btnShortcutsModal) {
+      els.btnShortcutsModal.addEventListener("click", openShortcutsModal);
+    }
+    if (els.shortcutsModalClose) {
+      els.shortcutsModalClose.addEventListener("click", closeShortcutsModal);
+    }
+    if (els.btnShortcutsClose) {
+      els.btnShortcutsClose.addEventListener("click", closeShortcutsModal);
+    }
+    if (els.shortcutsBackdrop) {
+      els.shortcutsBackdrop.addEventListener("click", closeShortcutsModal);
+    }
+
     // QuickLook Drawer
     els.drawerClose.addEventListener("click", closeDrawer);
     els.drawerBackdrop.addEventListener("click", closeDrawer);
 
-    // Keyboard Shortcuts (Apple HIG)
+    // Keyboard Shortcuts (Apple HIG Power Triage)
     document.addEventListener("keydown", (e) => {
       // Cmd+K Spotlight
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
@@ -1651,14 +1991,23 @@
       if (e.key === "Escape") {
         closeDrawer();
         closeSpotlight();
+        closeShortcutsModal();
         els.tokenModal.hidden = true;
         els.weightsModal.hidden = true;
         if (els.filterRepoHint) els.filterRepoHint.hidden = true;
         return;
       }
 
-      // If active typing in input, skip shortcut handling
+      // If active typing in input or textarea, skip shortcut handling
       if (["INPUT", "TEXTAREA"].includes(document.activeElement.tagName)) {
+        return;
+      }
+
+      // Toggle shortcuts sheet with ?
+      if (e.key === "?") {
+        e.preventDefault();
+        if (els.shortcutsModal && !els.shortcutsModal.hidden) closeShortcutsModal();
+        else openShortcutsModal();
         return;
       }
 
@@ -1676,6 +2025,88 @@
         const idx = parseInt(e.key, 10) - 1;
         if (els.segButtons[idx]) els.segButtons[idx].click();
         return;
+      }
+
+      // Drawer navigation when drawer is open
+      const drawerIsOpen = els.drawer.classList.contains("open");
+      if (drawerIsOpen) {
+        if (e.key === "ArrowRight" || e.key.toLowerCase() === "n") {
+          e.preventDefault();
+          if (els.drawerNext && !els.drawerNext.disabled) els.drawerNext.click();
+          return;
+        }
+        if (e.key === "ArrowLeft" || e.key.toLowerCase() === "p") {
+          e.preventDefault();
+          if (els.drawerPrev && !els.drawerPrev.disabled) els.drawerPrev.click();
+          return;
+        }
+        if (e.key.toLowerCase() === "v" || e.key.toLowerCase() === "g") {
+          if (state.selectedPR && state.selectedPR.url) {
+            window.open(state.selectedPR.url, "_blank");
+          }
+          return;
+        }
+        if (e.key.toLowerCase() === "c") {
+          if (state.selectedPR && els.btnCopyCli) {
+            els.btnCopyCli.click();
+          }
+          return;
+        }
+        return;
+      }
+
+      // Queue triage shortcuts when drawer is closed and dashboard is visible
+      if (!els.dashboardView.hidden && state.currentFilteredList && state.currentFilteredList.length > 0) {
+        // j or ArrowDown -> next row
+        if (e.key.toLowerCase() === "j" || e.key === "ArrowDown") {
+          e.preventDefault();
+          state.selectedIndex = Math.min(state.currentFilteredList.length - 1, state.selectedIndex + 1);
+          updateRowHighlight();
+          return;
+        }
+
+        // k or ArrowUp -> prev row
+        if (e.key.toLowerCase() === "k" || e.key === "ArrowUp") {
+          e.preventDefault();
+          state.selectedIndex = Math.max(0, state.selectedIndex - 1);
+          updateRowHighlight();
+          return;
+        }
+
+        // Enter or Space or o -> inspect selected row
+        if (e.key === "Enter" || e.key === " " || e.key.toLowerCase() === "o") {
+          if (state.selectedIndex >= 0 && state.selectedIndex < state.currentFilteredList.length) {
+            e.preventDefault();
+            const pr = state.currentFilteredList[state.selectedIndex];
+            openDrawer(pr, state.selectedIndex + 1);
+          }
+          return;
+        }
+
+        // v or g -> open selected PR on GitHub
+        if (e.key.toLowerCase() === "v" || e.key.toLowerCase() === "g") {
+          if (state.selectedIndex >= 0 && state.selectedIndex < state.currentFilteredList.length) {
+            e.preventDefault();
+            const pr = state.currentFilteredList[state.selectedIndex];
+            if (pr && pr.url) window.open(pr.url, "_blank");
+          }
+          return;
+        }
+
+        // c -> copy gh pr checkout
+        if (e.key.toLowerCase() === "c") {
+          if (state.selectedIndex >= 0 && state.selectedIndex < state.currentFilteredList.length) {
+            e.preventDefault();
+            const pr = state.currentFilteredList[state.selectedIndex];
+            const cmd = `gh pr checkout ${pr.number}`;
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+              navigator.clipboard.writeText(cmd).then(() => {
+                showToast(`Copied: ${cmd}`);
+              });
+            }
+          }
+          return;
+        }
       }
     });
 

@@ -19,7 +19,7 @@
       if (t === "light" || t === "dark") document.documentElement.dataset.theme = t;
     } catch (e) {}
   </script>
-  <link rel="stylesheet" href="./app.css?v=144ff27022" />
+  <link rel="stylesheet" href="./app.css?v=0cc2a9c6dd" />
 </head>
 <body>
   <!-- Apple-Style Translucent Frosted Navigation Bar -->
@@ -80,6 +80,14 @@
         <button type="button" class="icon-control" id="btn-weights-modal" title="Tuning & Weights" aria-label="Scoring Weights">
           <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round">
             <path d="M2.5 4h11M5 2v4M2.5 12h11M11 10v4M2.5 8h11M8 6v4"/>
+          </svg>
+        </button>
+
+        <!-- Keyboard Shortcuts Trigger (?) -->
+        <button type="button" class="icon-control" id="btn-shortcuts-modal" title="Keyboard Shortcuts (?)" aria-label="Keyboard Shortcuts">
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round">
+            <rect x="2" y="3.5" width="12" height="9" rx="1.5"/>
+            <path d="M4.5 6.5h.01M7 6.5h.01M9.5 6.5h.01M12 6.5h.01M5 9.5h6"/>
           </svg>
         </button>
 
@@ -266,6 +274,10 @@
                 <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="2" y="3" width="12" height="10" rx="1.5"/><path d="M5 10V6l2 2.5L9 6v4M12 9l-1.5 1.5M10.5 7.5L12 9"/></svg>
                 Copy Markdown Table
               </button>
+              <button type="button" data-export="full-report">
+                <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M4 2.5h8a1.5 1.5 0 0 1 1.5 1.5v9a1.5 1.5 0 0 1-1.5 1.5H4a1.5 1.5 0 0 1-1.5-1.5V4A1.5 1.5 0 0 1 4 2.5z"/><path d="M6 6h4M6 9h4M6 12h2"/></svg>
+                Full Triage Report (Markdown)
+              </button>
               <button type="button" data-export="csv">
                 <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M3 3h10v10H3zM3 6.5h10M3 10h10M7 3v10"/></svg>
                 Download CSV Spreadsheet
@@ -351,11 +363,14 @@
           <div class="sort-picker">
             <label for="sort-select">Sort:</label>
             <select id="sort-select" class="apple-select">
-              <option value="score">Score (High → Low)</option>
+              <option value="score">Review Priority (Score High → Low)</option>
+              <option value="comments-desc">Most Discussed (💬 High → Low)</option>
+              <option value="comments-asc">Unattended (💬 Low → High)</option>
               <option value="size-asc">Smallest Churn (Quick Wins)</option>
               <option value="size-desc">Largest Churn</option>
               <option value="updated">Recently Updated</option>
-              <option value="created">Oldest First</option>
+              <option value="created-asc">Stale First (Oldest Created)</option>
+              <option value="created-desc">Newest Created First</option>
             </select>
           </div>
         </div>
@@ -427,6 +442,15 @@
           <span class="drawer-pr-author" id="d-pr-author">by @author</span>
         </div>
         <div class="drawer-header-actions">
+          <div class="drawer-stepper">
+            <button type="button" class="icon-control" id="drawer-prev" title="Previous PR (k or ←)" aria-label="Previous PR">
+              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 12l-4-4 4-4"/></svg>
+            </button>
+            <span class="drawer-stepper-pos" id="drawer-pos">-- / --</span>
+            <button type="button" class="icon-control" id="drawer-next" title="Next PR (j or →)" aria-label="Next PR">
+              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 4l4 4-4 4"/></svg>
+            </button>
+          </div>
           <a id="d-github-link" href="#" target="_blank" rel="noopener" class="apple-btn apple-btn-secondary btn-sm" title="Open on GitHub">
             <span>GitHub ↗</span>
           </a>
@@ -456,6 +480,18 @@
             <p class="ring-rank" id="d-score-rank">Rank #-- in review queue</p>
             <p class="ring-verdict" id="d-score-verdict">Calculated across 5 code-aware dimensions.</p>
           </div>
+        </div>
+
+        <!-- Git CLI Local Checkout Banner -->
+        <div class="cli-checkout-banner">
+          <div class="cli-checkout-left">
+            <span class="cli-checkout-tag">gh CLI</span>
+            <code class="cli-checkout-cmd" id="d-cli-cmd">gh pr checkout 123</code>
+          </div>
+          <button type="button" class="apple-btn apple-btn-secondary btn-sm" id="btn-copy-cli" title="Copy gh pr checkout command">
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" style="width:13px;height:13px;margin-right:4px;"><rect x="4" y="4" width="9" height="9" rx="1.5"/><path d="M3 11V3a1.5 1.5 0 0 1 1.5-1.5h8"/></svg>
+            <span id="btn-copy-cli-text">Copy</span>
+          </button>
         </div>
 
         <!-- 5-Factor Gauge Breakdown -->
@@ -681,6 +717,85 @@
     </div>
   </div>
 
+  <!-- ═════════════════════════════════════════════════════════════════════════
+       8. KEYBOARD SHORTCUTS MODAL (APPLE HIG)
+  ══════════════════════════════════════════════════════════════════════════ -->
+  <div class="apple-modal" id="shortcuts-modal" hidden>
+    <div class="modal-scrim" id="shortcuts-backdrop"></div>
+    <div class="modal-sheet modal-sheet-wide">
+      <div class="modal-top">
+        <h3 class="modal-heading">Keyboard Shortcuts</h3>
+        <button type="button" class="modal-x" id="shortcuts-modal-close" aria-label="Close">✕</button>
+      </div>
+      <div class="modal-scroll-body">
+        <p class="modal-paragraph">
+          Triage your backlog at lightning speed with Apple-style keyboard navigation.
+        </p>
+
+        <div class="shortcuts-grid">
+          <div class="shortcuts-section">
+            <h4 class="shortcuts-section-title">Queue Navigation</h4>
+            <div class="shortcut-item">
+              <span class="shortcut-desc">Next Pull Request</span>
+              <div class="shortcut-keys"><kbd>j</kbd> <span>or</span> <kbd>↓</kbd></div>
+            </div>
+            <div class="shortcut-item">
+              <span class="shortcut-desc">Previous Pull Request</span>
+              <div class="shortcut-keys"><kbd>k</kbd> <span>or</span> <kbd>↑</kbd></div>
+            </div>
+            <div class="shortcut-item">
+              <span class="shortcut-desc">Inspect in Drawer</span>
+              <div class="shortcut-keys"><kbd>↵ Enter</kbd> <span>or</span> <kbd>Space</kbd></div>
+            </div>
+            <div class="shortcut-item">
+              <span class="shortcut-desc">Open on GitHub</span>
+              <div class="shortcut-keys"><kbd>v</kbd> <span>or</span> <kbd>g</kbd></div>
+            </div>
+            <div class="shortcut-item">
+              <span class="shortcut-desc">Copy <code>gh pr checkout</code></span>
+              <div class="shortcut-keys"><kbd>c</kbd></div>
+            </div>
+          </div>
+
+          <div class="shortcuts-section">
+            <h4 class="shortcuts-section-title">Drawer & Global Controls</h4>
+            <div class="shortcut-item">
+              <span class="shortcut-desc">Step Next PR in Drawer</span>
+              <div class="shortcut-keys"><kbd>→</kbd> <span>or</span> <kbd>n</kbd></div>
+            </div>
+            <div class="shortcut-item">
+              <span class="shortcut-desc">Step Prev PR in Drawer</span>
+              <div class="shortcut-keys"><kbd>←</kbd> <span>or</span> <kbd>p</kbd></div>
+            </div>
+            <div class="shortcut-item">
+              <span class="shortcut-desc">Switch Tabs (Active / All / Ready / Blocked)</span>
+              <div class="shortcut-keys"><kbd>1</kbd> <kbd>2</kbd> <kbd>3</kbd> <kbd>4</kbd></div>
+            </div>
+            <div class="shortcut-item">
+              <span class="shortcut-desc">Spotlight Repo Switcher</span>
+              <div class="shortcut-keys"><kbd>⌘</kbd><kbd>K</kbd></div>
+            </div>
+            <div class="shortcut-item">
+              <span class="shortcut-desc">Focus Search & Filter</span>
+              <div class="shortcut-keys"><kbd>/</kbd></div>
+            </div>
+            <div class="shortcut-item">
+              <span class="shortcut-desc">Close Drawer / Modals</span>
+              <div class="shortcut-keys"><kbd>esc</kbd></div>
+            </div>
+            <div class="shortcut-item">
+              <span class="shortcut-desc">Toggle Shortcuts Sheet</span>
+              <div class="shortcut-keys"><kbd>?</kbd></div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="modal-bottom-bar">
+        <button type="button" class="apple-btn apple-btn-primary" id="btn-shortcuts-close">Got It</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Apple Pill Toast Container -->
   <div class="apple-toast-shelf" id="toast-container" aria-live="polite"></div>
 
@@ -699,6 +814,6 @@
     </div>
   </footer>
 
-  <script src="./app.js?v=144ff27022"></script>
+  <script src="./app.js?v=0cc2a9c6dd"></script>
 </body>
 </html>
