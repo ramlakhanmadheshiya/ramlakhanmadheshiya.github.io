@@ -4,7 +4,7 @@
 // Incrementing CACHE_VERSION will kick off the install event and force
 // previously cached resources to be updated from the network.
 /** @type {string} */
-const CACHE_VERSION = '1794744465|4103568';
+const CACHE_VERSION = '1794745841|3283422';
 /** @type {string} */
 const CACHE_PREFIX = 'PayTrack-sw-cache-';
 const CACHE_NAME = CACHE_PREFIX + CACHE_VERSION;
