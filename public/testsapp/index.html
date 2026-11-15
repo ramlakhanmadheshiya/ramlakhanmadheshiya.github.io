@@ -15,12 +15,13 @@
   .lead { color: var(--text2); margin: 0 0 28px; }
   .card { background: var(--card); border-radius: 20px; padding: 20px; margin-bottom: 16px; }
   .head { display: flex; gap: 16px; align-items: center; }
+  .head > div { min-width: 0; }
   .head img { width: 72px; height: 72px; border-radius: 17px; box-shadow: 0 1px 3px rgba(0,0,0,.12); }
   .name { font-size: 22px; font-weight: 700; margin: 0; }
   .meta { color: var(--text2); font-size: 15px; margin: 2px 0 0; }
   .desc { margin: 16px 0; color: #3a3a3f; }
   .buttons { display: flex; flex-wrap: wrap; gap: 10px; }
-  .btn { flex: 1 1 200px; display: flex; align-items: center; justify-content: center; gap: 8px; min-height: 50px; border-radius: 13px; font-weight: 600; text-decoration: none; }
+  .btn { flex: 1 1 180px; min-width: 0; text-align: center; padding: 0 12px; display: flex; align-items: center; justify-content: center; gap: 8px; min-height: 50px; border-radius: 13px; font-weight: 600; text-decoration: none; }
   .primary { background: var(--accent); color: #fff; }
   .secondary { background: var(--accent-soft); color: var(--accent); }
   details { border-top: 1px solid var(--line); margin-top: 18px; padding-top: 12px; }
@@ -47,7 +48,7 @@
     <p class="desc">Labour payroll for mill contractors: daily kharchi, advances, jama, families and monthly hisab. English and Hindi.</p>
     <div class="buttons">
       <a class="btn primary" href="paytrack/PayTrack.apk" download>⬇ Download APK</a>
-      <a class="btn secondary" href="/paytrack/">Open web app (iPad, computer)</a>
+      <a class="btn secondary" href="/paytrack/">Open web app</a>
     </div>
     <details>
       <summary>How to install or update on Android</summary>
