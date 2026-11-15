@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Test apps</title>
+<meta name="theme-color" content="#F2F2F7">
+<style>
+  :root { --bg:#F2F2F7; --card:#fff; --text:#1C1C1E; --text2:#6C6C72; --line:#E4E4EA; --accent:#1D4FB8; --accent-soft:#E9EFFB; --green:#16803C; }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--text); font:17px/1.45 -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", Roboto, sans-serif; }
+  main { max-width: 640px; margin: 0 auto; padding: 40px 16px 60px; }
+  h1 { font-size: 34px; margin: 0 0 4px; letter-spacing: -0.02em; }
+  .lead { color: var(--text2); margin: 0 0 28px; }
+  .card { background: var(--card); border-radius: 20px; padding: 20px; margin-bottom: 16px; }
+  .head { display: flex; gap: 16px; align-items: center; }
+  .head img { width: 72px; height: 72px; border-radius: 17px; box-shadow: 0 1px 3px rgba(0,0,0,.12); }
+  .name { font-size: 22px; font-weight: 700; margin: 0; }
+  .meta { color: var(--text2); font-size: 15px; margin: 2px 0 0; }
+  .desc { margin: 16px 0; color: #3a3a3f; }
+  .buttons { display: flex; flex-wrap: wrap; gap: 10px; }
+  .btn { flex: 1 1 200px; display: flex; align-items: center; justify-content: center; gap: 8px; min-height: 50px; border-radius: 13px; font-weight: 600; text-decoration: none; }
+  .primary { background: var(--accent); color: #fff; }
+  .secondary { background: var(--accent-soft); color: var(--accent); }
+  details { border-top: 1px solid var(--line); margin-top: 18px; padding-top: 12px; }
+  summary { cursor: pointer; font-weight: 600; color: var(--accent); list-style: none; }
+  summary::-webkit-details-marker { display: none; }
+  ol { padding-left: 20px; margin: 10px 0 0; color: #3a3a3f; }
+  li { margin: 6px 0; }
+  .note { font-size: 14px; color: var(--text2); }
+</style>
+</head>
+<body>
+<main>
+  <h1>Test apps</h1>
+  <p class="lead">Download and install directly on any Android phone. Installing a newer version updates the app and keeps its data.</p>
+
+  <section class="card" id="paytrack">
+    <div class="head">
+      <img src="paytrack/icon.png" alt="">
+      <div>
+        <p class="name">PayTrack</p>
+        <p class="meta" id="pt-meta">Android · loading version…</p>
+      </div>
+    </div>
+    <p class="desc">Labour payroll for mill contractors: daily kharchi, advances, jama, families and monthly hisab. English and Hindi.</p>
+    <div class="buttons">
+      <a class="btn primary" href="paytrack/PayTrack.apk" download>⬇ Download APK</a>
+      <a class="btn secondary" href="/paytrack/">Open web app (iPad, computer)</a>
+    </div>
+    <details>
+      <summary>How to install or update on Android</summary>
+      <ol>
+        <li>Tap <b>Download APK</b> and open the downloaded file.</li>
+        <li>If asked, allow your browser to <b>install unknown apps</b>, then tap <b>Install</b> (or <b>Update</b>).</li>
+        <li>For a new version, download again and install over the old one. Your data stays.</li>
+      </ol>
+      <p class="note">Do not uninstall to update. Export a backup from More › Export backup now and then.</p>
+    </details>
+    <details>
+      <summary>How to use on iPad (free)</summary>
+      <ol>
+        <li>Open <b>theramlakhan.com/paytrack</b> in Safari.</li>
+        <li>Tap <b>Share</b>, then <b>Add to Home Screen</b>.</li>
+        <li>Always open PayTrack from that icon. It works without internet.</li>
+      </ol>
+    </details>
+  </section>
+</main>
+<script>
+  fetch("paytrack/version.json", {cache: "no-store"}).then(r => r.json()).then(v => {
+    document.getElementById("pt-meta").textContent = "Android · version " + v.version + " · " + v.size_mb + " MB · " + v.date;
+  }).catch(() => { document.getElementById("pt-meta").textContent = "Android"; });
+</script>
+</body>
+</html>
