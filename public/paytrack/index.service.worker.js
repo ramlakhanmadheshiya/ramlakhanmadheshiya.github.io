@@ -4,7 +4,7 @@
 // Incrementing CACHE_VERSION will kick off the install event and force
 // previously cached resources to be updated from the network.
 /** @type {string} */
-const CACHE_VERSION = '1794843827|3585310';
+const CACHE_VERSION = '1794845641|3389836';
 /** @type {string} */
 const CACHE_PREFIX = 'PayTrack-sw-cache-';
 const CACHE_NAME = CACHE_PREFIX + CACHE_VERSION;
@@ -14,10 +14,10 @@ const OFFLINE_URL = 'index.offline.html';
 const ENSURE_CROSSORIGIN_ISOLATION_HEADERS = false;
 // Files that will be cached on load.
 /** @type {string[]} */
-const CACHED_FILES = ["index.html","index.js","index.offline.html","index.icon.png","index.apple-touch-icon.png","index.audio.worklet.js","index.audio.position.worklet.js"];
+const CACHED_FILES = ["index.html","index.js","index.offline.html","index.icon.png","index.apple-touch-icon.png","engine-778dae2620.audio.worklet.js","engine-778dae2620.audio.position.worklet.js"];
 // Files that we might not want the user to preload, and will only be cached on first load.
 /** @type {string[]} */
-const CACHEABLE_FILES = ["index.wasm","index.pck"];
+const CACHEABLE_FILES = ["engine-778dae2620.wasm","index.pck"];
 const FULL_CACHE = CACHED_FILES.concat(CACHEABLE_FILES);
 
 self.addEventListener('install', (event) => {
@@ -26,7 +26,8 @@ self.addEventListener('install', (event) => {
 
 self.addEventListener('activate', (event) => {
 	event.waitUntil(caches.keys().then(
-		function (keys) {
+		async function (keys) {
+			await ptKeepEngine(keys);
 			// Remove old caches.
 			return Promise.all(keys.filter((key) => key.startsWith(CACHE_PREFIX) && key !== CACHE_NAME).map((key) => caches.delete(key)));
 		}
@@ -164,3 +165,30 @@ self.addEventListener('message', (event) => {
 	});
 });
 
+
+
+// PayTrack: before old caches are removed, keep the engine files that this
+// version uses too (same engine-<hash> name = same content), so an update
+// downloads only the app.
+async function ptKeepEngine(keys) {
+	try {
+		const cache = await caches.open(CACHE_NAME);
+		for (const key of keys) {
+			if (!key.startsWith(CACHE_PREFIX) || key === CACHE_NAME) {
+				continue;
+			}
+			const old = await caches.open(key);
+			for (const req of await old.keys()) {
+				const name = req.url.slice(req.url.lastIndexOf('/') + 1);
+				if (name.startsWith('engine-') && FULL_CACHE.includes(name) && !(await cache.match(req))) {
+					const res = await old.match(req);
+					if (res) {
+						await cache.put(req, res);
+					}
+				}
+			}
+		}
+	} catch (e) {
+		console.warn('PayTrack: could not keep the engine cache', e); // eslint-disable-line no-console
+	}
+}
