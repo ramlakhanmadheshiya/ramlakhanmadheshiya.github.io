@@ -4,7 +4,7 @@
 // Incrementing CACHE_VERSION will kick off the install event and force
 // previously cached resources to be updated from the network.
 /** @type {string} */
-const CACHE_VERSION = '1794845641|3389836';
+const CACHE_VERSION = '1794846701|3647902';
 /** @type {string} */
 const CACHE_PREFIX = 'PayTrack-sw-cache-';
 const CACHE_NAME = CACHE_PREFIX + CACHE_VERSION;
@@ -14,10 +14,10 @@ const OFFLINE_URL = 'index.offline.html';
 const ENSURE_CROSSORIGIN_ISOLATION_HEADERS = false;
 // Files that will be cached on load.
 /** @type {string[]} */
-const CACHED_FILES = ["index.html","index.js","index.offline.html","index.icon.png","index.apple-touch-icon.png","engine-778dae2620.audio.worklet.js","engine-778dae2620.audio.position.worklet.js"];
+const CACHED_FILES = ["index.html","engine-1cb7ce09b3.js","index.offline.html","index.icon.png","index.apple-touch-icon.png","engine-1cb7ce09b3.audio.worklet.js","engine-1cb7ce09b3.audio.position.worklet.js"];
 // Files that we might not want the user to preload, and will only be cached on first load.
 /** @type {string[]} */
-const CACHEABLE_FILES = ["engine-778dae2620.wasm","index.pck"];
+const CACHEABLE_FILES = ["engine-1cb7ce09b3.wasm","index.pck"];
 const FULL_CACHE = CACHED_FILES.concat(CACHEABLE_FILES);
 
 self.addEventListener('install', (event) => {
