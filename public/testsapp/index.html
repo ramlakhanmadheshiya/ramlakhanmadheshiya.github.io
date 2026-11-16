@@ -47,7 +47,7 @@
     </div>
     <p class="desc">Labour payroll for mill contractors: daily kharchi, advances, jama, families and monthly hisab. English and Hindi.</p>
     <div class="buttons">
-      <a class="btn primary" href="paytrack/PayTrack.apk" download>⬇ Download APK</a>
+      <a class="btn primary" id="pt-apk" href="paytrack/version.json" download>⬇ Download APK</a>
       <a class="btn secondary" href="/paytrack/">Open web app</a>
     </div>
     <details>
@@ -72,6 +72,8 @@
 <script>
   fetch("paytrack/version.json", {cache: "no-store"}).then(r => r.json()).then(v => {
     document.getElementById("pt-meta").textContent = "Android · version " + v.version + " · " + v.size_mb + " MB · " + v.date;
+    // The file name has the version in it, so the download is always this version.
+    document.getElementById("pt-apk").href = "paytrack/" + (v.apk || "PayTrack.apk");
   }).catch(() => { document.getElementById("pt-meta").textContent = "Android"; });
 </script>
 </body>
