@@ -64,7 +64,7 @@ export const openSource: Project[] = [
 		year: '2026',
 		blurb: 'Production numerical solvers for ODEs, DDEs and DAEs in Julia. Authored merged fixes to DelayDiffEq\'s MethodOfSteps: lag initialization, sign validation, and interpolation method dispatch.',
 		tags: ['Julia', 'Numerical Solvers', 'SciML', 'DDE'],
-		status: 'Merged Upstream',
+		status: 'Upstream Contributor',
 		featured: true,
 		links: [
 			{ label: 'Repository', href: 'https://github.com/SciML/OrdinaryDiffEq.jl' },
@@ -77,10 +77,10 @@ export const openSource: Project[] = [
 		year: '2024',
 		blurb: 'Portable Python dataframe engine for analytics across 20+ SQL backends. Merged UX contribution making complex multi-level documentation navigation menus scrollable and responsive.',
 		tags: ['Python', 'Dataframe', 'Documentation', 'UX'],
-		status: 'Merged Upstream',
+		status: 'Upstream Contributor',
 		featured: false,
 		links: [
-			{ label: 'Pull Request #10090', href: 'https://github.com/ibis-project/ibis/pull/10090' }
+			{ label: 'PR #10090', href: 'https://github.com/ibis-project/ibis/pull/10090' }
 		],
 	},
 ];
@@ -108,18 +108,6 @@ export const webApps: Project[] = [
 		links: [
 			{ label: 'Launch App', href: '/ghtrack/' },
 			gh('ghtrack')
-		]
-	},
-	{
-		name: 'ghpr',
-		year: '2026',
-		blurb: 'GitHub PR triage and health dashboard for open-source maintainers. Tracks 14 health and priority signals — merge conflicts, CI checks, line churn, test ratio, and author history — to categorize pull requests into actionable queues.',
-		tags: ['JavaScript', 'GitHub API', 'Developer Tooling'],
-		status: 'Live Web App',
-		featured: true,
-		links: [
-			{ label: 'Launch App', href: '/ghpr/' },
-			gh('ghpr')
 		]
 	},
 	{

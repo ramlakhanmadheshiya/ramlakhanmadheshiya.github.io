@@ -47,7 +47,7 @@ const prs = (repo: string) => mergedPRs.filter((p) => p.repo === repo);
 		</nav>
 	</header>
 
-	<!-- Merged Open Source Section -->
+	<!-- Merged Open Source Section (Badge only in front of PR, not repo) -->
 	<section class="section" id="open-source" style="margin-top:0;">
 		<h2>Open source</h2>
 		<p style="color:var(--muted);margin:0.25rem 0 1.25rem;font-size:0.95rem;">
@@ -59,7 +59,6 @@ const prs = (repo: string) => mergedPRs.filter((p) => p.repo === repo);
 				<li class="post-row">
 					<div style="display:flex;justify-content:space-between;align-items:baseline;gap:1rem;">
 						<h3>{p.name}</h3>
-						<span class="badge-merged">merged</span>
 					</div>
 					<p style="margin:0.35rem 0 0.6rem;color:var(--ink-secondary);">{p.blurb}</p>
 					<div class="tags">
@@ -68,9 +67,9 @@ const prs = (repo: string) => mergedPRs.filter((p) => p.repo === repo);
 					<div style="margin-top:0.75rem;">
 						{prs(p.name.replace(' / ', '/')).map((pr) => (
 							<div class="pr-row">
-								<span class="num">#{pr.number}</span>
-								<a href={pr.url} target="_blank" rel="noopener noreferrer">{pr.title}</a>
 								<span class="badge-merged">merged</span>
+								<a href={pr.url} target="_blank" rel="noopener noreferrer">#{pr.number}: {pr.title}</a>
+								<span class="num">{pr.repo}</span>
 							</div>
 						))}
 					</div>

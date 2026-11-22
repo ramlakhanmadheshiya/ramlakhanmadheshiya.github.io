@@ -9,8 +9,8 @@ const mergedPRs = pullRequests.filter((pr) => pr.state === 'merged');
 
 const highlights = [
 	{
-		title: 'Security tool for NTRO',
-		meta: 'SDE Intern · National Technical Research Organisation · 2025',
+		title: 'Security Compliance Suite',
+		meta: 'SDE Intern · National Technical Research Organisation (NTRO) · 2025',
 		blurb: 'Designed and built a security compliance tool, onsite, that supports internal hardening and audit operations. Architecture details confidential under NDA.',
 		links: [{ label: 'CV Details', href: '/cv/' }],
 	},
@@ -30,12 +30,12 @@ const highlights = [
 		],
 	},
 	{
-		title: 'ghtrack & ghpr',
+		title: 'ghtrack',
 		meta: 'Developer tooling · JavaScript, GitHub API, IndexedDB · 2026',
-		blurb: 'Client-side GitHub developer tools: lifetime activity analysis across PRs, issues, and reviews in ~2 seconds, and automated PR health triage with 14 priority signals.',
+		blurb: 'Client-side GitHub lifetime activity analyzer: exact counts of pull requests, issues, reviews, and comments in ~2 seconds for accounts with 48,000+ items without tokens or sign-in.',
 		links: [
-			{ label: 'ghtrack', href: '/ghtrack/' },
-			{ label: 'ghpr', href: '/ghpr/' }
+			{ label: 'Live App', href: '/ghtrack/' },
+			{ label: 'GitHub', href: 'https://github.com/ramlakhanmadheshiya/ghtrack' }
 		],
 	},
 ];
@@ -43,7 +43,7 @@ const highlights = [
 const ext = (href: string) => /^https?:/.test(href);
 ---
 <Base index={false}>
-	<!-- Minimal Hero -->
+	<!-- Fresh Minimal Hero -->
 	<section class="hero">
 		<span class="eyebrow">Software engineer · Gujarat, India</span>
 		<h1>Ramlakhan Madheshiya</h1>
@@ -63,7 +63,7 @@ const ext = (href: string) => /^https?:/.test(href);
 		</div>
 	</section>
 
-	<!-- Highlights (Numbered 01, 02, 03, 04) -->
+	<!-- Highlights (Clean Numbered List) -->
 	<section class="section">
 		<div class="section-head">
 			<h2>Highlights</h2>
@@ -90,7 +90,7 @@ const ext = (href: string) => /^https?:/.test(href);
 		</ol>
 	</section>
 
-	<!-- Merged Open Source Contributions Only -->
+	<!-- Merged Open Source Contributions (Badge only in front of the PR, not the repo) -->
 	<section class="section">
 		<div class="section-head">
 			<h2>Open source</h2>
@@ -100,15 +100,14 @@ const ext = (href: string) => /^https?:/.test(href);
 			<li class="post-row">
 				<h3>
 					<a href="https://github.com/SciML/OrdinaryDiffEq.jl" target="_blank" rel="noopener noreferrer">SciML / OrdinaryDiffEq.jl</a>
-					<span class="badge-merged">merged</span>
 				</h3>
 				<p>Production Julia differential equation solvers: lag handling, zero-lag step bound preservation, and interpolation dispatch order.</p>
-				<div style="margin-top:0.6rem;font-size:0.9rem;">
-					{mergedPRs.filter((p) => p.repo.includes('OrdinaryDiffEq')).map((pr, idx, arr) => (
-						<>
+				<div class="pr-list-block" style="margin-top:0.75rem;display:grid;gap:0.4rem;">
+					{mergedPRs.filter((p) => p.repo.includes('OrdinaryDiffEq')).map((pr) => (
+						<div style="font-size:0.92rem;display:flex;align-items:baseline;gap:0.5rem;flex-wrap:wrap;">
+							<span class="badge-merged">merged</span>
 							<a href={pr.url} target="_blank" rel="noopener noreferrer">#{pr.number}: {pr.title}</a>
-							{idx < arr.length - 1 ? ' · ' : ''}
-						</>
+						</div>
 					))}
 				</div>
 			</li>
@@ -116,12 +115,14 @@ const ext = (href: string) => /^https?:/.test(href);
 			<li class="post-row">
 				<h3>
 					<a href="https://github.com/ibis-project/ibis" target="_blank" rel="noopener noreferrer">ibis-project / ibis</a>
-					<span class="badge-merged">merged</span>
 				</h3>
 				<p>Portable Python dataframe engine: resolved deep documentation accessibility with scrollable navigation menus.</p>
-				<div style="margin-top:0.6rem;font-size:0.9rem;">
+				<div class="pr-list-block" style="margin-top:0.75rem;display:grid;gap:0.4rem;">
 					{mergedPRs.filter((p) => p.repo.includes('ibis')).map((pr) => (
-						<a href={pr.url} target="_blank" rel="noopener noreferrer">#{pr.number}: {pr.title}</a>
+						<div style="font-size:0.92rem;display:flex;align-items:baseline;gap:0.5rem;flex-wrap:wrap;">
+							<span class="badge-merged">merged</span>
+							<a href={pr.url} target="_blank" rel="noopener noreferrer">#{pr.number}: {pr.title}</a>
+						</div>
 					))}
 				</div>
 			</li>
@@ -148,7 +149,7 @@ const ext = (href: string) => /^https?:/.test(href);
 	)}
 
 	<!-- Outside Work -->
-	<section class="section" style="margin-top:4rem;">
+	<section class="section" style="margin-top:4.5rem;">
 		<h2>Outside work</h2>
 		<p style="margin-top:0.5rem;max-width:var(--measure);color:var(--muted);">
 			In my spare time I make small puzzle games with Godot 4, exploring procedural mechanics and level validation algorithms.
