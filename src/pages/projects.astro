@@ -3,73 +3,185 @@ import Base from '../layouts/Base.astro';
 import { openSource, games, webApps, security, research, pullRequests, issues } from '../data/projects';
 import type { Project } from '../data/projects';
 
+const mergedPRs = pullRequests.filter((p) => p.state === 'merged');
+
 const groups: { id: string; title: string; desc: string; items: Project[] }[] = [
-	{ id: 'games', title: 'Games', desc: 'Puzzle and arcade games made with Godot 4 for Android and the web, published under Brainnova Studio. Levels are generated and verified by solvers and tests.', items: games },
-	{ id: 'web', title: 'Web apps & tools', desc: 'Offline-first apps and the sites that run them.', items: webApps },
-	{ id: 'security', title: 'Security & systems', desc: 'Tooling built for compliance and hardening work.', items: security },
-	{ id: 'research', title: 'Research', desc: '', items: research },
+	{
+		id: 'web',
+		title: 'Web Applications & Developer Tools',
+		desc: 'High-speed, offline-first client-side web applications and developer tools built with zero server dependencies.',
+		items: webApps,
+	},
+	{
+		id: 'security',
+		title: 'Security, Systems & Compliance',
+		desc: 'System-level utilities and automation tools built for security hardening, CIS benchmarks, and compliance audits.',
+		items: security,
+	},
+	{
+		id: 'research',
+		title: 'Research & Publications',
+		desc: 'Analytical research papers and manuscripts exploring vulnerability structures and defensive systems.',
+		items: research,
+	},
+	{
+		id: 'games',
+		title: 'Game Development & Algorithms',
+		desc: 'Algorithmic puzzle and arcade games made with Godot 4 for Android and Web. Every puzzle level is generated and checked by automated solvers.',
+		items: games,
+	},
 ];
-const slug = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
-const prs = (repo: string) => pullRequests.filter((p) => p.repo === repo);
 ---
-<Base title="Projects" description="Open-source contributions, games, web apps, security tooling and research by Ramlakhan Madheshiya.">
-	<header class="page-head">
-		<p class="eyebrow" data-pagefind-ignore>Projects</p>
-		<h1>Projects</h1>
-		<p class="lede">Open-source contributions, games, web apps, security tooling and research.</p>
-		<nav class="toc" data-pagefind-ignore aria-label="On this page">
-			<a href="#open-source">Open source</a>
-			{groups.map((g) => <a href={`#${g.id}`}>{g.title}</a>)}
-		</nav>
+<Base title="Projects" description="Open-source contributions, developer tools, offline-first web apps, security tooling and games by Ramlakhan Madheshiya.">
+	<header class="section-head" style="margin-bottom:2rem;border-bottom:none;padding-bottom:0;">
+		<div class="section-title">
+			<span class="eyebrow">Portfolio</span>
+			<h1 style="font-size:clamp(2.2rem, 5vw, 3rem);">Engineering Projects</h1>
+			<p class="lede">
+				A comprehensive collection of merged open-source contributions, offline-first web software, security tooling, and verified algorithmic games.
+			</p>
+		</div>
 	</header>
 
-	<section class="group" id="open-source" style="margin-top:0">
-		<h2>Open source</h2>
-		<p class="group-desc">Contributions to projects maintained by others. Status as of 30 October 2026.</p>
-		<ul class="rows">
+	<!-- Quick Navigation Tabs -->
+	<nav class="filter-tabs" aria-label="Project Categories">
+		<a href="#open-source" class="filter-tab">Open Source (Merged)</a>
+		<a href="#web" class="filter-tab">Web Apps & Tools</a>
+		<a href="#security" class="filter-tab">Security & Systems</a>
+		<a href="#research" class="filter-tab">Research</a>
+		<a href="#games" class="filter-tab">Games</a>
+	</nav>
+
+	<!-- Merged Open Source Section -->
+	<section class="section" id="open-source" style="margin-top:1rem;scroll-margin-top:6rem;">
+		<div class="section-head">
+			<div class="section-title">
+				<span class="eyebrow">Production Codebases</span>
+				<h2>Merged Open Source Contributions</h2>
+				<p class="section-subtitle">
+					Upstream contributions merged into leading scientific computing and data analytics ecosystems.
+				</p>
+			</div>
+		</div>
+
+		<!-- Open Source Repositories -->
+		<div class="projects-grid" style="margin-bottom:2rem;">
 			{openSource.map((p) => (
-				<li class="row">
-					<div class="row-top">
-						<h3 id={slug(p.name)}>{p.name}</h3>
-						<span class="badge">{p.status}</span>
+				<article class="project-card">
+					<div class="card-top">
+						<span class="badge-merged">✓ {p.status}</span>
+						<span class="project-year">{p.year}</span>
 					</div>
-					<p>{p.blurb}</p>
-					<div class="tags">{p.tags.map((t) => <span class="tag">{t}</span>)}</div>
-					<ul class="pr-list">
-						{prs(p.name.replace(' / ', '/')).map((pr) => (
-							<li>
-								<span class="num">#{pr.number}</span>
-								<a href={pr.url}>{pr.title}</a>
-								<span class={`badge ${pr.state}`}>{pr.state === 'merged' ? 'accepted' : 'under review'}</span>
-							</li>
+					<h3>{p.name}</h3>
+					<p class="project-desc">{p.blurb}</p>
+					<div class="tags-group">
+						{p.tags.map((t) => (
+							<span class="tag">{t}</span>
 						))}
-					</ul>
-				</li>
+					</div>
+					<div class="card-links">
+						{p.links.map((l) => (
+							<a class="card-link" href={l.href} target="_blank" rel="noopener noreferrer">
+								<span>{l.label}</span>
+								<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+									<path d="M7 17L17 7M7 7h10v10"></path>
+								</svg>
+							</a>
+						))}
+					</div>
+				</article>
 			))}
-		</ul>
-		<p class="sub-label">Issues reported</p>
-		<p style="font-size:0.93rem;margin-top:0.5rem">
-			{issues.map((l, i) => (<><a href={l.href}>{l.label}</a>{i < issues.length - 1 ? ' · ' : ''}</>))}
-		</p>
+		</div>
+
+		<!-- Individual Merged Pull Requests List -->
+		<h3 style="font-size:1.15rem;margin:2rem 0 1rem;color:var(--ink);">Merged Upstream Pull Requests</h3>
+		<div class="pr-grid">
+			{mergedPRs.map((pr) => (
+				<div class="pr-card">
+					<div class="pr-status-icon" title="Merged">
+						<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+							<polyline points="20 6 9 17 4 12"></polyline>
+						</svg>
+					</div>
+					<div class="pr-info">
+						<div class="pr-meta-row">
+							<span class="pr-repo">{pr.repo}</span>
+							<span class="pr-num">#{pr.number}</span>
+							<span class="badge-merged">✓ Merged</span>
+						</div>
+						<h4 class="pr-title" style="margin:0 0 0.35rem;">
+							<a href={pr.url} target="_blank" rel="noopener noreferrer">{pr.title}</a>
+						</h4>
+						{pr.description && <p class="pr-desc">{pr.description}</p>}
+					</div>
+					<a class="pr-action-btn" href={pr.url} target="_blank" rel="noopener noreferrer">
+						<span>View on GitHub</span>
+						<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:0.85rem;height:0.85rem;">
+							<path d="M7 17L17 7M7 7h10v10"></path>
+						</svg>
+					</a>
+				</div>
+			))}
+		</div>
+
+		<!-- Issues Reported -->
+		<div style="margin-top:2rem;padding:1.25rem;background:var(--surface);border:1px solid var(--line);border-radius:var(--radius-md);">
+			<h4 style="margin:0 0 0.5rem;font-size:0.95rem;color:var(--ink);">Issues & Solvers Diagnosed in SciML Ecosystem</h4>
+			<p style="font-size:0.9rem;color:var(--muted);margin:0 0 0.75rem;">
+				Detailed technical issue reports diagnosing edge cases in delay integration, auto-switching algorithms, and fixed-point iteration:
+			</p>
+			<div style="display:flex;flex-wrap:wrap;gap:0.5rem 1rem;font-size:0.88rem;">
+				{issues.map((l) => (
+					<a href={l.href} target="_blank" rel="noopener noreferrer" style="display:inline-flex;align-items:center;gap:0.25rem;">
+						<span>{l.label}</span>
+						<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:0.75rem;height:0.75rem;">
+							<path d="M7 17L17 7M7 7h10v10"></path>
+						</svg>
+					</a>
+				))}
+			</div>
+		</div>
 	</section>
 
-	{groups.map((g) => (
-		<section class="group" id={g.id}>
-			<h2>{g.title}</h2>
-			{g.desc && <p class="group-desc">{g.desc}</p>}
-			<ul class="rows grid">
-				{g.items.map((p) => (
-					<li class="row">
-						<div class="row-top">
-							<h3 id={slug(p.name)}>{p.name}</h3>
-							<span class="meta">{p.status ? `${p.status} · ` : ''}{p.year}</span>
+	<!-- Other Project Groups -->
+	{groups.map((group) => (
+		<section class="section" id={group.id} style="scroll-margin-top:6rem;">
+			<div class="section-head">
+				<div class="section-title">
+					<h2>{group.title}</h2>
+					{group.desc && <p class="section-subtitle">{group.desc}</p>}
+				</div>
+			</div>
+
+			<div class="projects-grid">
+				{group.items.map((project) => (
+					<article class="project-card">
+						<div class="card-top">
+							<span class="project-category">{project.status ?? 'Production'}</span>
+							<span class="project-year">{project.year}</span>
 						</div>
-						<p>{p.blurb}</p>
-						<div class="tags">{p.tags.map((t) => <span class="tag">{t}</span>)}</div>
-						{p.links.length > 0 && <div class="links" style="margin-top:0.5rem">{p.links.map((l) => <a href={l.href}>{l.label} ↗</a>)}</div>}
-					</li>
+						<h3>{project.name}</h3>
+						<p class="project-desc">{project.blurb}</p>
+						<div class="tags-group">
+							{project.tags.map((t) => (
+								<span class="tag">{t}</span>
+							))}
+						</div>
+						{project.links.length > 0 && (
+							<div class="card-links">
+								{project.links.map((link) => (
+									<a class="card-link" href={link.href} target={link.href.startsWith('http') ? '_blank' : undefined} rel={link.href.startsWith('http') ? 'noopener noreferrer' : undefined}>
+										<span>{link.label}</span>
+										<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+											<path d="M7 17L17 7M7 7h10v10"></path>
+										</svg>
+									</a>
+								))}
+							</div>
+						)}
+					</article>
 				))}
-			</ul>
+			</div>
 		</section>
 	))}
 </Base>

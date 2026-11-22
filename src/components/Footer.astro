@@ -1,32 +1,45 @@
 ---
 import { NAV, SOCIAL, SITE_TITLE, EMAIL } from '../consts';
-const year = new Date().getFullYear();
+const currentYear = new Date().getFullYear();
 ---
 <footer class="site-footer">
 	<div class="wrap">
 		<div class="footer-grid">
 			<div class="footer-about">
-				<a class="brand" href="/">{SITE_TITLE}</a>
-				<p>Software engineer and open-source contributor building dependable tools and web applications.</p>
+				<div class="footer-about-title">{SITE_TITLE}</div>
+				<p>
+					Software engineer building dependable tools, high-performance numerical algorithms, and offline-first client-side web applications.
+				</p>
 			</div>
-			<nav aria-label="Pages">
-				<h2>Pages</h2>
-				<ul>
-					{NAV.map((item) => <li><a href={item.href}>{item.label}</a></li>)}
-					<li><a href="/BrainnovaStudio/games/">Games</a></li>
+
+			<div class="footer-col">
+				<h4>Navigation</h4>
+				<ul class="footer-links-list">
+					{NAV.map((item) => (
+						<li><a href={item.href}>{item.label}</a></li>
+					))}
+					<li><a href="/BrainnovaStudio/games/">Games Hub</a></li>
+					<li><a href="/rss.xml">RSS Feed</a></li>
 				</ul>
-			</nav>
-			<nav aria-label="Elsewhere">
-				<h2>Elsewhere</h2>
-				<ul>
-					{SOCIAL.filter((s) => s.label !== 'Email').map((item) => <li><a href={item.href} rel="me noopener">{item.label}</a></li>)}
-					<li><a href={`mailto:${EMAIL}`}>Email</a></li>
+			</div>
+
+			<div class="footer-col">
+				<h4>Elsewhere</h4>
+				<ul class="footer-links-list">
+					{SOCIAL.filter((s) => s.label !== 'Email').map((item) => (
+						<li><a href={item.href} target="_blank" rel="noopener noreferrer">{item.label} ↗</a></li>
+					))}
+					<li><a href={`mailto:${EMAIL}`}>Email ↗</a></li>
 				</ul>
-			</nav>
+			</div>
 		</div>
-		<div class="footer-base">
-			<span>© {year} {SITE_TITLE}</span>
-			<span><a href="/rss.xml">RSS</a> · Built with <a href="https://astro.build">Astro</a> · <a href="https://github.com/ramlakhanmadheshiya/ramlakhanmadheshiya.github.io">Source</a></span>
+
+		<div class="footer-bottom">
+			<span>© {currentYear} {SITE_TITLE}. All rights reserved.</span>
+			<span>
+				Crafted with <a href="https://astro.build" target="_blank" rel="noopener">Astro</a> ·
+				<a href="https://github.com/ramlakhanmadheshiya/ramlakhanmadheshiya.github.io" target="_blank" rel="noopener">Source Code</a>
+			</span>
 		</div>
 	</div>
 </footer>

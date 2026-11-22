@@ -3,26 +3,62 @@ import Base from '../../layouts/Base.astro';
 import { getPosts, fmtDate, readingTime } from '../../utils';
 
 const posts = await getPosts();
-const years = [...new Set(posts.map((p) => p.data.pubDate.getUTCFullYear()))];
+const years = [...new Set(posts.map((p) => p.data.pubDate.getUTCFullYear()))].sort((a, b) => b - a);
 ---
-<Base title="Blog" description="Notes on numerical solvers, game level design and offline-first apps.">
-	<header class="page-head">
-		<p class="eyebrow" data-pagefind-ignore>Blog</p>
-		<h1>Blog</h1>
-		<p class="lede">Notes on numerical solvers, game level design and offline-first apps. <a href="/rss.xml">RSS</a></p>
+<Base title="Blog & Notes" description="Engineering articles on numerical solvers, game level design, and offline-first applications by Ramlakhan Madheshiya.">
+	<header class="section-head" style="margin-bottom:2rem;border-bottom:none;padding-bottom:0;">
+		<div class="section-title">
+			<span class="eyebrow">Writing & Insights</span>
+			<h1 style="font-size:clamp(2.2rem, 5vw, 3rem);">Engineering Blog</h1>
+			<p class="lede">
+				In-depth technical notes covering numerical differential equation solvers, procedural level design, and offline-first architecture.
+			</p>
+		</div>
+		<div>
+			<a class="btn btn-secondary btn-sm" href="/rss.xml" target="_blank">
+				<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:0.85rem;height:0.85rem;color:var(--accent);">
+					<path d="M4 11a9 9 0 0 1 9 9"></path>
+					<path d="M4 4a16 16 0 0 1 16 16"></path>
+					<circle cx="5" cy="19" r="1"></circle>
+				</svg>
+				<span>RSS Feed</span>
+			</a>
+		</div>
 	</header>
-	{years.map((y) => (
-		<>
-			<p class="year">{y}</p>
-			<ul class="post-list">
-				{posts.filter((p) => p.data.pubDate.getUTCFullYear() === y).map((post) => (
-					<li>
-						<span class="meta" data-pagefind-ignore>{fmtDate(post.data.pubDate)} · {readingTime(post.body ?? '')} min read</span>
-						<h3><a href={`/blog/${post.id}/`}>{post.data.title}</a></h3>
+
+	{years.map((year) => (
+		<section class="section" style="margin-top:2.5rem;">
+			<div style="display:flex;align-items:center;gap:1rem;margin-bottom:1.5rem;">
+				<h2 style="font-size:1.35rem;font-family:var(--mono);color:var(--accent);margin:0;">{year}</h2>
+				<div style="flex:1;height:1px;background:var(--line);"></div>
+			</div>
+
+			<div class="post-grid">
+				{posts.filter((p) => p.data.pubDate.getUTCFullYear() === year).map((post) => (
+					<article class="post-card">
+						<div class="meta" style="margin-bottom:0.75rem;">
+							<span>{fmtDate(post.data.pubDate)}</span> · <span>{readingTime(post.body ?? '')} min read</span>
+						</div>
+						<h3>
+							<a href={`/blog/${post.id}/`}>{post.data.title}</a>
+						</h3>
 						<p>{post.data.description}</p>
-					</li>
+						{post.data.tags.length > 0 && (
+							<div class="tags-group" style="margin-bottom:1rem;">
+								{post.data.tags.map((t) => (
+									<span class="tag">{t}</span>
+								))}
+							</div>
+						)}
+						<a class="read-more" href={`/blog/${post.id}/`}>
+							<span>Read Article</span>
+							<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+								<path d="M5 12h14M12 5l7 7-7 7"></path>
+							</svg>
+						</a>
+					</article>
 				))}
-			</ul>
-		</>
+			</div>
+		</section>
 	))}
 </Base>

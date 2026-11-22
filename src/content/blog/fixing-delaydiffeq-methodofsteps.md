@@ -5,7 +5,7 @@ pubDate: 2026-10-27
 tags: ['Julia', 'SciML', 'Open source']
 ---
 
-Over the last few weeks I've sent a run of pull requests to [OrdinaryDiffEq.jl](https://github.com/SciML/OrdinaryDiffEq.jl), the Julia package behind many of SciML's differential equation solvers. Most of them touch one corner: the delay differential equation (DDE) path, `MethodOfSteps`. Two are merged, five are in review. This post is the map I wish I'd had on day one.
+Over the last few weeks I've sent a run of pull requests to [OrdinaryDiffEq.jl](https://github.com/SciML/OrdinaryDiffEq.jl), the Julia package behind many of SciML's differential equation solvers. Most of them touch one corner: the delay differential equation (DDE) path, `MethodOfSteps`. This post is the map I wish I'd had on day one.
 
 ## What a delay equation changes
 

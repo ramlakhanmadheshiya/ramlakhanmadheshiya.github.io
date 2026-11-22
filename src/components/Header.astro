@@ -1,116 +1,302 @@
 ---
-import { NAV, SITE_TITLE } from '../consts';
+import { NAV, SITE_TITLE, CV_PDF } from '../consts';
 const path = Astro.url.pathname;
-const active = (href: string) => path === href || path.startsWith(href);
+const active = (href: string) => path === href || (href !== '/' && path.startsWith(href));
 ---
 <header class="site-header">
 	<div class="wrap">
-		<a class="brand" href="/">Ramlakhan<span class="brand-rest"> Madheshiya</span></a>
-		<nav aria-label="Main">
+		<a class="brand" href="/" aria-label="Ramlakhan Madheshiya Home">
+			<span class="brand-badge">RM</span>
+			<span>Ramlakhan<span class="brand-rest"> Madheshiya</span></span>
+		</a>
+
+		<nav class="nav-links" aria-label="Main Navigation">
 			{NAV.map((item) => (
-				<a href={item.href} aria-current={active(item.href) ? 'page' : undefined}>{item.label}</a>
+				<a href={item.href} aria-current={active(item.href) ? 'page' : undefined}>
+					{item.label}
+				</a>
 			))}
-			<form class="search" role="search" action="/" onsubmit="return false">
-				<label for="site-search" class="visually-hidden">Search the site</label>
-				<svg class="field-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
-				<input id="site-search" type="search" placeholder="Search projects, posts, CV" autocomplete="off" spellcheck="false" tabindex="-1" />
-				<button class="theme-toggle search-btn" type="button" aria-label="Search (press /)" aria-expanded="false" aria-controls="site-search">
-					<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
-				</button>
-			</form>
-			<button class="theme-toggle theme-btn" type="button" aria-label="Toggle colour theme">
-				<svg class="sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
-				<svg class="moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
-			</button>
 		</nav>
+
+		<div class="header-actions">
+			<button class="search-trigger" id="open-search-btn" type="button" aria-label="Search site (Press /)" title="Press / to search">
+				<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+					<circle cx="11" cy="11" r="8"></circle>
+					<path d="m21 21-4.35-4.35"></path>
+				</svg>
+				<span class="search-label">Search</span>
+				<kbd class="kbd">/</kbd>
+			</button>
+
+			<a href={CV_PDF} class="btn btn-secondary btn-sm" download title="Download Curriculum Vitae (PDF)" style="display:none; @media(min-width:640px){display:inline-flex;}">
+				<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:0.85rem;height:0.85rem;">
+					<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+					<polyline points="7 10 12 15 17 10"></polyline>
+					<line x1="12" y1="15" x2="12" y2="3"></line>
+				</svg>
+				<span>CV</span>
+			</a>
+
+			<button class="icon-btn theme-toggle" id="theme-toggle-btn" type="button" aria-label="Toggle dark/light theme" title="Toggle theme">
+				<svg class="sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+					<circle cx="12" cy="12" r="4"></circle>
+					<path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"></path>
+				</svg>
+				<svg class="moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+					<path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"></path>
+				</svg>
+			</button>
+		</div>
+	</div>
+
+	<!-- Search Modal Overlay -->
+	<div id="search-modal" class="search-modal-backdrop" hidden>
+		<div class="search-modal-dialog" role="dialog" aria-modal="true" aria-label="Site Search">
+			<div class="search-modal-header">
+				<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:1.2rem;height:1.2rem;color:var(--muted)">
+					<circle cx="11" cy="11" r="8"></circle>
+					<path d="m21 21-4.35-4.35"></path>
+				</svg>
+				<input id="modal-search-input" type="search" placeholder="Search projects, writing, CV..." autocomplete="off" spellcheck="false" />
+				<button id="close-search-btn" class="icon-btn" type="button" aria-label="Close search (Esc)">
+					<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+						<path d="M18 6 6 18M6 6l12 12"></path>
+					</svg>
+				</button>
+			</div>
+			<div class="search-modal-body">
+				<p id="modal-search-status" class="search-modal-status">Type to begin searching...</p>
+				<ul id="modal-search-list" class="modal-results-list"></ul>
+			</div>
+		</div>
 	</div>
 </header>
-<script>
-	document.querySelector('.theme-btn')?.addEventListener('click', () => {
-		const next = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark';
-		document.documentElement.dataset.theme = next;
-		try { localStorage.setItem('theme', next); } catch {}
-	});
-</script>
+
+<style>
+	.search-modal-backdrop {
+		position: fixed;
+		inset: 0;
+		background: rgba(15, 23, 42, 0.65);
+		backdrop-filter: blur(8px);
+		-webkit-backdrop-filter: blur(8px);
+		z-index: 100;
+		display: flex;
+		align-items: flex-start;
+		justify-content: center;
+		padding: 4rem 1.5rem 2rem;
+		animation: fadeIn 0.15s ease-out;
+	}
+
+	.search-modal-backdrop[hidden] {
+		display: none;
+	}
+
+	@keyframes fadeIn {
+		from { opacity: 0; }
+		to { opacity: 1; }
+	}
+
+	.search-modal-dialog {
+		background: var(--surface-raised);
+		border: 1px solid var(--line-strong);
+		border-radius: var(--radius-lg);
+		width: 100%;
+		max-width: 38rem;
+		box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.35);
+		overflow: hidden;
+		display: flex;
+		flex-direction: column;
+		max-height: 80vh;
+	}
+
+	.search-modal-header {
+		display: flex;
+		align-items: center;
+		gap: 0.75rem;
+		padding: 1rem 1.25rem;
+		border-bottom: 1px solid var(--line);
+	}
+
+	.search-modal-header input {
+		flex: 1;
+		border: none;
+		background: transparent;
+		font-family: inherit;
+		font-size: 1.05rem;
+		color: var(--ink);
+		outline: none;
+	}
+
+	.search-modal-header input::placeholder {
+		color: var(--subtle);
+	}
+
+	.search-modal-body {
+		padding: 1.25rem;
+		overflow-y: auto;
+		max-height: calc(80vh - 4.5rem);
+	}
+
+	.search-modal-status {
+		font-family: var(--mono);
+		font-size: 0.8rem;
+		color: var(--muted);
+		margin: 0 0 1rem;
+	}
+
+	.modal-results-list {
+		list-style: none;
+		padding: 0;
+		margin: 0;
+		display: grid;
+		gap: 0.85rem;
+	}
+
+	.modal-results-list :global(li) {
+		background: var(--surface);
+		border: 1px solid var(--line);
+		border-radius: var(--radius-md);
+		padding: 1rem 1.2rem;
+		transition: border-color 0.15s ease, background-color 0.15s ease;
+	}
+
+	.modal-results-list :global(li:hover) {
+		border-color: var(--accent-border);
+		background: var(--bg-subtle);
+	}
+
+	.modal-results-list :global(h4) {
+		margin: 0 0 0.35rem;
+		font-size: 1rem;
+	}
+
+	.modal-results-list :global(h4 a) {
+		color: var(--ink);
+		text-decoration: none;
+	}
+
+	.modal-results-list :global(p) {
+		margin: 0;
+		font-size: 0.88rem;
+		color: var(--muted);
+		line-height: 1.5;
+	}
+
+	.modal-results-list :global(mark) {
+		background: var(--accent-soft);
+		color: var(--accent);
+		font-weight: 600;
+		padding: 0 0.2rem;
+		border-radius: 2px;
+	}
+</style>
 
 <script>
-	// Header search: the icon opens a field; typing swaps the page for live
-	// Pagefind results, and closing it (or clearing it) brings the page back.
+	// Theme toggle script with persistent storage
+	const themeBtn = document.getElementById('theme-toggle-btn');
+	themeBtn?.addEventListener('click', () => {
+		const currentTheme = document.documentElement.dataset.theme;
+		const nextTheme = currentTheme === 'dark' ? 'light' : 'dark';
+		document.documentElement.dataset.theme = nextTheme;
+		try {
+			localStorage.setItem('theme', nextTheme);
+		} catch {}
+	});
+
+	// Search modal handling with Pagefind integration
 	type Sub = { title: string; url: string; excerpt: string };
 	type Result = { url: string; excerpt: string; meta: { title?: string }; sub_results?: Sub[] };
 	type Pagefind = { debouncedSearch: (q: string, o?: object, ms?: number) => Promise<{ results: { data: () => Promise<Result> }[] } | null> };
 
-	const form = document.querySelector<HTMLFormElement>('.search')!;
-	const input = document.getElementById('site-search') as HTMLInputElement;
-	const btn = form.querySelector<HTMLButtonElement>('.search-btn')!;
-	const results = document.getElementById('search-results')!;
-	const page = document.getElementById('page')!;
-	const list = document.getElementById('search-list')!;
-	const status = document.getElementById('search-status')!;
-	const PAGEFIND = ['', 'pagefind', 'pagefind.js'].join('/'); // built after Astro, so keep it out of the bundle
-	let pagefind: Promise<Pagefind> | null = null;
-	const load = () => (pagefind ??= import(/* @vite-ignore */ PAGEFIND) as Promise<Pagefind>);
-	const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
+	const openBtn = document.getElementById('open-search-btn');
+	const closeBtn = document.getElementById('close-search-btn');
+	const modal = document.getElementById('search-modal');
+	const input = document.getElementById('modal-search-input') as HTMLInputElement | null;
+	const status = document.getElementById('modal-search-status');
+	const list = document.getElementById('modal-search-list');
 
-	function open() {
-		form.classList.add('is-open');
-		btn.setAttribute('aria-expanded', 'true');
-		input.tabIndex = 0;
+	const PAGEFIND_PATH = ['', 'pagefind', 'pagefind.js'].join('/');
+	let pagefindInstance: Promise<Pagefind> | null = null;
+	const loadPagefind = () => (pagefindInstance ??= import(/* @vite-ignore */ PAGEFIND_PATH) as Promise<Pagefind>);
+
+	const escapeHtml = (s: string) => s.replace(/[&<>"']/g, (c) => ({
+		'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+	}[c]!));
+
+	function openModal() {
+		if (!modal || !input) return;
+		modal.hidden = false;
 		input.focus();
-		load().catch(() => {});
-	}
-	function close() {
-		form.classList.remove('is-open');
-		btn.setAttribute('aria-expanded', 'false');
-		input.tabIndex = -1;
-		input.value = '';
-		show('');
-		input.blur();
+		input.select();
+		document.body.style.overflow = 'hidden';
+		loadPagefind().catch(() => {});
 	}
 
-	async function show(q: string) {
-		const query = q.trim();
-		const url = new URL(location.href);
-		if (query) url.searchParams.set('q', query); else url.searchParams.delete('q');
-		history.replaceState(history.state, '', url);
-		if (!query) { results.hidden = true; page.hidden = false; return; }
-		results.hidden = false;
-		page.hidden = true;
-		scrollTo({ top: 0 });
-		status.textContent = 'Searching…';
+	function closeModal() {
+		if (!modal || !input) return;
+		modal.hidden = true;
+		input.value = '';
+		if (status) status.textContent = 'Type to begin searching...';
+		if (list) list.innerHTML = '';
+		document.body.style.overflow = '';
+	}
+
+	openBtn?.addEventListener('click', openModal);
+	closeBtn?.addEventListener('click', closeModal);
+
+	modal?.addEventListener('click', (e) => {
+		if (e.target === modal) closeModal();
+	});
+
+	window.addEventListener('keydown', (e) => {
+		if (e.key === '/' && document.activeElement?.tagName !== 'INPUT' && document.activeElement?.tagName !== 'TEXTAREA') {
+			e.preventDefault();
+			openModal();
+		} else if (e.key === 'k' && (e.metaKey || e.ctrlKey)) {
+			e.preventDefault();
+			openModal();
+		} else if (e.key === 'Escape' && modal && !modal.hidden) {
+			closeModal();
+		}
+	});
+
+	input?.addEventListener('input', async () => {
+		const query = input.value.trim();
+		if (!query) {
+			if (status) status.textContent = 'Type to begin searching...';
+			if (list) list.innerHTML = '';
+			return;
+		}
+
+		if (status) status.textContent = 'Searching...';
 
 		let pf: Pagefind;
-		try { pf = await load(); } catch { status.textContent = 'Search works on the published site.'; list.innerHTML = ''; return; }
+		try {
+			pf = await loadPagefind();
+		} catch {
+			if (status) status.textContent = 'Search index is available on the published build.';
+			if (list) list.innerHTML = '';
+			return;
+		}
+
 		const search = await pf.debouncedSearch(query, {}, 150);
-		if (search === null || input.value.trim() !== query) return; // a newer query is running
+		if (search === null || input.value.trim() !== query) return;
 
-		const data = await Promise.all(search.results.slice(0, 10).map((r) => r.data()));
-		status.textContent = data.length ? `${data.length} result${data.length > 1 ? 's' : ''} for “${query}”` : `No results for “${query}”`;
-		list.innerHTML = data.map((d) => {
-			const subs = (d.sub_results ?? []).filter((s) => s.url !== d.url).slice(0, 3);
-			return `<li>
-				<h3><a href="${esc(d.url)}">${esc(d.meta.title ?? d.url)}</a></h3>
-				<p>${d.excerpt}</p>
-				${subs.length ? `<ul class="sub-results">${subs.map((s) => `<li><a href="${esc(s.url)}">${esc(s.title)}</a><p>${s.excerpt}</p></li>`).join('')}</ul>` : ''}
-			</li>`;
-		}).join('');
-	}
+		const data = await Promise.all(search.results.slice(0, 8).map((r) => r.data()));
 
-	btn.addEventListener('click', open);
-	// An empty field closes itself when focus or a click goes elsewhere.
-	input.addEventListener('blur', () => setTimeout(() => { if (!input.value.trim() && !form.contains(document.activeElement)) close(); }, 120));
-	document.addEventListener('pointerdown', (e) => {
-		if (form.classList.contains('is-open') && !input.value.trim() && !form.contains(e.target as Node)) close();
+		if (data.length === 0) {
+			if (status) status.textContent = `No results found for “${query}”`;
+			if (list) list.innerHTML = '';
+		} else {
+			if (status) status.textContent = `${data.length} result${data.length > 1 ? 's' : ''} for “${query}”`;
+			if (list) {
+				list.innerHTML = data.map((d) => `
+					<li>
+						<h4><a href="${escapeHtml(d.url)}">${escapeHtml(d.meta.title ?? d.url)}</a></h4>
+						<p>${d.excerpt}</p>
+					</li>
+				`).join('');
+			}
+		}
 	});
-	input.addEventListener('input', () => show(input.value));
-	input.addEventListener('keydown', (e) => { if (e.key === 'Escape') { e.preventDefault(); close(); } });
-	window.addEventListener('keydown', (e) => {
-		const t = document.activeElement;
-		if (e.key !== '/' || t instanceof HTMLInputElement || t instanceof HTMLTextAreaElement) return;
-		e.preventDefault();
-		open();
-	});
-
-	const initial = new URLSearchParams(location.search).get('q');
-	if (initial) { open(); input.value = initial; show(initial); }
 </script>

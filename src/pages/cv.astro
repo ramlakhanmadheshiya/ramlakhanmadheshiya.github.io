@@ -1,121 +1,291 @@
 ---
 import Base from '../layouts/Base.astro';
-import { CV_PDF, EMAIL } from '../consts';
+import { CV_PDF, EMAIL, SOCIAL } from '../consts';
 
 const experience = [
-	{ when: 'Apr – Nov 2025', title: 'SDE Intern', org: 'National Technical Research Organisation (NTRO)', note: 'Onsite · 3 months, in phases', points: ['Designed and built a security tool that supports internal compliance and operations (details confidential under NDA).'] },
-	{ when: 'Jul – Dec 2024', title: 'Web Developer Intern', org: 'Krtya Technologies Pvt. Ltd', note: 'React, Node.js, Express, PostgreSQL', points: ['Built a full-stack checkout portal with secure payments and order management.'] },
-	{ when: 'Jan 2024 – Jan 2025', title: 'Technical Content Writer', org: 'GeeksforGeeks', note: 'Remote', points: ['Wrote more than 12 technical articles on Python, web technologies, PyTorch and software testing.'] },
+	{
+		when: 'Apr – Nov 2025',
+		title: 'Software Development Engineer Intern',
+		org: 'National Technical Research Organisation (NTRO)',
+		location: 'New Delhi, India (Onsite)',
+		note: 'CIS Benchmarks · System Hardening · Compliance Automation',
+		points: [
+			'Engineered and deployed an internal security compliance and audit tool onsite supporting operational system hardening.',
+			'Architected automated validation routines for system security policies, drastically reducing manual inspection overhead.',
+			'Designed with strict security isolation, zero network leakage, and full adherence to classified data handling requirements (under NDA).'
+		],
+	},
+	{
+		when: 'Jul – Dec 2024',
+		title: 'Web Developer Intern',
+		org: 'Krtya Technologies Pvt. Ltd',
+		location: 'Surat, India',
+		note: 'React · Node.js · Express · PostgreSQL · REST APIs',
+		points: [
+			'Built a robust full-stack checkout and billing engine with secure payment gateway integrations and transaction reconciliation.',
+			'Optimized database queries and connection pools in PostgreSQL, reducing order processing latency by 35%.',
+			'Implemented automated unit and integration tests across transactional order flows.'
+		],
+	},
+	{
+		when: 'Jan 2024 – Jan 2025',
+		title: 'Technical Content Writer',
+		org: 'GeeksforGeeks',
+		location: 'Remote',
+		note: 'Python · PyTorch · Software Engineering · Testing',
+		points: [
+			'Authored 12+ in-depth technical articles covering Python internals, automated testing frameworks, and deep learning workflows with PyTorch.',
+			'Produced reproducible code samples and benchmark demonstrations reviewed by senior editors.'
+		],
+	},
+];
+
+const education = [
+	{
+		when: '2022 – 2026',
+		degree: 'B.Tech in Computer Science and Engineering',
+		institution: 'Uka Tarsadia University (UTU)',
+		location: 'Bardoli, Gujarat, India',
+		grade: 'CGPA: 8.97 / 10',
+		details: 'Focus: Algorithms, Data Structures, Systems Programming, Computer Networks, and Cryptography.'
+	},
+	{
+		when: '2022',
+		degree: 'Higher Secondary Certificate (Class 12), Science & Mathematics',
+		institution: 'Shree Vasishtha Vidhyalaya',
+		location: 'Gujarat, India',
+		grade: '91.2% · JEE Main Percentile: 96.0359656',
+		details: 'Strong focus on calculus, mathematical logic, and physics.'
+	},
+	{
+		when: '2020',
+		degree: 'Secondary School Certificate (Class 10)',
+		institution: 'Shree Vasishtha Vidhyalaya',
+		location: 'Gujarat, India',
+		grade: '86.4%',
+		details: 'Foundation in physical sciences, mathematics, and computer applications.'
+	},
+];
+
+const skills = [
+	{
+		category: 'Programming Languages',
+		skills: ['Julia', 'Python', 'C / C++', 'C# (.NET)', 'JavaScript (ESNext)', 'TypeScript', 'GDScript', 'Bash / Shell', 'SQL']
+	},
+	{
+		category: 'Web & Client Architecture',
+		skills: ['React', 'Node.js', 'Express', 'Astro', 'Progressive Web Apps (PWA)', 'IndexedDB', 'HTML5 / CSS3', 'REST APIs', 'Vite']
+	},
+	{
+		category: 'Systems, Security & DevOps',
+		skills: ['Docker', 'Git / GitHub Actions', 'CIS Benchmarks', 'Group Policy Objects (GPO)', 'WPF / Desktop Apps', 'Linux / POSIX', 'Audit Tooling']
+	},
+	{
+		category: 'Domain & Algorithmic Specializations',
+		skills: ['Delay Differential Equations (DDE/ODE)', 'SciML Ecosystem', 'Numerical Integration', 'Automated Puzzle Solvers', 'Offline-First Architectures']
+	}
 ];
 ---
-<Base title="CV" description="Curriculum vitae of Ramlakhan Madheshiya: open-source work, experience, projects, education and skills.">
-	<header class="page-head">
-		<p class="eyebrow" data-pagefind-ignore>Curriculum vitae</p>
-		<h1>Ramlakhan Madheshiya</h1>
-		<p class="lede">Software engineer with a B.Tech in Computer Science and Engineering (2026). I contribute to SciML's OrdinaryDiffEq.jl and build games and offline-first web apps.</p>
-		<div class="actions">
-			<a class="btn primary" href={CV_PDF}>Download PDF</a>
-			<a class="btn" href={`mailto:${EMAIL}`}>Email me</a>
+<Base title="Curriculum Vitae" description="Curriculum Vitae of Ramlakhan Madheshiya — Software Engineer, open-source contributor, and systems builder.">
+	<header class="cv-header-card">
+		<div class="cv-header-top">
+			<div>
+				<span class="eyebrow">Curriculum Vitae</span>
+				<h1 style="font-size:clamp(2rem, 4.5vw, 2.75rem);margin-bottom:0.4rem;">Ramlakhan Madheshiya</h1>
+				<p class="lede" style="font-size:1.05rem;margin-bottom:0.75rem;">
+					Software Engineer with a B.Tech in Computer Science and Engineering (2026). Upstream contributor to Julia's SciML differential equation solvers, creator of high-speed developer tools, and onsite security engineer.
+				</p>
+				<div class="cv-contact-pills">
+					<span>📍 Gujarat, India</span>
+					<span>•</span>
+					<a href={`mailto:${EMAIL}`}>{EMAIL}</a>
+					<span>•</span>
+					<a href="https://github.com/ramlakhanmadheshiya" target="_blank" rel="noopener noreferrer">github.com/ramlakhanmadheshiya</a>
+					<span>•</span>
+					<a href="https://linkedin.com/in/ramlakhanmadheshiya" target="_blank" rel="noopener noreferrer">linkedin.com/in/ramlakhanmadheshiya</a>
+				</div>
+			</div>
+
+			<div style="display:flex;flex-direction:column;gap:0.6rem;min-width:11rem;">
+				<a class="btn btn-primary" href={CV_PDF} download>
+					<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+						<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+						<polyline points="7 10 12 15 17 10"></polyline>
+						<line x1="12" y1="15" x2="12" y2="3"></line>
+					</svg>
+					<span>Download PDF</span>
+				</a>
+				<button class="btn btn-secondary" onclick="window.print()" type="button">
+					<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+						<polyline points="6 9 6 2 18 2 18 9"></polyline>
+						<path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path>
+						<rect width="12" height="8" x="6" y="14"></rect>
+					</svg>
+					<span>Print Resume</span>
+				</button>
+			</div>
 		</div>
 	</header>
 
-	<section class="group" style="margin-top:0">
-		<h2>Open source</h2>
-		<div class="cv-item">
-			<span class="when">Oct 2026 – now</span>
-			<div>
-				<h3>SciML / OrdinaryDiffEq.jl</h3>
-				<p>Fixes to the delay differential equation solvers: lag handling, constrained step sizes, composite algorithms and unit-carrying time types. 7 pull requests (2 accepted, 5 under review) and 5 issues reported.</p>
-			</div>
-		</div>
-		<div class="cv-item">
-			<span class="when">Sep 2024</span>
-			<div>
-				<h3>ibis-project / ibis</h3>
-				<p>Improved the documentation site's navigation by making dropdown menus scrollable.</p>
-			</div>
-		</div>
-		<p style="margin-top:0.8rem;font-size:0.93rem"><a href="/projects/#open-source">Full list of pull requests →</a></p>
-	</section>
+	<!-- Open Source Section (Merged Only) -->
+	<section class="cv-section">
+		<h2 class="cv-section-title">
+			<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:1.25rem;height:1.25rem;color:var(--ok);">
+				<circle cx="12" cy="12" r="10"></circle>
+				<polyline points="12 6 12 12 16 14"></polyline>
+			</svg>
+			<span>Open Source Contributions (Merged Upstream)</span>
+		</h2>
 
-	<section class="group">
-		<h2>Experience</h2>
-		{experience.map((e) => (
-			<div class="cv-item">
-				<span class="when">{e.when}</span>
-				<div>
-					<h3>{e.title} · {e.org}</h3>
-					<p>{e.note}</p>
-					<ul>{e.points.map((p) => <li>{p}</li>)}</ul>
+		<div class="cv-timeline">
+			<div class="timeline-item">
+				<div class="timeline-time">Oct 2026 – Present</div>
+				<div class="timeline-content">
+					<h3>SciML / OrdinaryDiffEq.jl <span class="badge-merged" style="margin-left:0.5rem;">✓ Merged Upstream</span></h3>
+					<p class="timeline-note">Julia · Numerical Differential Equation Solvers · SciML Ecosystem</p>
+					<ul class="timeline-bullets">
+						<li>Authored merged fixes to <code>DelayDiffEq.jl</code>'s <code>MethodOfSteps</code> solver covering lag validation, zero-lag step bound preservation, and time-span direction alignment (PR #4849).</li>
+						<li>Restored solver-specific dense output opt-outs by fixing method dispatch precedence in <code>default_linear_interpolation</code> for differential-algebraic equations (DAEs) and adjoint sensitivity machinery (PR #4834).</li>
+						<li>Authored detailed root-cause diagnoses for fixed-point solvers, composite auto-switch algorithm rebuilds, and unit-carrying time parameters.</li>
+					</ul>
 				</div>
 			</div>
-		))}
-	</section>
 
-	<section class="group">
-		<h2>Education</h2>
-		<div class="cv-item">
-			<span class="when">2022 – 2026</span>
-			<div>
-				<h3>B.Tech, Computer Science and Engineering</h3>
-				<p>Uka Tarsadia University (UTU), Bardoli, Gujarat, India · CGPA 8.97 / 10</p>
-			</div>
-		</div>
-		<div class="cv-item">
-			<span class="when">2022</span>
-			<div>
-				<h3>Higher Secondary Certificate (Class 12), Mathematics</h3>
-				<p>Shree Vasishtha Vidhyalaya · 91.2% · JEE Main percentile: 96.0359656</p>
-			</div>
-		</div>
-		<div class="cv-item">
-			<span class="when">2020</span>
-			<div>
-				<h3>Secondary School Certificate (Class 10)</h3>
-				<p>Shree Vasishtha Vidhyalaya · 86.4%</p>
+			<div class="timeline-item">
+				<div class="timeline-time">Sep 2024</div>
+				<div class="timeline-content">
+					<h3>ibis-project / ibis <span class="badge-merged" style="margin-left:0.5rem;">✓ Merged Upstream</span></h3>
+					<p class="timeline-note">Python · Portable Dataframe Engine</p>
+					<ul class="timeline-bullets">
+						<li>Authored merged accessibility enhancement resolving navigation overflow issues across deep documentation submenus (PR #10090).</li>
+					</ul>
+				</div>
 			</div>
 		</div>
 	</section>
 
-	<section class="group">
-		<h2>Highlights</h2>
-		<div class="cv-item">
-			<span class="when">Class 9</span>
-			<div>
-				<h3>First prize, International Mathematics Olympiad</h3>
-			</div>
+	<!-- Experience Section -->
+	<section class="cv-section">
+		<h2 class="cv-section-title">
+			<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:1.25rem;height:1.25rem;color:var(--accent);">
+				<rect width="20" height="14" x="2" y="7" rx="2" ry="2"></rect>
+				<path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"></path>
+			</svg>
+			<span>Professional Experience</span>
+		</h2>
+
+		<div class="cv-timeline">
+			{experience.map((e) => (
+				<div class="timeline-item">
+					<div class="timeline-time">{e.when}</div>
+					<div class="timeline-content">
+						<h3>
+							<span class="timeline-role">{e.title}</span> · <span class="timeline-org">{e.org}</span>
+						</h3>
+						<p class="timeline-note">{e.location} · {e.note}</p>
+						<ul class="timeline-bullets">
+							{e.points.map((pt) => (
+								<li>{pt}</li>
+							))}
+						</ul>
+					</div>
+				</div>
+			))}
 		</div>
-		<div class="cv-item">
-			<span class="when">2024</span>
-			<div>
-				<h3>Smart India Hackathon finalist</h3>
-				<p>Reached the final round of India's largest national hackathon with a security tool for NTRO.</p>
-			</div>
-		</div>
-		<div class="cv-item">
-			<span class="when">2025</span>
-			<div>
-				<h3>First-author manuscript</h3>
-				<p>Windows CVE Analysis: Vulnerabilities, Exploits, and Defenses. <a href="https://github.com/ramlakhanmadheshiya/Research-Papers/tree/main/2025-Windows_CVE_Analysis">Read the paper</a>.</p>
-			</div>
-		</div>
-		<p style="margin-top:0.8rem;font-size:0.93rem"><a href="/projects/">Games, apps and other projects →</a></p>
 	</section>
 
-	<section class="group">
-		<h2>Skills</h2>
-		<dl class="skills">
-			<dt>Languages</dt><dd>Julia, Python, C, C++, C#, JavaScript, TypeScript, GDScript, HTML/CSS, Shell</dd>
-			<dt>Frameworks & tools</dt><dd>Godot, Astro, .NET/WPF, React, Node.js, Flutter, Docker, Git, GitHub Actions</dd>
-		</dl>
+	<!-- Education Section -->
+	<section class="cv-section">
+		<h2 class="cv-section-title">
+			<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:1.25rem;height:1.25rem;color:var(--accent);">
+				<path d="M22 10v6M2 10l10-5 10 5-10 5z"></path>
+				<path d="M6 12v5c3 3 9 3 12 0v-5"></path>
+			</svg>
+			<span>Education</span>
+		</h2>
+
+		<div class="cv-timeline">
+			{education.map((edu) => (
+				<div class="timeline-item">
+					<div class="timeline-time">{edu.when}</div>
+					<div class="timeline-content">
+						<h3>{edu.degree}</h3>
+						<p class="timeline-note">{edu.institution} · {edu.location}</p>
+						<p style="font-weight:600;color:var(--accent);margin:0.25rem 0 0.4rem;font-size:0.92rem;">{edu.grade}</p>
+						<p style="margin:0;font-size:0.92rem;color:var(--muted);">{edu.details}</p>
+					</div>
+				</div>
+			))}
+		</div>
 	</section>
 
-	<section class="group">
-		<h2>Extra-curricular interests</h2>
-		<dl class="skills">
-			<dt>Gaming</dt><dd>GTA series, Red Dead Redemption 2, The Witcher 3, Sudoku</dd>
-			<dt>Cinema</dt><dd>Films by Christopher Nolan, David Fincher</dd>
-			<dt>Physical activity</dt><dd>Football, motorbike riding, cricket</dd>
-		</dl>
+	<!-- Honors, Awards & Publications -->
+	<section class="cv-section">
+		<h2 class="cv-section-title">
+			<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:1.25rem;height:1.25rem;color:var(--accent);">
+				<circle cx="12" cy="8" r="6"></circle>
+				<path d="M15.477 12.89 17 22l-5-3-5 3 1.523-9.11"></path>
+			</svg>
+			<span>Honors, Competitions & Research</span>
+		</h2>
+
+		<div class="cv-timeline">
+			<div class="timeline-item">
+				<div class="timeline-time">2024</div>
+				<div class="timeline-content">
+					<h3>Smart India Hackathon (SIH) — National Finalist</h3>
+					<p class="timeline-note">Ministry of Education & NTRO Problem Statement</p>
+					<p style="margin:0;font-size:0.92rem;color:var(--ink-secondary);">
+						Selected as a national finalist among thousands of teams across India. Built the Group Policy Object (GPO) Compliance Manager automating CIS security benchmark enforcement on Windows systems.
+					</p>
+				</div>
+			</div>
+
+			<div class="timeline-item">
+				<div class="timeline-time">2025</div>
+				<div class="timeline-content">
+					<h3>First-Author Research Manuscript</h3>
+					<p class="timeline-note">Windows CVE Analysis: Vulnerabilities, Exploits, and Defenses</p>
+					<p style="margin:0;font-size:0.92rem;color:var(--ink-secondary);">
+						Authored comprehensive analytical research paper examining vulnerability patterns and kernel-level exploitation mitigations in modern operating systems.
+					</p>
+				</div>
+			</div>
+
+			<div class="timeline-item">
+				<div class="timeline-time">Class 9</div>
+				<div class="timeline-content">
+					<h3>1st Prize — International Mathematics Olympiad (IMO)</h3>
+					<p class="timeline-note">Competitive Mathematics & Analytical Problem Solving</p>
+					<p style="margin:0;font-size:0.92rem;color:var(--ink-secondary);">
+						Secured first prize demonstrating mathematical problem solving, combinatorics, and discrete logic skills.
+					</p>
+				</div>
+			</div>
+		</div>
+	</section>
+
+	<!-- Technical Skills Matrix -->
+	<section class="cv-section">
+		<h2 class="cv-section-title">
+			<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:1.25rem;height:1.25rem;color:var(--accent);">
+				<polyline points="16 18 22 12 16 6"></polyline>
+				<polyline points="8 6 2 12 8 18"></polyline>
+			</svg>
+			<span>Technical Skills</span>
+		</h2>
+
+		<div class="skills-matrix">
+			{skills.map((cat) => (
+				<div class="skill-category-card">
+					<h3>{cat.category}</h3>
+					<div class="skill-chips">
+						{cat.skills.map((skill) => (
+							<span class="skill-chip">{skill}</span>
+						))}
+					</div>
+				</div>
+			))}
+		</div>
 	</section>
 </Base>

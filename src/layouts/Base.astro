@@ -28,16 +28,28 @@ const canonical = new URL(Astro.url.pathname, Astro.site);
 		<meta property="og:description" content={description} />
 		<meta property="og:type" content={type} />
 		<meta property="og:url" content={canonical} />
-		<meta name="twitter:card" content="summary" />
-		<meta name="theme-color" content="#ffffff" />
+		<meta name="twitter:card" content="summary_large_image" />
+		<meta name="theme-color" content="#0b0f17" media="(prefers-color-scheme: dark)" />
+		<meta name="theme-color" content="#f8fafc" media="(prefers-color-scheme: light)" />
+
+		<!-- Fast theme initializer to prevent Flash of Unstyled Theme -->
 		<script is:inline>
 			(function () {
-				var t;
-				try { t = localStorage.getItem('theme'); } catch (e) {}
-				if (t !== 'dark') t = 'light';
-				document.documentElement.dataset.theme = t;
+				try {
+					var stored = localStorage.getItem('theme');
+					if (stored === 'dark' || stored === 'light') {
+						document.documentElement.dataset.theme = stored;
+					} else {
+						var prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+						document.documentElement.dataset.theme = prefersDark ? 'dark' : 'light';
+					}
+				} catch (e) {
+					document.documentElement.dataset.theme = 'light';
+				}
 			})();
 		</script>
+
+		<!-- Google Analytics -->
 		<script is:inline async src={`https://www.googletagmanager.com/gtag/js?id=${GA_ID}`}></script>
 		<script is:inline define:vars={{ GA_ID }}>
 			window.dataLayer = window.dataLayer || [];
@@ -48,12 +60,9 @@ const canonical = new URL(Astro.url.pathname, Astro.site);
 	</head>
 	<body>
 		<Header />
-		<main>
-			<section id="search-results" class="search-results" hidden aria-live="polite">
-				<p class="eyebrow" id="search-status"></p>
-				<ul class="post-list" id="search-list"></ul>
-			</section>
-			<div id="page" data-pagefind-body={index ? '' : undefined}><span hidden data-pagefind-meta={`title:${title ?? SITE_TITLE}`}></span><slot /></div>
+		<main id="main-content" data-pagefind-body={index ? '' : undefined}>
+			<span hidden data-pagefind-meta={`title:${title ?? SITE_TITLE}`}></span>
+			<slot />
 		</main>
 		<Footer />
 	</body>

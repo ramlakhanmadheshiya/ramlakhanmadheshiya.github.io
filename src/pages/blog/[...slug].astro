@@ -11,16 +11,54 @@ const { post } = Astro.props;
 const { Content } = await render(post);
 ---
 <Base title={post.data.title} description={post.data.description} type="article">
-	<article class="narrow">
-		<header class="post-head">
-			<p class="meta" data-pagefind-ignore>
-				{fmtDate(post.data.pubDate)} · {readingTime(post.body ?? '')} min read
-				{post.data.tags.length > 0 && ` · ${post.data.tags.join(', ')}`}
-			</p>
-			<h1>{post.data.title}</h1>
-			<p class="lede">{post.data.description}</p>
-		</header>
-		<div class="prose"><Content /></div>
-	</article>
-	<a class="back" href="/blog/">← All posts</a>
+	<div style="max-width:48rem;margin:0 auto;">
+		<a href="/blog/" style="display:inline-flex;align-items:center;gap:0.4rem;font-size:0.9rem;color:var(--muted);margin-bottom:2rem;text-decoration:none;">
+			<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:0.9rem;height:0.9rem;">
+				<path d="M19 12H5M12 19l-7-7 7-7"></path>
+			</svg>
+			<span>Back to all articles</span>
+		</a>
+
+		<article>
+			<header style="margin-bottom:2.5rem;border-bottom:1px solid var(--line);padding-bottom:1.75rem;">
+				<div style="display:flex;flex-wrap:wrap;align-items:center;gap:0.6rem;font-family:var(--mono);font-size:0.8rem;color:var(--muted);margin-bottom:0.75rem;">
+					<span>{fmtDate(post.data.pubDate)}</span>
+					<span>•</span>
+					<span>{readingTime(post.body ?? '')} min read</span>
+				</div>
+
+				<h1 style="font-size:clamp(2rem, 4.5vw, 2.75rem);line-height:1.2;margin-bottom:1rem;">
+					{post.data.title}
+				</h1>
+
+				<p class="lede" style="font-size:1.15rem;margin-bottom:1.25rem;">
+					{post.data.description}
+				</p>
+
+				{post.data.tags.length > 0 && (
+					<div class="tags-group" style="margin-bottom:0;">
+						{post.data.tags.map((tag) => (
+							<span class="tag">{tag}</span>
+						))}
+					</div>
+				)}
+			</header>
+
+			<div class="prose">
+				<Content />
+			</div>
+
+			<footer style="margin-top:4rem;padding-top:2rem;border-top:1px solid var(--line);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:1rem;">
+				<a href="/blog/" class="btn btn-secondary btn-sm">
+					<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:0.85rem;height:0.85rem;">
+						<path d="M19 12H5M12 19l-7-7 7-7"></path>
+					</svg>
+					<span>Back to Blog</span>
+				</a>
+				<a href="#main-content" style="font-size:0.88rem;color:var(--muted);text-decoration:none;">
+					<span>↑ Scroll to top</span>
+				</a>
+			</footer>
+		</article>
+	</div>
 </Base>
