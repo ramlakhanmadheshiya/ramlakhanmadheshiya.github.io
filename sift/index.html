@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en" class="dark">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/sift/icon.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+    <title>Sift — The Anti-Algorithm Feed</title>
+    <meta name="description" content="Sift combines your favorite creators from YouTube, Substack, Bluesky, Mastodon, and RSS into one calm, chronological feed with zero algorithms, zero ads, and zero infinite scroll." />
+    
+    <!-- PWA & Mobile Web App Meta -->
+    <meta name="theme-color" content="#0f1115" media="(prefers-color-scheme: dark)" />
+    <meta name="theme-color" content="#fbfbfb" media="(prefers-color-scheme: light)" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Sift" />
+    <link rel="manifest" href="/sift/manifest.webmanifest" />
+    <link rel="apple-touch-icon" href="/sift/icon.svg" />
+
+    <!-- Google Fonts for Reader Mode -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400..600;1,6..72,400&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <script type="module" crossorigin src="/sift/assets/index-33c83asy.js"></script>
+    <link rel="stylesheet" crossorigin href="/sift/assets/index-KcALNVka.css">
+  </head>
+  <body class="bg-sift-light dark:bg-sift-dark text-gray-900 dark:text-gray-100 min-h-screen selection:bg-emerald-500/20 selection:text-emerald-400 antialiased">
+    <div id="root"></div>
+    <script>
+      // Register Service Worker for offline PWA capabilities
+      if ('serviceWorker' in navigator && window.location.protocol === 'https:') {
+        window.addEventListener('load', () => {
+          navigator.serviceWorker.register('/sift/sw.js').catch(err => {
+            console.log('SW registration note:', err);
+          });
+        });
+      }
+    </script>
+  </body>
+</html>

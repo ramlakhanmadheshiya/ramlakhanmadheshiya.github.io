@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="none">
+  <rect width="512" height="512" rx="128" fill="#0f1115"/>
+  <!-- Calming Zen/Sift Waves -->
+  <path d="M128 176C192 176 224 208 288 208C352 208 384 176 416 176" stroke="#10b981" stroke-width="32" stroke-linecap="round"/>
+  <path d="M96 256C160 256 192 288 256 288C320 288 352 256 416 256" stroke="#34d399" stroke-width="32" stroke-linecap="round"/>
+  <path d="M144 336C208 336 240 368 304 368C368 368 384 336 416 336" stroke="#6ee7b7" stroke-width="32" stroke-linecap="round"/>
+  <!-- Subtle center dot of intention -->
+  <circle cx="256" cy="256" r="16" fill="#10b981"/>
+</svg>

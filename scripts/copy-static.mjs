@@ -12,6 +12,7 @@ const STATIC = [
 	'games',
 	'one-clean-shot',
 	'projects',
+	'sift',
 	'test',
 ];
 

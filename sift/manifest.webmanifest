@@ -1,0 +1,17 @@
+{
+  "name": "Sift — The Anti-Algorithm Feed",
+  "short_name": "Sift",
+  "description": "Clean, chronological feeds from your favorite creators without algorithms or infinite scroll.",
+  "start_url": "/sift/",
+  "display": "standalone",
+  "background_color": "#0f1115",
+  "theme_color": "#0f1115",
+  "icons": [
+    {
+      "src": "/sift/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
