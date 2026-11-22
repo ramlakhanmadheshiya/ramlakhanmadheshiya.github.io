@@ -1,45 +1,66 @@
 ---
-import { NAV, SOCIAL, SITE_TITLE, EMAIL } from '../consts';
+import { NAV, SOCIAL, SITE_TITLE, EMAIL, CV_PDF } from '../consts';
 const currentYear = new Date().getFullYear();
 ---
 <footer class="site-footer">
 	<div class="wrap">
 		<div class="footer-grid">
-			<div class="footer-about">
-				<div class="footer-about-title">{SITE_TITLE}</div>
+			<div class="footer-col">
+				<h3 style="font-size:0.95rem;font-family:var(--font-sans);">{SITE_TITLE} &copy; <span data-year>{currentYear}</span></h3>
 				<p>
-					Software engineer building dependable tools, high-performance numerical algorithms, and offline-first client-side web applications.
+					Software engineer building dependable tools, numerical algorithms, and offline-first client-side web applications.
+				</p>
+				<p>
+					<a href="https://github.com/ramlakhanmadheshiya/ramlakhanmadheshiya.github.io" target="_blank" rel="noopener noreferrer">Source on GitHub</a>
 				</p>
 			</div>
 
 			<div class="footer-col">
-				<h4>Navigation</h4>
-				<ul class="footer-links-list">
+				<h3>Site</h3>
+				<ul>
 					{NAV.map((item) => (
 						<li><a href={item.href}>{item.label}</a></li>
 					))}
+					<li><a href={CV_PDF} download>Resume (PDF)</a></li>
 					<li><a href="/BrainnovaStudio/games/">Games Hub</a></li>
-					<li><a href="/rss.xml">RSS Feed</a></li>
 				</ul>
 			</div>
 
 			<div class="footer-col">
-				<h4>Elsewhere</h4>
-				<ul class="footer-links-list">
+				<h3>Connect</h3>
+				<ul>
 					{SOCIAL.filter((s) => s.label !== 'Email').map((item) => (
-						<li><a href={item.href} target="_blank" rel="noopener noreferrer">{item.label} ↗</a></li>
+						<li>
+							<a href={item.href} target="_blank" rel="noopener noreferrer">
+								{item.label} <span style="font-size:0.75em;opacity:0.8;">&#8599;</span>
+							</a>
+						</li>
 					))}
-					<li><a href={`mailto:${EMAIL}`}>Email ↗</a></li>
+					<li>
+						<a href={`mailto:${EMAIL}`}>
+							Email <span style="font-size:0.75em;opacity:0.8;">&#8599;</span>
+						</a>
+					</li>
+				</ul>
+			</div>
+
+			<div class="footer-col">
+				<h3>Meta</h3>
+				<ul>
+					<li><a href="/rss.xml">RSS Feed</a></li>
+					<li><a href="https://astro.build" target="_blank" rel="noopener">Built with Astro</a></li>
 				</ul>
 			</div>
 		</div>
 
 		<div class="footer-bottom">
-			<span>© {currentYear} {SITE_TITLE}. All rights reserved.</span>
-			<span>
-				Crafted with <a href="https://astro.build" target="_blank" rel="noopener">Astro</a> ·
-				<a href="https://github.com/ramlakhanmadheshiya/ramlakhanmadheshiya.github.io" target="_blank" rel="noopener">Source Code</a>
-			</span>
+			<span>Based in Gujarat, India</span>
+			<span>&copy; {currentYear} {SITE_TITLE}</span>
 		</div>
 	</div>
 </footer>
+
+<script>
+	const yearEl = document.querySelector('[data-year]');
+	if (yearEl) yearEl.textContent = String(new Date().getFullYear());
+</script>

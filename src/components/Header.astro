@@ -1,198 +1,49 @@
 ---
-import { NAV, SITE_TITLE, CV_PDF } from '../consts';
+import { NAV, CV_PDF } from '../consts';
 const path = Astro.url.pathname;
 const active = (href: string) => path === href || (href !== '/' && path.startsWith(href));
 ---
 <header class="site-header">
 	<div class="wrap">
-		<a class="brand" href="/" aria-label="Ramlakhan Madheshiya Home">
-			<span class="brand-badge">RM</span>
-			<span>Ramlakhan<span class="brand-rest"> Madheshiya</span></span>
-		</a>
+		<a class="brand" href="/" aria-label="Ramlakhan Madheshiya">Ramlakhan Madheshiya</a>
 
-		<nav class="nav-links" aria-label="Main Navigation">
-			{NAV.map((item) => (
-				<a href={item.href} aria-current={active(item.href) ? 'page' : undefined}>
-					{item.label}
-				</a>
-			))}
-		</nav>
+		<div class="nav-right">
+			<nav class="nav-links" aria-label="Main Navigation">
+				{NAV.map((item) => (
+					<a href={item.href} aria-current={active(item.href) ? 'page' : undefined}>
+						{item.label}
+					</a>
+				))}
+			</nav>
 
-		<div class="header-actions">
-			<button class="search-trigger" id="open-search-btn" type="button" aria-label="Search site (Press /)" title="Press / to search">
-				<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-					<circle cx="11" cy="11" r="8"></circle>
-					<path d="m21 21-4.35-4.35"></path>
-				</svg>
-				<span class="search-label">Search</span>
-				<kbd class="kbd">/</kbd>
-			</button>
+			<!-- Expanding Search with Floating Live Results -->
+			<div class="nav-search" data-search-root>
+				<label class="nav-search-field" for="nav-search-input">
+					<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+						<circle cx="11" cy="11" r="7"></circle>
+						<path d="m20 20-4.2-4.2"></path>
+					</svg>
+					<input id="nav-search-input" class="nav-search-input" type="search" placeholder="Search..." autocomplete="off" spellcheck="false" aria-label="Search" />
+				</label>
+				<div class="nav-search-results" hidden></div>
+			</div>
 
-			<a href={CV_PDF} class="btn btn-secondary btn-sm" download title="Download Curriculum Vitae (PDF)" style="display:none; @media(min-width:640px){display:inline-flex;}">
-				<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:0.85rem;height:0.85rem;">
-					<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-					<polyline points="7 10 12 15 17 10"></polyline>
-					<line x1="12" y1="15" x2="12" y2="3"></line>
-				</svg>
-				<span>CV</span>
-			</a>
-
-			<button class="icon-btn theme-toggle" id="theme-toggle-btn" type="button" aria-label="Toggle dark/light theme" title="Toggle theme">
-				<svg class="sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+			<!-- Theme Toggle Button -->
+			<button class="theme-toggle" id="theme-toggle-btn" type="button" aria-label="Toggle theme" title="Toggle theme">
+				<svg class="sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
 					<circle cx="12" cy="12" r="4"></circle>
 					<path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"></path>
 				</svg>
-				<svg class="moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+				<svg class="moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
 					<path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"></path>
 				</svg>
 			</button>
 		</div>
 	</div>
-
-	<!-- Search Modal Overlay -->
-	<div id="search-modal" class="search-modal-backdrop" hidden>
-		<div class="search-modal-dialog" role="dialog" aria-modal="true" aria-label="Site Search">
-			<div class="search-modal-header">
-				<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:1.2rem;height:1.2rem;color:var(--muted)">
-					<circle cx="11" cy="11" r="8"></circle>
-					<path d="m21 21-4.35-4.35"></path>
-				</svg>
-				<input id="modal-search-input" type="search" placeholder="Search projects, writing, CV..." autocomplete="off" spellcheck="false" />
-				<button id="close-search-btn" class="icon-btn" type="button" aria-label="Close search (Esc)">
-					<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-						<path d="M18 6 6 18M6 6l12 12"></path>
-					</svg>
-				</button>
-			</div>
-			<div class="search-modal-body">
-				<p id="modal-search-status" class="search-modal-status">Type to begin searching...</p>
-				<ul id="modal-search-list" class="modal-results-list"></ul>
-			</div>
-		</div>
-	</div>
 </header>
 
-<style>
-	.search-modal-backdrop {
-		position: fixed;
-		inset: 0;
-		background: rgba(15, 23, 42, 0.65);
-		backdrop-filter: blur(8px);
-		-webkit-backdrop-filter: blur(8px);
-		z-index: 100;
-		display: flex;
-		align-items: flex-start;
-		justify-content: center;
-		padding: 4rem 1.5rem 2rem;
-		animation: fadeIn 0.15s ease-out;
-	}
-
-	.search-modal-backdrop[hidden] {
-		display: none;
-	}
-
-	@keyframes fadeIn {
-		from { opacity: 0; }
-		to { opacity: 1; }
-	}
-
-	.search-modal-dialog {
-		background: var(--surface-raised);
-		border: 1px solid var(--line-strong);
-		border-radius: var(--radius-lg);
-		width: 100%;
-		max-width: 38rem;
-		box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.35);
-		overflow: hidden;
-		display: flex;
-		flex-direction: column;
-		max-height: 80vh;
-	}
-
-	.search-modal-header {
-		display: flex;
-		align-items: center;
-		gap: 0.75rem;
-		padding: 1rem 1.25rem;
-		border-bottom: 1px solid var(--line);
-	}
-
-	.search-modal-header input {
-		flex: 1;
-		border: none;
-		background: transparent;
-		font-family: inherit;
-		font-size: 1.05rem;
-		color: var(--ink);
-		outline: none;
-	}
-
-	.search-modal-header input::placeholder {
-		color: var(--subtle);
-	}
-
-	.search-modal-body {
-		padding: 1.25rem;
-		overflow-y: auto;
-		max-height: calc(80vh - 4.5rem);
-	}
-
-	.search-modal-status {
-		font-family: var(--mono);
-		font-size: 0.8rem;
-		color: var(--muted);
-		margin: 0 0 1rem;
-	}
-
-	.modal-results-list {
-		list-style: none;
-		padding: 0;
-		margin: 0;
-		display: grid;
-		gap: 0.85rem;
-	}
-
-	.modal-results-list :global(li) {
-		background: var(--surface);
-		border: 1px solid var(--line);
-		border-radius: var(--radius-md);
-		padding: 1rem 1.2rem;
-		transition: border-color 0.15s ease, background-color 0.15s ease;
-	}
-
-	.modal-results-list :global(li:hover) {
-		border-color: var(--accent-border);
-		background: var(--bg-subtle);
-	}
-
-	.modal-results-list :global(h4) {
-		margin: 0 0 0.35rem;
-		font-size: 1rem;
-	}
-
-	.modal-results-list :global(h4 a) {
-		color: var(--ink);
-		text-decoration: none;
-	}
-
-	.modal-results-list :global(p) {
-		margin: 0;
-		font-size: 0.88rem;
-		color: var(--muted);
-		line-height: 1.5;
-	}
-
-	.modal-results-list :global(mark) {
-		background: var(--accent-soft);
-		color: var(--accent);
-		font-weight: 600;
-		padding: 0 0.2rem;
-		border-radius: 2px;
-	}
-</style>
-
 <script>
-	// Theme toggle script with persistent storage
+	// Theme toggle script
 	const themeBtn = document.getElementById('theme-toggle-btn');
 	themeBtn?.addEventListener('click', () => {
 		const currentTheme = document.documentElement.dataset.theme;
@@ -203,17 +54,13 @@ const active = (href: string) => path === href || (href !== '/' && path.startsWi
 		} catch {}
 	});
 
-	// Search modal handling with Pagefind integration
-	type Sub = { title: string; url: string; excerpt: string };
-	type Result = { url: string; excerpt: string; meta: { title?: string }; sub_results?: Sub[] };
+	// In-navbar expanding search with live Pagefind dropdown
+	type Result = { url: string; excerpt: string; meta: { title?: string } };
 	type Pagefind = { debouncedSearch: (q: string, o?: object, ms?: number) => Promise<{ results: { data: () => Promise<Result> }[] } | null> };
 
-	const openBtn = document.getElementById('open-search-btn');
-	const closeBtn = document.getElementById('close-search-btn');
-	const modal = document.getElementById('search-modal');
-	const input = document.getElementById('modal-search-input') as HTMLInputElement | null;
-	const status = document.getElementById('modal-search-status');
-	const list = document.getElementById('modal-search-list');
+	const searchRoot = document.querySelector<HTMLElement>('[data-search-root]');
+	const input = document.getElementById('nav-search-input') as HTMLInputElement | null;
+	const resultsContainer = searchRoot?.querySelector<HTMLElement>('.nav-search-results');
 
 	const PAGEFIND_PATH = ['', 'pagefind', 'pagefind.js'].join('/');
 	let pagefindInstance: Promise<Pagefind> | null = null;
@@ -223,80 +70,71 @@ const active = (href: string) => path === href || (href !== '/' && path.startsWi
 		'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
 	}[c]!));
 
-	function openModal() {
-		if (!modal || !input) return;
-		modal.hidden = false;
-		input.focus();
-		input.select();
-		document.body.style.overflow = 'hidden';
-		loadPagefind().catch(() => {});
-	}
-
-	function closeModal() {
-		if (!modal || !input) return;
-		modal.hidden = true;
+	const closeSearch = () => {
+		if (!searchRoot || !resultsContainer || !input) return;
+		searchRoot.removeAttribute('data-open');
+		resultsContainer.hidden = true;
+		resultsContainer.innerHTML = '';
 		input.value = '';
-		if (status) status.textContent = 'Type to begin searching...';
-		if (list) list.innerHTML = '';
-		document.body.style.overflow = '';
-	}
+	};
 
-	openBtn?.addEventListener('click', openModal);
-	closeBtn?.addEventListener('click', closeModal);
-
-	modal?.addEventListener('click', (e) => {
-		if (e.target === modal) closeModal();
-	});
-
-	window.addEventListener('keydown', (e) => {
-		if (e.key === '/' && document.activeElement?.tagName !== 'INPUT' && document.activeElement?.tagName !== 'TEXTAREA') {
-			e.preventDefault();
-			openModal();
-		} else if (e.key === 'k' && (e.metaKey || e.ctrlKey)) {
-			e.preventDefault();
-			openModal();
-		} else if (e.key === 'Escape' && modal && !modal.hidden) {
-			closeModal();
-		}
+	input?.addEventListener('focus', () => {
+		searchRoot?.setAttribute('data-open', '');
+		loadPagefind().catch(() => {});
 	});
 
 	input?.addEventListener('input', async () => {
+		if (!resultsContainer || !input) return;
 		const query = input.value.trim();
+
 		if (!query) {
-			if (status) status.textContent = 'Type to begin searching...';
-			if (list) list.innerHTML = '';
+			resultsContainer.hidden = true;
+			resultsContainer.innerHTML = '';
 			return;
 		}
-
-		if (status) status.textContent = 'Searching...';
 
 		let pf: Pagefind;
 		try {
 			pf = await loadPagefind();
 		} catch {
-			if (status) status.textContent = 'Search index is available on the published build.';
-			if (list) list.innerHTML = '';
+			resultsContainer.hidden = false;
+			resultsContainer.innerHTML = '<p class="nav-search-empty">Search index available on published site.</p>';
 			return;
 		}
 
-		const search = await pf.debouncedSearch(query, {}, 150);
+		const search = await pf.debouncedSearch(query, {}, 120);
 		if (search === null || input.value.trim() !== query) return;
 
-		const data = await Promise.all(search.results.slice(0, 8).map((r) => r.data()));
+		const data = await Promise.all(search.results.slice(0, 6).map((r) => r.data()));
 
+		resultsContainer.hidden = false;
 		if (data.length === 0) {
-			if (status) status.textContent = `No results found for “${query}”`;
-			if (list) list.innerHTML = '';
+			resultsContainer.innerHTML = '<p class="nav-search-empty">Nothing found.</p>';
 		} else {
-			if (status) status.textContent = `${data.length} result${data.length > 1 ? 's' : ''} for “${query}”`;
-			if (list) {
-				list.innerHTML = data.map((d) => `
-					<li>
-						<h4><a href="${escapeHtml(d.url)}">${escapeHtml(d.meta.title ?? d.url)}</a></h4>
-						<p>${d.excerpt}</p>
-					</li>
-				`).join('');
-			}
+			resultsContainer.innerHTML = data.map((d) => `
+				<a href="${escapeHtml(d.url)}">
+					<span class="r-title">${escapeHtml(d.meta.title ?? d.url)}</span>
+					<span class="r-excerpt">${d.excerpt}</span>
+				</a>
+			`).join('');
+		}
+	});
+
+	// Keyboard handling: '/' focuses search, Escape closes
+	window.addEventListener('keydown', (e) => {
+		if (e.key === '/' && document.activeElement?.tagName !== 'INPUT' && document.activeElement?.tagName !== 'TEXTAREA') {
+			e.preventDefault();
+			input?.focus();
+		} else if (e.key === 'Escape' && searchRoot?.hasAttribute('data-open')) {
+			closeSearch();
+			input?.blur();
+		}
+	});
+
+	// Click outside closes
+	document.addEventListener('click', (e) => {
+		if (searchRoot && !searchRoot.contains(e.target as Node) && !input?.value.trim()) {
+			closeSearch();
 		}
 	});
 </script>

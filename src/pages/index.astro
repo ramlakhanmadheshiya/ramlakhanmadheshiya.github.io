@@ -1,297 +1,158 @@
 ---
 import Base from '../layouts/Base.astro';
-import { getPosts, fmtDate, readingTime } from '../utils';
-import { SOCIAL, EMAIL, CV_PDF } from '../consts';
-import { pullRequests, webApps, security, openSource, games } from '../data/projects';
+import { getPosts, fmtDate } from '../utils';
+import { SOCIAL } from '../consts';
+import { pullRequests } from '../data/projects';
 
 const posts = (await getPosts()).slice(0, 3);
 const mergedPRs = pullRequests.filter((pr) => pr.state === 'merged');
 
-const featuredProjects = [
-	webApps.find((p) => p.name === 'Bill Studio')!,
-	webApps.find((p) => p.name === 'ghtrack')!,
-	webApps.find((p) => p.name === 'ghpr')!,
-	security.find((p) => p.name === 'GPO Compliance Manager')!,
-	openSource.find((p) => p.name.includes('OrdinaryDiffEq'))!,
+const highlights = [
+	{
+		title: 'Security tool for NTRO',
+		meta: 'SDE Intern · National Technical Research Organisation · 2025',
+		blurb: 'Designed and built a security compliance tool, onsite, that supports internal hardening and audit operations. Architecture details confidential under NDA.',
+		links: [{ label: 'CV Details', href: '/cv/' }],
+	},
+	{
+		title: 'Group Policy Object Manager',
+		meta: 'Smart India Hackathon 2024 finalist · C#, .NET, WPF',
+		blurb: 'A Windows system administration application that generates and manages Group Policy Objects aligned with CIS security benchmarks, developed for the NTRO challenge.',
+		links: [{ label: 'GitHub', href: 'https://github.com/ramlakhanmadheshiya/Project-Techolics_' }],
+	},
+	{
+		title: 'Bill Studio',
+		meta: 'Web app · JavaScript, PWA, IndexedDB · 2026',
+		blurb: 'Free, offline-first billing for 50+ countries: tax rules (GST, VAT, sales tax), drag-and-drop bill designer, ledgers, reports, payment QR codes and client-side encrypted backups. Zero server requirement.',
+		links: [
+			{ label: 'Live App', href: '/projects/bill-studio/' },
+			{ label: 'GitHub', href: 'https://github.com/ramlakhanmadheshiya/bill-studio' }
+		],
+	},
+	{
+		title: 'ghtrack & ghpr',
+		meta: 'Developer tooling · JavaScript, GitHub API, IndexedDB · 2026',
+		blurb: 'Client-side GitHub developer tools: lifetime activity analysis across PRs, issues, and reviews in ~2 seconds, and automated PR health triage with 14 priority signals.',
+		links: [
+			{ label: 'ghtrack', href: '/ghtrack/' },
+			{ label: 'ghpr', href: '/ghpr/' }
+		],
+	},
 ];
+
+const ext = (href: string) => /^https?:/.test(href);
 ---
-<Base title="Home" description="Ramlakhan Madheshiya — Software engineer, open-source contributor, and systems builder.">
-	<!-- Hero Section -->
+<Base index={false}>
+	<!-- Minimal Hero -->
 	<section class="hero">
-		<div class="hero-content">
-			<div class="status-badge">
-				<span class="pulse-dot"></span>
-				<span>Available for Software Engineering Roles</span>
-			</div>
-			<h1>
-				Ramlakhan Madheshiya<br />
-				<span class="hero-gradient">Crafting dependable systems, high-speed tools & offline software.</span>
-			</h1>
-			<p class="hero-bio">
-				Software engineer specializing in numerical solvers, security compliance tooling, and client-side web architectures. Contributor to Julia's <strong>SciML</strong> ecosystem and creator of zero-server, high-performance developer tools.
-			</p>
-
-			<div class="hero-actions">
-				<a class="btn btn-primary" href="/projects/">
-					<span>Explore Projects</span>
-					<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-						<path d="M5 12h14M12 5l7 7-7 7"></path>
-					</svg>
+		<span class="eyebrow">Software engineer · Gujarat, India</span>
+		<h1>Ramlakhan Madheshiya</h1>
+		<p class="lede">
+			Software engineer building dependable tools and systems. Upstream contributor to Julia's SciML scientific computing libraries, developer of offline-first client-side web applications, and security tooling researcher.
+		</p>
+		<div class="actions">
+			<a class="btn primary" href="/projects/">See projects</a>
+			<a class="btn" href="/cv/">Read my CV</a>
+		</div>
+		<div class="social-links">
+			{SOCIAL.map((s) => (
+				<a href={s.href} target={ext(s.href) ? '_blank' : undefined} rel={ext(s.href) ? 'noopener noreferrer' : undefined}>
+					{s.label}{s.label !== 'Email' && ' ↗'}
 				</a>
-				<a class="btn btn-secondary" href="/cv/">
-					<span>View Resume / CV</span>
-				</a>
-				<button class="copy-btn" id="copy-email-btn" data-email={EMAIL} type="button" title="Copy email address">
-					<svg id="copy-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:1rem;height:1rem;">
-						<rect width="14" height="14" x="8" y="8" rx="2" ry="2"></rect>
-						<path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"></path>
-					</svg>
-					<span id="copy-text">Copy Email</span>
-				</button>
-			</div>
-
-			<div class="social-bar">
-				{SOCIAL.filter((s) => s.label !== 'Email').map((s) => (
-					<a href={s.href} target="_blank" rel="noopener noreferrer">
-						<span>{s.label}</span>
-						<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-							<path d="M7 17L17 7M7 7h10v10"></path>
-						</svg>
-					</a>
-				))}
-			</div>
-		</div>
-
-		<div class="hero-avatar">
-			<div class="avatar-frame">
-				<img src="/profile.jpeg" alt="Ramlakhan Madheshiya" class="avatar-img" width="140" height="140" loading="eager" />
-			</div>
-			<div class="avatar-label">
-				<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:0.85rem;height:0.85rem;color:var(--accent);">
-					<path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"></path>
-					<circle cx="12" cy="10" r="3"></circle>
-				</svg>
-				<span>Gujarat, India</span>
-			</div>
-		</div>
-	</section>
-
-	<!-- Key Metrics Strip -->
-	<section class="metrics-strip">
-		<div class="metric-card">
-			<div class="metric-num">3<span class="accent">+</span></div>
-			<div class="metric-label">Merged Upstream PRs in SciML & Ibis ecosystems</div>
-		</div>
-		<div class="metric-card">
-			<div class="metric-num">50<span class="accent">+</span></div>
-			<div class="metric-label">Countries supported with offline tax & billing rules</div>
-		</div>
-		<div class="metric-card">
-			<div class="metric-num">6<span class="accent">+</span></div>
-			<div class="metric-label">Shipped Godot games with automated level verification</div>
-		</div>
-		<div class="metric-card">
-			<div class="metric-num">NTRO<span class="accent">/SIH</span></div>
-			<div class="metric-label">Smart India Hackathon Finalist & Onsite Security Intern</div>
-		</div>
-	</section>
-
-	<!-- Featured Projects Showcase -->
-	<section class="section">
-		<div class="section-head">
-			<div class="section-title">
-				<span class="eyebrow">Work & Systems</span>
-				<h2>Featured Projects</h2>
-				<p class="section-subtitle">Flagship offline-first web apps, developer tools, and numerical software.</p>
-			</div>
-			<a class="view-all" href="/projects/">
-				<span>All Projects</span>
-				<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="width:0.9rem;height:0.9rem;">
-					<path d="M5 12h14M12 5l7 7-7 7"></path>
-				</svg>
-			</a>
-		</div>
-
-		<div class="projects-grid">
-			{featuredProjects.map((project) => (
-				<article class="project-card">
-					<div class="card-top">
-						<span class="project-category">{project.status ?? 'Production'}</span>
-						<span class="project-year">{project.year}</span>
-					</div>
-					<h3>{project.name}</h3>
-					<p class="project-desc">{project.blurb}</p>
-					<div class="tags-group">
-						{project.tags.map((tag) => (
-							<span class="tag">{tag}</span>
-						))}
-					</div>
-					<div class="card-links">
-						{project.links.map((link) => (
-							<a class="card-link" href={link.href} target={link.href.startsWith('http') ? '_blank' : undefined} rel={link.href.startsWith('http') ? 'noopener noreferrer' : undefined}>
-								<span>{link.label}</span>
-								<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-									<path d="M7 17L17 7M7 7h10v10"></path>
-								</svg>
-							</a>
-						))}
-					</div>
-				</article>
 			))}
 		</div>
 	</section>
 
-	<!-- Merged Open Source Contributions -->
+	<!-- Highlights (Numbered 01, 02, 03, 04) -->
 	<section class="section">
 		<div class="section-head">
-			<div class="section-title">
-				<span class="eyebrow">Open Source</span>
-				<h2>Merged Contributions</h2>
-				<p class="section-subtitle">Accepted and merged pull requests to major open-source scientific and data computing codebases.</p>
-			</div>
-			<a class="view-all" href="/projects/#open-source">
-				<span>View Full Breakdown</span>
-				<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="width:0.9rem;height:0.9rem;">
-					<path d="M5 12h14M12 5l7 7-7 7"></path>
-				</svg>
-			</a>
+			<h2>Highlights</h2>
+			<a href="/projects/">All projects &rarr;</a>
 		</div>
-
-		<div class="pr-grid">
-			{mergedPRs.map((pr) => (
-				<div class="pr-card">
-					<div class="pr-status-icon" title="Merged upstream">
-						<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-							<polyline points="20 6 9 17 4 12"></polyline>
-						</svg>
-					</div>
-					<div class="pr-info">
-						<div class="pr-meta-row">
-							<span class="pr-repo">{pr.repo}</span>
-							<span class="pr-num">#{pr.number}</span>
-							<span class="badge-merged">✓ Merged</span>
+		<ol class="highlights-list">
+			{highlights.map((h, i) => (
+				<li class="highlights-item">
+					<span class="hl-index">{String(i + 1).padStart(2, '0')}</span>
+					<div class="highlights-content">
+						<p class="meta">{h.meta}</p>
+						<h3>{h.title}</h3>
+						<p>{h.blurb}</p>
+						<div class="item-links">
+							{h.links.map((l) => (
+								<a href={l.href} target={ext(l.href) ? '_blank' : undefined} rel={ext(l.href) ? 'noopener noreferrer' : undefined}>
+									{l.label} {ext(l.href) ? '↗' : '→'}
+								</a>
+							))}
 						</div>
-						<h3 class="pr-title">
-							<a href={pr.url} target="_blank" rel="noopener noreferrer">{pr.title}</a>
-						</h3>
-						{pr.description && <p class="pr-desc">{pr.description}</p>}
 					</div>
-					<a class="pr-action-btn" href={pr.url} target="_blank" rel="noopener noreferrer">
-						<span>View PR</span>
-						<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:0.85rem;height:0.85rem;">
-							<path d="M7 17L17 7M7 7h10v10"></path>
-						</svg>
-					</a>
-				</div>
+				</li>
 			))}
+		</ol>
+	</section>
+
+	<!-- Merged Open Source Contributions Only -->
+	<section class="section">
+		<div class="section-head">
+			<h2>Open source</h2>
+			<a href="/projects/#open-source">All contributions &rarr;</a>
 		</div>
+		<ul class="post-rows">
+			<li class="post-row">
+				<h3>
+					<a href="https://github.com/SciML/OrdinaryDiffEq.jl" target="_blank" rel="noopener noreferrer">SciML / OrdinaryDiffEq.jl</a>
+					<span class="badge-merged">merged</span>
+				</h3>
+				<p>Production Julia differential equation solvers: lag handling, zero-lag step bound preservation, and interpolation dispatch order.</p>
+				<div style="margin-top:0.6rem;font-size:0.9rem;">
+					{mergedPRs.filter((p) => p.repo.includes('OrdinaryDiffEq')).map((pr, idx, arr) => (
+						<>
+							<a href={pr.url} target="_blank" rel="noopener noreferrer">#{pr.number}: {pr.title}</a>
+							{idx < arr.length - 1 ? ' · ' : ''}
+						</>
+					))}
+				</div>
+			</li>
+
+			<li class="post-row">
+				<h3>
+					<a href="https://github.com/ibis-project/ibis" target="_blank" rel="noopener noreferrer">ibis-project / ibis</a>
+					<span class="badge-merged">merged</span>
+				</h3>
+				<p>Portable Python dataframe engine: resolved deep documentation accessibility with scrollable navigation menus.</p>
+				<div style="margin-top:0.6rem;font-size:0.9rem;">
+					{mergedPRs.filter((p) => p.repo.includes('ibis')).map((pr) => (
+						<a href={pr.url} target="_blank" rel="noopener noreferrer">#{pr.number}: {pr.title}</a>
+					))}
+				</div>
+			</li>
+		</ul>
 	</section>
 
 	<!-- Technical Writing -->
 	{posts.length > 0 && (
 		<section class="section">
 			<div class="section-head">
-				<div class="section-title">
-					<span class="eyebrow">Writing</span>
-					<h2>Technical Notes & Articles</h2>
-					<p class="section-subtitle">Deep dives into numerical ODE/DDE solvers, offline systems, and level generation algorithms.</p>
-				</div>
-				<a class="view-all" href="/blog/">
-					<span>All Articles</span>
-					<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="width:0.9rem;height:0.9rem;">
-						<path d="M5 12h14M12 5l7 7-7 7"></path>
-					</svg>
-				</a>
+				<h2>Writing</h2>
+				<a href="/blog/">All posts &rarr;</a>
 			</div>
-
-			<div class="post-grid">
+			<ul class="post-rows">
 				{posts.map((post) => (
-					<article class="post-card">
-						<div class="meta">{fmtDate(post.data.pubDate)} · {readingTime(post.body ?? '')} min read</div>
-						<h3>
-							<a href={`/blog/${post.id}/`}>{post.data.title}</a>
-						</h3>
+					<li class="post-row">
+						<span class="meta">{fmtDate(post.data.pubDate)}</span>
+						<h3><a href={`/blog/${post.id}/`}>{post.data.title}</a></h3>
 						<p>{post.data.description}</p>
-						<span class="read-more">
-							<span>Read Article</span>
-							<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-								<path d="M5 12h14M12 5l7 7-7 7"></path>
-							</svg>
-						</span>
-					</article>
+					</li>
 				))}
-			</div>
+			</ul>
 		</section>
 	)}
 
-	<!-- Outside Work / Creative Tech -->
-	<section class="section">
-		<div class="section-head">
-			<div class="section-title">
-				<span class="eyebrow">Game Development</span>
-				<h2>Creative Tech & Game Design</h2>
-				<p class="section-subtitle">Independent puzzle games crafted with Godot 4 for Android and Web under Brainnova Studio.</p>
-			</div>
-			<a class="view-all" href="/BrainnovaStudio/games/">
-				<span>Explore Games Hub</span>
-				<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="width:0.9rem;height:0.9rem;">
-					<path d="M5 12h14M12 5l7 7-7 7"></path>
-				</svg>
-			</a>
-		</div>
-
-		<div class="projects-grid">
-			{games.slice(0, 3).map((game) => (
-				<article class="project-card">
-					<div class="card-top">
-						<span class="project-category">{game.status ?? 'Godot 4 Game'}</span>
-						<span class="project-year">{game.year}</span>
-					</div>
-					<h3>{game.name}</h3>
-					<p class="project-desc">{game.blurb}</p>
-					<div class="tags-group">
-						{game.tags.map((tag) => (
-							<span class="tag">{tag}</span>
-						))}
-					</div>
-					<div class="card-links">
-						{game.links.map((link) => (
-							<a class="card-link" href={link.href} target={link.href.startsWith('http') ? '_blank' : undefined} rel={link.href.startsWith('http') ? 'noopener noreferrer' : undefined}>
-								<span>{link.label}</span>
-								<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-									<path d="M7 17L17 7M7 7h10v10"></path>
-								</svg>
-							</a>
-						))}
-					</div>
-				</article>
-			))}
-		</div>
+	<!-- Outside Work -->
+	<section class="section" style="margin-top:4rem;">
+		<h2>Outside work</h2>
+		<p style="margin-top:0.5rem;max-width:var(--measure);color:var(--muted);">
+			In my spare time I make small puzzle games with Godot 4, exploring procedural mechanics and level validation algorithms.
+			They live at <a href="/BrainnovaStudio/games/">Brainnova Studio</a>.
+		</p>
 	</section>
 </Base>
-
-<script>
-	// Copy email with animated feedback
-	const copyBtn = document.getElementById('copy-email-btn');
-	const copyText = document.getElementById('copy-text');
-
-	copyBtn?.addEventListener('click', async () => {
-		const email = copyBtn.getAttribute('data-email');
-		if (!email) return;
-
-		try {
-			await navigator.clipboard.writeText(email);
-			if (copyText) copyText.textContent = 'Copied to Clipboard!';
-			copyBtn.style.borderColor = 'var(--ok-border)';
-			copyBtn.style.color = 'var(--ok)';
-
-			setTimeout(() => {
-				if (copyText) copyText.textContent = 'Copy Email';
-				copyBtn.style.borderColor = '';
-				copyBtn.style.color = '';
-			}, 2500);
-		} catch (err) {
-			window.location.href = `mailto:${email}`;
-		}
-	});
-</script>
