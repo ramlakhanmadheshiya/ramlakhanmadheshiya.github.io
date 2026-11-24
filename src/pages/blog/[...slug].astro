@@ -2,28 +2,57 @@
 import { getCollection, render } from 'astro:content';
 import Base from '../../layouts/Base.astro';
 import { fmtDate, readingTime } from '../../utils';
+import { EMAIL, SOCIAL } from '../../consts';
 
 export async function getStaticPaths() {
-	const posts = await getCollection('blog', ({ data }) => !data.draft);
-	return posts.map((post) => ({ params: { slug: post.id }, props: { post } }));
+	const posts = (await getCollection('blog', ({ data }) => !data.draft))
+		.sort((a, b) => b.data.pubDate.valueOf() - a.data.pubDate.valueOf());
+
+	return posts.map((post, index) => ({
+		params: { slug: post.id },
+		props: {
+			post,
+			prevPost: index < posts.length - 1 ? posts[index + 1] : null,
+			nextPost: index > 0 ? posts[index - 1] : null,
+		},
+	}));
 }
-const { post } = Astro.props;
+
+const { post, prevPost, nextPost } = Astro.props;
 const { Content } = await render(post);
 ---
 <Base title={post.data.title} description={post.data.description} type="article">
-	<article style="max-width:var(--measure);margin:0 auto;">
-		<header style="margin-bottom:2.5rem;">
-			<a href="/blog/" style="display:inline-block;margin-bottom:1.5rem;font-size:0.88rem;color:var(--muted);text-decoration:none;">
-				&larr; All posts
-			</a>
-			<p class="meta" style="margin-bottom:0.5rem;">
-				{fmtDate(post.data.pubDate)} · {readingTime(post.body ?? '')} min read
-				{post.data.tags.length > 0 && ` · ${post.data.tags.join(', ')}`}
-			</p>
-			<h1 style="font-size:clamp(1.9rem, 4.5vw, 2.5rem);margin-bottom:0.8rem;">
-				{post.data.title}
-			</h1>
-			<p class="lede" style="font-size:1.1rem;margin-bottom:0;">
+	<article class="article-container">
+		<a href="/blog/" class="back-link">
+			<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+				<line x1="19" y1="12" x2="5" y2="12"></line>
+				<polyline points="12 19 5 12 12 5"></polyline>
+			</svg>
+			<span>Back to writing</span>
+		</a>
+
+		<header class="article-header">
+			{post.data.tags.length > 0 && (
+				<div class="tag-list" style="margin-bottom:0.75rem;">
+					{post.data.tags.map((tag: string) => (
+						<span class="tag">{tag}</span>
+					))}
+				</div>
+			)}
+
+			<h1>{post.data.title}</h1>
+
+			<div class="article-meta-bar">
+				<time datetime={post.data.pubDate.toISOString()}>
+					{fmtDate(post.data.pubDate)}
+				</time>
+				<span>·</span>
+				<span>{readingTime(post.body ?? '')} min read</span>
+				<span>·</span>
+				<span>Ramlakhan Madheshiya</span>
+			</div>
+
+			<p class="lede" style="margin-bottom:0;">
 				{post.data.description}
 			</p>
 		</header>
@@ -32,9 +61,47 @@ const { Content } = await render(post);
 			<Content />
 		</div>
 
-		<footer style="margin-top:3.5rem;padding-top:1.5rem;border-top:1px solid var(--line);">
-			<a href="/blog/" style="font-size:0.92rem;color:var(--muted);">
-				&larr; Back to all posts
+		<aside class="author-card">
+			<h3>Ramlakhan Madheshiya</h3>
+			<p>
+				Software engineer & open-source contributor to Julia's SciML differential equation solvers. Exploring numerical analysis, procedural level generation, and offline-first software architectures.
+			</p>
+			<div style="display:flex;flex-wrap:wrap;gap:0.4rem 1.2rem;margin-top:0.4rem;font-size:0.88rem;">
+				{SOCIAL.map((s) => (
+					<a href={s.href} target={s.href.startsWith('http') ? '_blank' : undefined} rel={s.href.startsWith('http') ? 'noopener noreferrer' : undefined}>
+						{s.label}
+					</a>
+				))}
+			</div>
+		</aside>
+
+		{(prevPost || nextPost) && (
+			<nav class="post-nav" aria-label="Article navigation">
+				{prevPost ? (
+					<a href={`/blog/${prevPost.id}/`} class="post-nav-card prev">
+						<span class="post-nav-label">&larr; Older article</span>
+						<span class="post-nav-title">{prevPost.data.title}</span>
+					</a>
+				) : (
+					<div></div>
+				)}
+				{nextPost ? (
+					<a href={`/blog/${nextPost.id}/`} class="post-nav-card next">
+						<span class="post-nav-label">Newer article &rarr;</span>
+						<span class="post-nav-title">{nextPost.data.title}</span>
+					</a>
+				) : (
+					<div></div>
+				)}
+			</nav>
+		)}
+
+		<footer style="margin-top:2.5rem;padding-top:1.5rem;border-top:1px solid var(--line);display:flex;justify-content:space-between;align-items:center;">
+			<a href="/blog/" style="font-size:0.9rem;color:var(--muted);text-decoration:none;">
+				&larr; Back to all articles
+			</a>
+			<a href="#main-content" style="font-size:0.9rem;color:var(--muted);text-decoration:none;">
+				Back to top &uarr;
 			</a>
 		</footer>
 	</article>

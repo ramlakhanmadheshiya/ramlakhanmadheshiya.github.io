@@ -4,31 +4,134 @@ import { getPosts, fmtDate, readingTime } from '../../utils';
 
 const posts = await getPosts();
 const years = [...new Set(posts.map((p) => p.data.pubDate.getUTCFullYear()))].sort((a, b) => b - a);
+
+// Extract top tags for quick filtering
+const allTags = [...new Set(posts.flatMap((p) => p.data.tags))];
 ---
-<Base title="Blog" description="Notes on numerical solvers, game level design, and offline-first applications by Ramlakhan Madheshiya.">
-	<header style="margin-bottom:3rem;">
+<Base title="Blog" description="Technical notes on numerical solvers, procedural game verification, and offline-first systems by Ramlakhan Madheshiya.">
+	<header class="blog-header">
 		<span class="eyebrow">Writing</span>
-		<h1>Blog & Notes</h1>
+		<h1>Technical Notes & Articles</h1>
 		<p class="lede">
-			Notes on numerical differential equation solvers, procedural level design, and offline-first web apps.
-			<a href="/rss.xml" style="margin-left:0.5rem;">RSS</a>
+			In-depth writeups on numerical differential equation solvers, procedural game verification, and offline-first software architecture.
 		</p>
+
+		<div class="blog-toolbar">
+			<div class="blog-filters" id="tag-filters">
+				<button class="blog-filter-btn active" data-filter="all">All ({posts.length})</button>
+				{allTags.map((tag) => {
+					const count = posts.filter((p) => p.data.tags.includes(tag)).length;
+					return (
+						<button class="blog-filter-btn" data-filter={tag.toLowerCase()}>
+							{tag} ({count})
+						</button>
+					);
+				})}
+			</div>
+
+			<a href="/rss.xml" class="blog-rss-link" title="Subscribe via RSS">
+				<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+					<path d="M4 11a9 9 0 0 1 9 9" />
+					<path d="M4 4a16 16 0 0 1 16 16" />
+					<circle cx="5" cy="19" r="1" />
+				</svg>
+				<span>RSS Feed</span>
+			</a>
+		</div>
 	</header>
 
-	{years.map((year) => (
-		<section class="section" style="margin-top:2rem;">
-			<span style="font-family:var(--font-mono);font-size:0.85rem;color:var(--muted);display:block;margin-bottom:0.75rem;">
-				{year}
-			</span>
-			<ul class="post-rows">
-				{posts.filter((p) => p.data.pubDate.getUTCFullYear() === year).map((post) => (
-					<li class="post-row">
-						<span class="meta">{fmtDate(post.data.pubDate)} · {readingTime(post.body ?? '')} min read</span>
-						<h3><a href={`/blog/${post.id}/`}>{post.data.title}</a></h3>
-						<p>{post.data.description}</p>
-					</li>
-				))}
-			</ul>
-		</section>
-	))}
+	<div id="posts-container">
+		{years.map((year) => {
+			const yearPosts = posts.filter((p) => p.data.pubDate.getUTCFullYear() === year);
+			return (
+				<section class="blog-year-group" data-year={year}>
+					<div class="blog-year-heading">
+						<span class="blog-year-label">{year}</span>
+						<span class="blog-year-line"></span>
+					</div>
+
+					<div class="blog-cards">
+						{yearPosts.map((post) => (
+							<a
+								href={`/blog/${post.id}/`}
+								class="blog-card"
+								data-tags={post.data.tags.map((t) => t.toLowerCase()).join(',')}
+							>
+								<div class="blog-card-top">
+									<div class="blog-card-meta">
+										<time datetime={post.data.pubDate.toISOString()}>
+											{fmtDate(post.data.pubDate)}
+										</time>
+										<span>·</span>
+										<span>{readingTime(post.body ?? '')} min read</span>
+									</div>
+									<div class="tag-list" style="margin-bottom:0;">
+										{post.data.tags.map((t) => (
+											<span class="tag">{t}</span>
+										))}
+									</div>
+								</div>
+
+								<h2>{post.data.title}</h2>
+								<p>{post.data.description}</p>
+
+								<div class="blog-card-footer">
+									<span class="blog-card-read-more">
+										Read article
+										<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+											<line x1="5" y1="12" x2="19" y2="12"></line>
+											<polyline points="12 5 19 12 12 19"></polyline>
+										</svg>
+									</span>
+								</div>
+							</a>
+						))}
+					</div>
+				</section>
+			);
+		})}
+	</div>
+
+	<p id="empty-state" style="display:none;padding:3rem 0;text-align:center;color:var(--muted);">
+		No articles found under this topic.
+	</p>
 </Base>
+
+<script>
+	const buttons = document.querySelectorAll<HTMLButtonElement>('.blog-filter-btn');
+	const cards = document.querySelectorAll<HTMLElement>('.blog-card');
+	const yearGroups = document.querySelectorAll<HTMLElement>('.blog-year-group');
+	const emptyState = document.getElementById('empty-state');
+
+	buttons.forEach((btn) => {
+		btn.addEventListener('click', () => {
+			buttons.forEach((b) => b.classList.remove('active'));
+			btn.classList.add('active');
+
+			const filter = btn.getAttribute('data-filter')?.toLowerCase() ?? 'all';
+			let totalVisible = 0;
+
+			yearGroups.forEach((group) => {
+				const groupCards = group.querySelectorAll<HTMLElement>('.blog-card');
+				let groupVisible = 0;
+
+				groupCards.forEach((card) => {
+					const tags = card.getAttribute('data-tags') ?? '';
+					if (filter === 'all' || tags.split(',').includes(filter)) {
+						card.style.display = 'flex';
+						groupVisible++;
+						totalVisible++;
+					} else {
+						card.style.display = 'none';
+					}
+				});
+
+				group.style.display = groupVisible > 0 ? 'block' : 'none';
+			});
+
+			if (emptyState) {
+				emptyState.style.display = totalVisible === 0 ? 'block' : 'none';
+			}
+		});
+	});
+</script>
