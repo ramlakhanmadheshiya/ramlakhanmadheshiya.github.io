@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Wildlife Acts</title>
+    <link rel="stylesheet" href="../styles/styles.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css"
+        integrity="sha512-1ycn6IcaQQ40/MKBW2W4Rhis/DbILU74C1vSrLJxCq57o941Ym01SwNsOMqvEBFlcgUa6xLiPY/NS5R+E6ztJQ=="
+        crossorigin="anonymous" referrerpolicy="no-referrer" />
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap"
+        rel="stylesheet">
+</head>
+
+<body class="main-content">
+    <main>
+        <section class="container active" id="blogs">
+            <div class="blogs-content"><br><br><br><br>
+                <div class="main-title">
+                    <h2>INTERNATIONAL <span>ACTS</span><span class="bg-text">INTERNATIONAL ACTS</span></h2>
+                </div><br><br><br>
+                <p class="port-text">
+                    <center>The Wildlife And It's Habitat Cannot Speak, So We Must And We Will...</center>
+                </p>
+                <div class="blogs">
+                    <div class="blog">
+                        <a href="https://en.wikipedia.org/wiki/Montreal_Protocol" target="_blank"><img src="../img/in1.png" alt="">
+                        <div class="blog-text">
+                            <h4>
+                                Montreal Protocol, 1987
+                            </h4>
+                            <p>
+                                The Montreal Protocol is an international treaty designed to protect the ozone layer by
+                                phasing out the production of numerous substances that are responsible for ozone
+                                depletion. It was agreed on 16 September 1987, and entered into force on 1 January 1989.
+                            </p>
+                        </div>
+                        </a>
+                    </div>
+                    <div class="blog">
+                        <a href="https://en.wikipedia.org/wiki/Convention_on_Biological_Diversity" target="_blank"><img src="../img/in2.png" alt="">
+                        <div class="blog-text">
+                            <h4>
+                                The Convention on Biological Diversity, 1992
+                            </h4>
+                            <p>
+                                The Convention on Biological Diversity (CBD) is the international legal instrument for
+                                "the conservation of biological diversity, the sustainable use of its components and the
+                                fair and equitable sharing of the benefits arising out of the utilization of genetic
+                                resources" that has been ratified by 196 nations.
+                            </p>
+                        </div>
+                        </a>
+                    </div>
+                    <div class="blog">
+                        <a href="https://en.wikipedia.org/wiki/Kyoto_Protocol" target="_blank"><img src="../img/in3.png" alt="">
+                        <div class="blog-text">
+                            <h4>
+                                Kyoto Protocol, 1997
+                            </h4>
+                            <p>
+                                The Kyoto Protocol was an international treaty which extended the 1992 United Nations
+                                Framework Convention on Climate Change that commits state parties to reduce greenhouse
+                                gas emissions, based on the scientific consensus that global warming is occurring and
+                                that human-made CO₂ emissions are driving it.
+                            </p>
+                        </div>
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+    <div class="controls">
+        <a class="control" href="../index.html" data-id="home" data-title="Home">
+            <i class="fas fa-home"></i>
+        </a>
+        <a class="control" href="national-acts.html" data-id="national-acts" data-title="National Acts">
+            <i class="fas fa-city"></i>
+        </a>
+        <a class="control active-btn" href="international-acts.html" data-id="blogs" data-title="International Acts">
+            <i class="fas fa-globe"></i>
+        </a>
+        <a class="control" href="about-us.html" data-id="about" data-title="About Us">
+            <i class="fas fa-user"></i>
+        </a>
+        <a class="control" href="contact-us.html" data-id="contact" data-title="Contact Us">
+            <i class="fas fa-phone"></i>
+        </a>
+    </div>
+    <div class="theme-btn" data-title="Theme">
+        <i class="fas fa-adjust"></i>
+    </div>
+
+    <script>
+        const currentTheme = localStorage.getItem('theme') || 'dark';
+        setTheme(currentTheme);
+    </script>
+
+    <script src="../js/script.js" defer></script>
+</body>
+
+</html>

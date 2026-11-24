@@ -50,14 +50,6 @@ export const pullRequests: PullRequest[] = [
 	},
 ];
 
-export const issues: Link[] = [
-	{ label: 'OrdinaryDiffEq.jl #4895', href: 'https://github.com/SciML/OrdinaryDiffEq.jl/issues/4895' },
-	{ label: 'OrdinaryDiffEq.jl #4891', href: 'https://github.com/SciML/OrdinaryDiffEq.jl/issues/4891' },
-	{ label: 'OrdinaryDiffEq.jl #4876', href: 'https://github.com/SciML/OrdinaryDiffEq.jl/issues/4876' },
-	{ label: 'OrdinaryDiffEq.jl #4875', href: 'https://github.com/SciML/OrdinaryDiffEq.jl/issues/4875' },
-	{ label: 'NonlinearSolve.jl #1372', href: 'https://github.com/SciML/NonlinearSolve.jl/issues/1372' },
-];
-
 export const openSource: Project[] = [
 	{
 		name: 'SciML / OrdinaryDiffEq.jl',
@@ -86,6 +78,17 @@ export const openSource: Project[] = [
 ];
 
 export const webApps: Project[] = [
+	{
+		name: 'PayTrack',
+		year: '2024',
+		blurb: 'Offline-first expense tracking and personal finance application. Engineered with Godot and WebAssembly to run entirely in the browser without server dependencies or cloud data sync.',
+		tags: ['Godot', 'WebAssembly', 'Offline-First', 'PWA'],
+		status: 'Live Web App',
+		featured: true,
+		links: [
+			{ label: 'Launch App', href: '/paytrack/' },
+		]
+	},
 	{
 		name: 'Bill Studio',
 		year: '2026',
@@ -120,6 +123,18 @@ export const webApps: Project[] = [
 		links: [
 			{ label: 'Explore Hub', href: '/BrainnovaStudio/games/' },
 			gh('BrainnovaStudio')
+		]
+	},
+	{
+		name: 'Wildlife Acts',
+		year: '2023',
+		blurb: 'Interactive educational platform on wildlife protection, biodiversity preservation, and Indian national & international environmental conservation acts.',
+		tags: ['HTML', 'CSS', 'JavaScript', 'Conservation'],
+		status: 'Live Web App',
+		featured: false,
+		links: [
+			{ label: 'Live Platform', href: '/wildlife/' },
+			gh('Wildlife-Project')
 		]
 	},
 ];

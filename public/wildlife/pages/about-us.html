@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Wildlife Acts</title>
+    <link rel="stylesheet" href="../styles/styles.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css"
+        integrity="sha512-1ycn6IcaQQ40/MKBW2W4Rhis/DbILU74C1vSrLJxCq57o941Ym01SwNsOMqvEBFlcgUa6xLiPY/NS5R+E6ztJQ=="
+        crossorigin="anonymous" referrerpolicy="no-referrer" />
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap"
+        rel="stylesheet">
+</head>
+
+<body class="main-content">
+    <main>
+        <section class="container about active" id="about">
+            <div class="main-title"><br><br><br><br>
+                <h2>About <span>Us</span><span class="bg-text">About Us</span></h2>
+            </div><br>
+            <div class="about-container">
+                <div class="left-about">
+                    <h4>Information About Us</h4>
+                    <p>
+                        We are The Students, a first-year BTech CSE team from Div-A with a passion for programming and
+                        web development. We specialize in building responsive websites, games, and applications with a
+                        variety of languages and frameworks. <br><br> Our focus is on delivering high-quality solutions
+                        that exceed our clients' expectations.
+                    </p>
+                    <div class="btn-con">
+                        <a href="http://utu.ac.in/AMTICS/index.html" class="main-btn" target="_blank">
+                            <span class="btn-text">Know More</span>
+                            <span class="btn-icon"><i class="fas fa-info"></i></span>
+                        </a>
+                    </div>
+                </div>
+                <div class="right-about">
+                    <div class="about-item">
+                        <div class="abt-text">
+                            <p class="large-text">Ramlakhan </p>
+                            <p class="small-text"> <br>2nd Batch<br>3rd Sem<br>Div-A</p>
+                        </div>
+                    </div>
+                    <div class="about-item">
+                        <div class="abt-text">
+                            <p class="large-text">Jitendra </p>
+                            <p class="small-text"> <br>2nd Batch<br>3rd Sem<br>Div-A</p>
+                        </div>
+                    </div>
+                    <div class="about-item">
+                        <div class="abt-text">
+                            <p class="large-text">Shravan </p>
+                            <p class="small-text"> <br>2nd Batch<br>3rd Sem<br>Div-A</p>
+                        </div>
+                    </div>
+                    <div class="about-item">
+                        <div class="abt-text">
+                            <p class="large-text">Sourav </p>
+                            <p class="small-text"> <br>2nd Batch<br>3rd Sem<br>Div-A</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="about-stats">
+                <h4 class="stat-title">AMTICS, UTU</h4>
+            </div>
+            </div>
+        </section>
+    </main>
+    <div class="controls">
+        <a class="control" href="../index.html" data-id="home" data-title="Home">
+            <i class="fas fa-home"></i>
+        </a>
+        <a class="control" href="national-acts.html" data-id="national-acts" data-title="National Acts">
+            <i class="fas fa-city"></i>
+        </a>
+        <a class="control" href="international-acts.html" data-id="blogs" data-title="International Acts">
+            <i class="fas fa-globe"></i>
+        </a>
+        <a class="control active-btn" href="about-us.html" data-id="about" data-title="About Us">
+            <i class="fas fa-user"></i>
+        </a>
+        <a class="control" href="contact-us.html" data-id="contact" data-title="Contact Us">
+            <i class="fas fa-phone"></i>
+        </a>
+    </div>
+    <div class="theme-btn" data-title="Theme">
+        <i class="fas fa-adjust"></i>
+    </div>
+
+    <script>
+        const currentTheme = localStorage.getItem('theme') || 'dark';
+        setTheme(currentTheme);
+    </script>
+    <script src="../js/script.js" defer></script>
+</body>
+
+</html>
