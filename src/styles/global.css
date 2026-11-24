@@ -1,36 +1,38 @@
 /* ==========================================================================
-   Ramlakhan Madheshiya — Portfolio Styles
-   Minimal, refined, bespoke design with dark & light support
+   Ramlakhan Madheshiya — Portfolio Stylesheet
+   Contemporary Minimalist Design System
    ========================================================================== */
 
 :root {
 	/* Light theme */
 	--bg: #ffffff;
-	--bg-subtle: #f8f9fa;
-	--panel: #f7f7f5;
-	--panel-hover: #f0f0ee;
-	--ink: #181a1e;
-	--ink-secondary: #3c4049;
-	--muted: #6b7280;
-	--faint: #9ca3af;
-	--line: #e5e7eb;
-	--line-dark: #d1d5db;
+	--bg-subtle: #f8fafc;
+	--panel: #f8fafc;
+	--panel-hover: #f1f5f9;
+	--panel-border: #e2e8f0;
 
-	--accent: #1e3a8a;
+	--ink: #0f172a;
+	--ink-secondary: #334155;
+	--muted: #64748b;
+	--faint: #94a3b8;
+	--line: #e2e8f0;
+	--line-dark: #cbd5e1;
+
+	--accent: #1e40af;
 	--accent-link: #2563eb;
 	--accent-soft: rgba(37, 99, 235, 0.08);
 
-	--ok: #059669;
-	--ok-soft: rgba(5, 150, 105, 0.1);
+	--ok: #047857;
+	--ok-soft: #ecfdf5;
+	--ok-border: #a7f3d0;
 
-	--footer-bg: #14161a;
-	--footer-text: #e5e7eb;
-	--footer-muted: #9ca3af;
-	--footer-line: rgba(255, 255, 255, 0.12);
+	--footer-bg: #090d16;
+	--footer-text: #f1f5f9;
+	--footer-muted: #94a3b8;
+	--footer-line: rgba(255, 255, 255, 0.1);
 
 	/* Typography */
-	--font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-	--font-serif: Charter, 'Iowan Old Style', 'Palatino Linotype', 'Times New Roman', Georgia, serif;
+	--font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
 	--font-mono: 'JetBrains Mono', 'SF Mono', Menlo, Consolas, Monaco, monospace;
 
 	--max-w: 64rem;
@@ -41,27 +43,30 @@
 
 :root[data-theme='dark'] {
 	/* Dark theme */
-	--bg: #121316;
-	--bg-subtle: #181a1f;
-	--panel: #1b1d22;
-	--panel-hover: #22252c;
-	--ink: #f3f4f6;
-	--ink-secondary: #d1d5db;
-	--muted: #9ca3af;
-	--faint: #6b7280;
-	--line: #262930;
-	--line-dark: #373b45;
+	--bg: #0b0f19;
+	--bg-subtle: #111726;
+	--panel: #131926;
+	--panel-hover: #1b2334;
+	--panel-border: rgba(255, 255, 255, 0.08);
+
+	--ink: #f8fafc;
+	--ink-secondary: #cbd5e1;
+	--muted: #94a3b8;
+	--faint: #64748b;
+	--line: rgba(255, 255, 255, 0.08);
+	--line-dark: rgba(255, 255, 255, 0.15);
 
 	--accent: #93c5fd;
 	--accent-link: #60a5fa;
 	--accent-soft: rgba(96, 165, 250, 0.12);
 
 	--ok: #34d399;
-	--ok-soft: rgba(52, 211, 153, 0.14);
+	--ok-soft: rgba(16, 185, 129, 0.12);
+	--ok-border: rgba(52, 211, 153, 0.25);
 
-	--footer-bg: #0d0e11;
-	--footer-text: #f3f4f6;
-	--footer-muted: #9ca3af;
+	--footer-bg: #060911;
+	--footer-text: #f8fafc;
+	--footer-muted: #94a3b8;
 	--footer-line: rgba(255, 255, 255, 0.08);
 
 	color-scheme: dark;
@@ -84,13 +89,14 @@ body {
 	background: var(--bg);
 	color: var(--ink);
 	font-family: var(--font-sans);
-	font-size: 16.5px;
-	line-height: 1.7;
+	font-size: 16px;
+	line-height: 1.68;
 	min-height: 100vh;
 	display: flex;
 	flex-direction: column;
 	text-rendering: optimizeLegibility;
 	-webkit-font-smoothing: antialiased;
+	-moz-osx-font-smoothing: grayscale;
 }
 
 main {
@@ -111,9 +117,9 @@ main {
 a {
 	color: inherit;
 	text-decoration: underline;
-	text-decoration-color: color-mix(in srgb, currentColor 28%, transparent);
+	text-decoration-color: color-mix(in srgb, currentColor 25%, transparent);
 	text-underline-offset: 3px;
-	transition: color 0.12s ease, text-decoration-color 0.12s ease;
+	transition: color 0.15s ease, text-decoration-color 0.15s ease;
 }
 
 a:hover {
@@ -128,31 +134,32 @@ a:hover {
 
 :focus-visible {
 	outline: 2px solid var(--accent-link);
-	outline-offset: 3px;
+	outline-offset: 2px;
+	border-radius: 4px;
 }
 
-/* Typography elements */
+/* Typography styles */
 h1, h2, h3, h4 {
-	font-family: var(--font-serif);
-	font-weight: 500;
-	letter-spacing: -0.015em;
+	font-weight: 600;
+	letter-spacing: -0.025em;
 	color: var(--ink);
 	line-height: 1.25;
 }
 
 h1 {
-	font-size: clamp(2.2rem, 5vw, 3.2rem);
-	font-weight: 600;
-	letter-spacing: -0.025em;
+	font-size: clamp(2.2rem, 5vw, 3rem);
+	letter-spacing: -0.03em;
 	line-height: 1.15;
 }
 
 h2 {
-	font-size: clamp(1.4rem, 2.5vw, 1.75rem);
+	font-size: clamp(1.35rem, 2.5vw, 1.65rem);
+	letter-spacing: -0.02em;
 }
 
 h3 {
 	font-size: 1.15rem;
+	letter-spacing: -0.015em;
 }
 
 p {
@@ -170,10 +177,11 @@ p {
 .eyebrow {
 	font-family: var(--font-mono);
 	font-size: 0.8rem;
+	font-weight: 500;
 	letter-spacing: 0.05em;
 	text-transform: uppercase;
 	color: var(--muted);
-	margin-bottom: 0.85rem;
+	margin-bottom: 0.75rem;
 	display: block;
 }
 
@@ -184,7 +192,7 @@ p {
 }
 
 /* ==========================================================================
-   Header & Nav
+   Header & Navigation
    ========================================================================== */
 
 .site-header {
@@ -200,17 +208,19 @@ p {
 	display: flex;
 	align-items: center;
 	justify-content: space-between;
-	height: 3.75rem;
+	height: 3.8rem;
 	gap: 1.25rem;
 }
 
 .brand {
-	font-family: var(--font-serif);
 	font-size: 1.05rem;
 	font-weight: 600;
-	text-decoration: none;
+	letter-spacing: -0.02em;
 	color: var(--ink);
-	letter-spacing: -0.01em;
+	text-decoration: none;
+	display: flex;
+	align-items: center;
+	gap: 0.5rem;
 }
 
 .brand:hover {
@@ -227,7 +237,7 @@ p {
 	display: flex;
 	align-items: center;
 	gap: 1.2rem;
-	font-size: 0.93rem;
+	font-size: 0.92rem;
 }
 
 .nav-links a {
@@ -244,7 +254,7 @@ p {
 	border-bottom-color: var(--ink);
 }
 
-/* Inline Expanding Search (inspired by jitendravjh.in) */
+/* Inline Expanding Search */
 .nav-search {
 	position: relative;
 }
@@ -363,7 +373,7 @@ p {
 	color: var(--muted);
 }
 
-/* Header theme toggle */
+/* Theme toggle */
 .theme-toggle {
 	background: none;
 	border: 1px solid var(--line);
@@ -404,11 +414,27 @@ p {
 	margin: 0.25rem 0 1rem;
 }
 
+.hero-meta-strip {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 0.75rem 1.25rem;
+	margin: 1.25rem 0 1.5rem;
+	font-size: 0.9rem;
+	color: var(--muted);
+}
+
+.hero-meta-item {
+	display: inline-flex;
+	align-items: center;
+	gap: 0.35rem;
+}
+
 .actions {
 	display: flex;
 	flex-wrap: wrap;
 	gap: 0.75rem;
-	margin: 1.75rem 0;
+	margin: 1.5rem 0;
 }
 
 .btn {
@@ -416,14 +442,15 @@ p {
 	align-items: center;
 	justify-content: center;
 	gap: 0.4rem;
-	padding: 0.55rem 1.15rem;
+	padding: 0.55rem 1.2rem;
 	border: 1px solid var(--ink);
 	border-radius: 6px;
-	font-size: 0.93rem;
+	font-size: 0.92rem;
 	text-decoration: none;
 	font-weight: 500;
 	transition: all 0.15s ease;
 	line-height: 1.4;
+	cursor: pointer;
 }
 
 .btn.primary {
@@ -445,6 +472,7 @@ p {
 
 .btn:not(.primary):hover {
 	border-color: var(--ink);
+	background: var(--panel);
 }
 
 .social-links {
@@ -452,7 +480,7 @@ p {
 	flex-wrap: wrap;
 	gap: 0.4rem 1.4rem;
 	font-size: 0.92rem;
-	margin-top: 1.5rem;
+	margin-top: 1.25rem;
 }
 
 .social-links a {
@@ -465,7 +493,7 @@ p {
 }
 
 /* ==========================================================================
-   Numbered Highlights (01, 02, 03) — Calm & Intellectual
+   Sections & Featured Work Grid (New Editorial Minimal Style)
    ========================================================================== */
 
 .section {
@@ -477,7 +505,13 @@ p {
 	align-items: baseline;
 	justify-content: space-between;
 	gap: 1rem;
-	margin-bottom: 0.75rem;
+	margin-bottom: 1.25rem;
+	padding-bottom: 0.5rem;
+	border-bottom: 1px solid var(--line);
+}
+
+.section-head h2 {
+	margin: 0;
 }
 
 .section-head a {
@@ -490,153 +524,29 @@ p {
 	color: var(--ink);
 }
 
-.highlights-list {
-	list-style: none;
-	border-top: 1px solid var(--line);
-}
-
-.highlights-item {
+/* Modern Showcase Cards */
+.showcase-grid {
 	display: grid;
-	grid-template-columns: 3.5rem 1fr;
+	grid-template-columns: repeat(auto-fit, minmax(20rem, 1fr));
 	gap: 1.25rem;
-	padding: 1.75rem 0;
-	border-bottom: 1px solid var(--line);
 }
 
-.hl-index {
-	font-family: var(--font-serif);
-	font-size: 1.5rem;
-	color: var(--muted);
-	opacity: 0.7;
-	line-height: 1.2;
-}
-
-.highlights-content h3 {
-	font-size: 1.25rem;
-	margin: 0.2rem 0 0.4rem;
-}
-
-.highlights-content p:not(.meta) {
-	color: var(--ink-secondary);
-	margin: 0 0 0.75rem;
-	font-size: 0.97rem;
-	max-width: 44rem;
-}
-
-.item-links {
-	display: flex;
-	flex-wrap: wrap;
-	gap: 1rem;
-	font-size: 0.88rem;
-}
-
-.item-links a {
-	color: var(--accent-link);
-	text-decoration: none;
-}
-
-.item-links a:hover {
-	text-decoration: underline;
-}
-
-/* ==========================================================================
-   Clean Rows & Merged Pull Requests
-   ========================================================================== */
-
-.post-rows {
-	list-style: none;
-	border-top: 1px solid var(--line);
-}
-
-.post-row {
-	padding: 1.25rem 0;
-	border-bottom: 1px solid var(--line);
-}
-
-.post-row h3 {
-	font-size: 1.15rem;
-	margin: 0.15rem 0 0.35rem;
-}
-
-.post-row h3 a {
-	text-decoration: none;
-}
-
-.post-row h3 a:hover {
-	text-decoration: underline;
-}
-
-.post-row p {
-	color: var(--muted);
-	font-size: 0.95rem;
-	margin: 0;
-}
-
-/* Merged Pull Request Pill */
-.badge-merged {
-	display: inline-block;
-	font-family: var(--font-mono);
-	font-size: 0.72rem;
-	padding: 0.12rem 0.5rem;
-	border-radius: 999px;
-	background: var(--ok-soft);
-	color: var(--ok);
-	border: 1px solid color-mix(in srgb, var(--ok) 30%, transparent);
-	vertical-align: middle;
-	margin-left: 0.5rem;
-}
-
-.pr-row {
-	display: grid;
-	grid-template-columns: auto 1fr auto;
-	gap: 0.5rem 1rem;
-	align-items: baseline;
-	padding: 0.85rem 0;
-	border-bottom: 1px dashed var(--line);
-	font-size: 0.95rem;
-}
-
-.pr-row .num {
-	font-family: var(--font-mono);
-	font-size: 0.82rem;
-	color: var(--muted);
-}
-
-.pr-row a {
-	text-decoration: none;
-}
-
-.pr-row a:hover {
-	text-decoration: underline;
-}
-
-/* ==========================================================================
-   Project Grid & Cards (Minimal Clean)
-   ========================================================================== */
-
-.projects-grid {
-	display: grid;
-	grid-template-columns: repeat(auto-fill, minmax(19rem, 1fr));
-	gap: 1.25rem;
-	margin-top: 1rem;
-}
-
-.project-item {
-	border: 1px solid var(--line);
-	border-radius: 8px;
-	padding: 1.4rem;
+.showcase-card {
 	background: var(--panel);
+	border: 1px solid var(--panel-border);
+	border-radius: 8px;
+	padding: 1.4rem 1.5rem;
 	display: flex;
 	flex-direction: column;
-	transition: border-color 0.15s ease, background 0.15s ease;
+	transition: border-color 0.15s ease, background-color 0.15s ease;
 }
 
-.project-item:hover {
+.showcase-card:hover {
 	border-color: var(--line-dark);
 	background: var(--panel-hover);
 }
 
-.project-item-top {
+.showcase-top {
 	display: flex;
 	justify-content: space-between;
 	align-items: baseline;
@@ -644,37 +554,185 @@ p {
 	margin-bottom: 0.5rem;
 }
 
-.project-item h3 {
-	font-size: 1.15rem;
-	margin: 0;
+.showcase-domain {
+	font-family: var(--font-mono);
+	font-size: 0.72rem;
+	letter-spacing: 0.04em;
+	text-transform: uppercase;
+	color: var(--accent-link);
 }
 
-.project-item p {
-	font-size: 0.94rem;
+.showcase-year {
+	font-family: var(--font-mono);
+	font-size: 0.75rem;
 	color: var(--muted);
-	margin: 0.5rem 0 1rem;
+}
+
+.showcase-card h3 {
+	font-size: 1.18rem;
+	margin-bottom: 0.45rem;
+}
+
+.showcase-card h3 a {
+	color: var(--ink);
+	text-decoration: none;
+}
+
+.showcase-card h3 a:hover {
+	color: var(--accent-link);
+}
+
+.showcase-desc {
+	font-size: 0.94rem;
+	color: var(--ink-secondary);
+	line-height: 1.6;
+	margin: 0 0 1.2rem;
 	flex: 1;
 }
 
-.tags {
+.tag-list {
 	display: flex;
 	flex-wrap: wrap;
 	gap: 0.35rem;
-	margin-bottom: 0.75rem;
+	margin-bottom: 1rem;
 }
 
 .tag {
 	font-family: var(--font-mono);
-	font-size: 0.73rem;
-	color: var(--muted);
+	font-size: 0.72rem;
+	padding: 0.15rem 0.45rem;
 	background: var(--bg);
 	border: 1px solid var(--line);
-	padding: 0.15rem 0.45rem;
 	border-radius: 4px;
+	color: var(--muted);
+}
+
+.showcase-links {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 1rem;
+	font-size: 0.88rem;
+	margin-top: auto;
+	padding-top: 0.75rem;
+	border-top: 1px solid var(--line);
+}
+
+.showcase-links a {
+	color: var(--accent-link);
+	text-decoration: none;
+	font-weight: 500;
+}
+
+.showcase-links a:hover {
+	text-decoration: underline;
 }
 
 /* ==========================================================================
-   CV / Resume Elements
+   Open Source Section (Merged badge in front of PR only)
+   ========================================================================== */
+
+.oss-block {
+	padding: 1.25rem 0;
+	border-bottom: 1px solid var(--line);
+}
+
+.oss-block:first-child {
+	border-top: 1px solid var(--line);
+}
+
+.oss-block h3 {
+	font-size: 1.15rem;
+	margin-bottom: 0.3rem;
+}
+
+.oss-block p {
+	font-size: 0.95rem;
+	color: var(--muted);
+	margin-bottom: 0.75rem;
+}
+
+.pr-item {
+	display: flex;
+	align-items: baseline;
+	gap: 0.6rem;
+	font-size: 0.92rem;
+	padding: 0.4rem 0;
+	border-top: 1px dashed var(--line);
+}
+
+.badge-merged {
+	display: inline-flex;
+	align-items: center;
+	font-family: var(--font-mono);
+	font-size: 0.7rem;
+	font-weight: 500;
+	padding: 0.1rem 0.45rem;
+	border-radius: 4px;
+	background: var(--ok-soft);
+	color: var(--ok);
+	border: 1px solid var(--ok-border);
+	flex-shrink: 0;
+}
+
+.pr-item a {
+	color: var(--ink);
+	text-decoration: none;
+}
+
+.pr-item a:hover {
+	color: var(--accent-link);
+	text-decoration: underline;
+}
+
+/* ==========================================================================
+   Writing / Blog Rows
+   ========================================================================== */
+
+.post-rows {
+	list-style: none;
+}
+
+.post-row {
+	display: grid;
+	grid-template-columns: 8.5rem 1fr;
+	gap: 1.5rem;
+	padding: 1.25rem 0;
+	border-bottom: 1px solid var(--line);
+	align-items: baseline;
+}
+
+.post-row:first-child {
+	border-top: 1px solid var(--line);
+}
+
+.post-date {
+	font-family: var(--font-mono);
+	font-size: 0.82rem;
+	color: var(--muted);
+}
+
+.post-content h3 {
+	font-size: 1.15rem;
+	margin-bottom: 0.25rem;
+}
+
+.post-content h3 a {
+	color: var(--ink);
+	text-decoration: none;
+}
+
+.post-content h3 a:hover {
+	color: var(--accent-link);
+}
+
+.post-content p {
+	margin: 0;
+	font-size: 0.94rem;
+	color: var(--muted);
+}
+
+/* ==========================================================================
+   CV Elements
    ========================================================================== */
 
 .cv-item {
@@ -682,7 +740,7 @@ p {
 	border-top: 1px solid var(--line);
 	display: grid;
 	grid-template-columns: 11rem 1fr;
-	gap: 1.25rem;
+	gap: 1.5rem;
 }
 
 .cv-item:last-child {
@@ -696,9 +754,7 @@ p {
 }
 
 .cv-item h3 {
-	font-family: var(--font-sans);
 	font-size: 1.05rem;
-	font-weight: 600;
 	margin-bottom: 0.25rem;
 }
 
@@ -713,12 +769,12 @@ p {
 }
 
 .cv-item li {
-	margin-bottom: 0.25rem;
+	margin-bottom: 0.3rem;
 }
 
 .skills-list dt {
 	font-family: var(--font-mono);
-	font-size: 0.82rem;
+	font-size: 0.8rem;
 	color: var(--muted);
 	margin-top: 1.1rem;
 	text-transform: uppercase;
@@ -732,7 +788,7 @@ p {
 }
 
 /* ==========================================================================
-   Prose / Blog Reading Styles
+   Prose / Blog Reading
    ========================================================================== */
 
 .prose {
@@ -794,7 +850,7 @@ p {
 }
 
 /* ==========================================================================
-   Footer — Grounded, Clean Columns (inspired by jitendravjh.in & minimalist ethos)
+   Footer — Structured 4-Column Layout
    ========================================================================== */
 
 .site-footer {
@@ -806,14 +862,14 @@ p {
 }
 
 .site-footer .wrap {
-	padding-top: 3rem;
+	padding-top: 3.5rem;
 	padding-bottom: 2.5rem;
 }
 
 .footer-grid {
 	display: grid;
 	grid-template-columns: 2fr 1fr 1fr 1fr;
-	gap: 2rem;
+	gap: 2.5rem;
 	padding-bottom: 2.5rem;
 	border-bottom: 1px solid var(--footer-line);
 }
@@ -882,7 +938,7 @@ p {
    Responsive Adaptations
    ========================================================================== */
 
-@media (max-width: 48rem) {
+@media (max-width: 52rem) {
 	main {
 		padding: 2.25rem 1.15rem 4.5rem;
 	}
@@ -892,23 +948,16 @@ p {
 	.site-header .wrap {
 		height: 3.5rem;
 	}
-	.highlights-item {
+	.post-row {
 		grid-template-columns: 1fr;
-		gap: 0.5rem;
-	}
-	.hl-index {
-		font-size: 1.1rem;
+		gap: 0.35rem;
 	}
 	.cv-item {
 		grid-template-columns: 1fr;
 		gap: 0.4rem;
 	}
-	.pr-row {
-		grid-template-columns: auto 1fr;
-	}
-	.pr-row .badge-merged {
-		grid-column: 2;
-		justify-self: start;
+	.showcase-grid {
+		grid-template-columns: 1fr;
 	}
 	.footer-grid {
 		grid-template-columns: 1fr 1fr;

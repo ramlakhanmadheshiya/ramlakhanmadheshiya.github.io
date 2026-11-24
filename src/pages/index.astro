@@ -1,43 +1,55 @@
 ---
 import Base from '../layouts/Base.astro';
 import { getPosts, fmtDate } from '../utils';
-import { SOCIAL } from '../consts';
+import { SOCIAL, EMAIL } from '../consts';
 import { pullRequests } from '../data/projects';
 
 const posts = (await getPosts()).slice(0, 3);
 const mergedPRs = pullRequests.filter((pr) => pr.state === 'merged');
 
-const highlights = [
+const featuredProjects = [
 	{
-		title: 'Security Compliance Suite',
-		meta: 'SDE Intern · National Technical Research Organisation (NTRO) · 2025',
-		blurb: 'Designed and built a security compliance tool, onsite, that supports internal hardening and audit operations. Architecture details confidential under NDA.',
-		links: [{ label: 'CV Details', href: '/cv/' }],
-	},
-	{
-		title: 'Group Policy Object Manager',
-		meta: 'Smart India Hackathon 2024 finalist · C#, .NET, WPF',
-		blurb: 'A Windows system administration application that generates and manages Group Policy Objects aligned with CIS security benchmarks, developed for the NTRO challenge.',
-		links: [{ label: 'GitHub', href: 'https://github.com/ramlakhanmadheshiya/Project-Techolics_' }],
-	},
-	{
-		title: 'Bill Studio',
-		meta: 'Web app · JavaScript, PWA, IndexedDB · 2026',
-		blurb: 'Free, offline-first billing for 50+ countries: tax rules (GST, VAT, sales tax), drag-and-drop bill designer, ledgers, reports, payment QR codes and client-side encrypted backups. Zero server requirement.',
+		name: 'Bill Studio',
+		domain: 'Offline-First Web App',
+		year: '2026',
+		blurb: 'Free, offline-first billing for 50+ countries: tax rules (GST, VAT, sales tax), drag-and-drop bill designer, customer ledgers, payment QR codes and client-side encrypted backups. Zero server required.',
+		tags: ['JavaScript', 'PWA', 'IndexedDB', 'Web Crypto'],
 		links: [
-			{ label: 'Live App', href: '/projects/bill-studio/' },
-			{ label: 'GitHub', href: 'https://github.com/ramlakhanmadheshiya/bill-studio' }
-		],
+			{ label: 'Launch App', href: '/projects/bill-studio/' },
+			{ label: 'Source', href: 'https://github.com/ramlakhanmadheshiya/bill-studio' }
+		]
 	},
 	{
-		title: 'ghtrack',
-		meta: 'Developer tooling · JavaScript, GitHub API, IndexedDB · 2026',
-		blurb: 'Client-side GitHub lifetime activity analyzer: exact counts of pull requests, issues, reviews, and comments in ~2 seconds for accounts with 48,000+ items without tokens or sign-in.',
+		name: 'ghtrack',
+		domain: 'Developer Tooling',
+		year: '2026',
+		blurb: 'Client-side GitHub lifetime activity analyzer: exact counts of pull requests, issues, reviews, and comments in ~2 seconds for accounts with 48,000+ items without authentication, tokens, or servers.',
+		tags: ['JavaScript', 'GitHub REST API', 'IndexedDB'],
 		links: [
-			{ label: 'Live App', href: '/ghtrack/' },
-			{ label: 'GitHub', href: 'https://github.com/ramlakhanmadheshiya/ghtrack' }
-		],
+			{ label: 'Launch App', href: '/ghtrack/' },
+			{ label: 'Source', href: 'https://github.com/ramlakhanmadheshiya/ghtrack' }
+		]
 	},
+	{
+		name: 'GPO Compliance Manager',
+		domain: 'Security & Compliance',
+		year: '2024',
+		blurb: 'Windows system security application that generates and enforces customized Group Policy Objects aligned with CIS benchmarks. National finalist in Smart India Hackathon 2024 (NTRO challenge).',
+		tags: ['C#', '.NET', 'WPF', 'CIS Benchmarks'],
+		links: [
+			{ label: 'Source', href: 'https://github.com/ramlakhanmadheshiya/Project-Techolics_' }
+		]
+	},
+	{
+		name: 'NTRO Security Compliance Suite',
+		domain: 'System Hardening',
+		year: '2025',
+		blurb: 'Engineered onsite during a software engineering internship at the National Technical Research Organisation to automate security compliance verification and internal audit workflows.',
+		tags: ['Security', 'System Hardening', 'Audit Tooling'],
+		links: [
+			{ label: 'CV Details', href: '/cv/' }
+		]
+	}
 ];
 
 const ext = (href: string) => /^https?:/.test(href);
@@ -45,14 +57,17 @@ const ext = (href: string) => /^https?:/.test(href);
 <Base index={false}>
 	<!-- Fresh Minimal Hero -->
 	<section class="hero">
-		<span class="eyebrow">Software engineer · Gujarat, India</span>
+		<span class="eyebrow">Software Engineer · India</span>
 		<h1>Ramlakhan Madheshiya</h1>
 		<p class="lede">
 			Software engineer building dependable tools and systems. Upstream contributor to Julia's SciML scientific computing libraries, developer of offline-first client-side web applications, and security tooling researcher.
 		</p>
 		<div class="actions">
-			<a class="btn primary" href="/projects/">See projects</a>
-			<a class="btn" href="/cv/">Read my CV</a>
+			<a class="btn primary" href="/projects/">See projects &rarr;</a>
+			<a class="btn" href="/cv/">Read my CV &rarr;</a>
+			<button class="btn" id="copy-email-btn" data-email={EMAIL} type="button" title="Copy email address">
+				<span id="copy-text">Copy Email</span>
+			</button>
 		</div>
 		<div class="social-links">
 			{SOCIAL.map((s) => (
@@ -63,70 +78,73 @@ const ext = (href: string) => /^https?:/.test(href);
 		</div>
 	</section>
 
-	<!-- Highlights (Clean Numbered List) -->
+	<!-- Selected Systems & Featured Work (Modern Minimal Showcase) -->
 	<section class="section">
 		<div class="section-head">
-			<h2>Highlights</h2>
+			<h2>Featured Work</h2>
 			<a href="/projects/">All projects &rarr;</a>
 		</div>
-		<ol class="highlights-list">
-			{highlights.map((h, i) => (
-				<li class="highlights-item">
-					<span class="hl-index">{String(i + 1).padStart(2, '0')}</span>
-					<div class="highlights-content">
-						<p class="meta">{h.meta}</p>
-						<h3>{h.title}</h3>
-						<p>{h.blurb}</p>
-						<div class="item-links">
-							{h.links.map((l) => (
-								<a href={l.href} target={ext(l.href) ? '_blank' : undefined} rel={ext(l.href) ? 'noopener noreferrer' : undefined}>
-									{l.label} {ext(l.href) ? '↗' : '→'}
-								</a>
-							))}
-						</div>
+		<div class="showcase-grid">
+			{featuredProjects.map((project) => (
+				<article class="showcase-card">
+					<div class="showcase-top">
+						<span class="showcase-domain">{project.domain}</span>
+						<span class="showcase-year">{project.year}</span>
 					</div>
-				</li>
+					<h3>{project.name}</h3>
+					<p class="showcase-desc">{project.blurb}</p>
+					<div class="tag-list">
+						{project.tags.map((t) => <span class="tag">{t}</span>)}
+					</div>
+					<div class="showcase-links">
+						{project.links.map((l) => (
+							<a href={l.href} target={ext(l.href) ? '_blank' : undefined} rel={ext(l.href) ? 'noopener noreferrer' : undefined}>
+								{l.label} {ext(l.href) ? '↗' : '→'}
+							</a>
+						))}
+					</div>
+				</article>
 			))}
-		</ol>
+		</div>
 	</section>
 
-	<!-- Merged Open Source Contributions (Badge only in front of the PR, not the repo) -->
+	<!-- Merged Open Source Contributions (Badge only in front of PR, not repo) -->
 	<section class="section">
 		<div class="section-head">
-			<h2>Open source</h2>
+			<h2>Open Source</h2>
 			<a href="/projects/#open-source">All contributions &rarr;</a>
 		</div>
-		<ul class="post-rows">
-			<li class="post-row">
+		<div class="oss-container">
+			<div class="oss-block">
 				<h3>
 					<a href="https://github.com/SciML/OrdinaryDiffEq.jl" target="_blank" rel="noopener noreferrer">SciML / OrdinaryDiffEq.jl</a>
 				</h3>
-				<p>Production Julia differential equation solvers: lag handling, zero-lag step bound preservation, and interpolation dispatch order.</p>
-				<div class="pr-list-block" style="margin-top:0.75rem;display:grid;gap:0.4rem;">
+				<p>Production differential equation solvers in Julia (MethodOfSteps): lag handling, zero-lag step bound preservation, and interpolation dispatch order.</p>
+				<div class="pr-list">
 					{mergedPRs.filter((p) => p.repo.includes('OrdinaryDiffEq')).map((pr) => (
-						<div style="font-size:0.92rem;display:flex;align-items:baseline;gap:0.5rem;flex-wrap:wrap;">
+						<div class="pr-item">
 							<span class="badge-merged">merged</span>
 							<a href={pr.url} target="_blank" rel="noopener noreferrer">#{pr.number}: {pr.title}</a>
 						</div>
 					))}
 				</div>
-			</li>
+			</div>
 
-			<li class="post-row">
+			<div class="oss-block">
 				<h3>
 					<a href="https://github.com/ibis-project/ibis" target="_blank" rel="noopener noreferrer">ibis-project / ibis</a>
 				</h3>
-				<p>Portable Python dataframe engine: resolved deep documentation accessibility with scrollable navigation menus.</p>
-				<div class="pr-list-block" style="margin-top:0.75rem;display:grid;gap:0.4rem;">
+				<p>Portable Python dataframe engine: resolved documentation accessibility with scrollable navigation menus.</p>
+				<div class="pr-list">
 					{mergedPRs.filter((p) => p.repo.includes('ibis')).map((pr) => (
-						<div style="font-size:0.92rem;display:flex;align-items:baseline;gap:0.5rem;flex-wrap:wrap;">
+						<div class="pr-item">
 							<span class="badge-merged">merged</span>
 							<a href={pr.url} target="_blank" rel="noopener noreferrer">#{pr.number}: {pr.title}</a>
 						</div>
 					))}
 				</div>
-			</li>
-		</ul>
+			</div>
+		</div>
 	</section>
 
 	<!-- Technical Writing -->
@@ -139,9 +157,11 @@ const ext = (href: string) => /^https?:/.test(href);
 			<ul class="post-rows">
 				{posts.map((post) => (
 					<li class="post-row">
-						<span class="meta">{fmtDate(post.data.pubDate)}</span>
-						<h3><a href={`/blog/${post.id}/`}>{post.data.title}</a></h3>
-						<p>{post.data.description}</p>
+						<span class="post-date">{fmtDate(post.data.pubDate)}</span>
+						<div class="post-content">
+							<h3><a href={`/blog/${post.id}/`}>{post.data.title}</a></h3>
+							<p>{post.data.description}</p>
+						</div>
 					</li>
 				))}
 			</ul>
@@ -157,3 +177,21 @@ const ext = (href: string) => /^https?:/.test(href);
 		</p>
 	</section>
 </Base>
+
+<script>
+	const copyBtn = document.getElementById('copy-email-btn');
+	const copyText = document.getElementById('copy-text');
+	copyBtn?.addEventListener('click', async () => {
+		const email = copyBtn.getAttribute('data-email');
+		if (!email) return;
+		try {
+			await navigator.clipboard.writeText(email);
+			if (copyText) copyText.textContent = 'Copied!';
+			setTimeout(() => {
+				if (copyText) copyText.textContent = 'Copy Email';
+			}, 2000);
+		} catch {
+			window.location.href = `mailto:${email}`;
+		}
+	});
+</script>

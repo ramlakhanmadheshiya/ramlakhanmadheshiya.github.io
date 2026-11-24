@@ -49,33 +49,32 @@ const prs = (repo: string) => mergedPRs.filter((p) => p.repo === repo);
 
 	<!-- Merged Open Source Section (Badge only in front of PR, not repo) -->
 	<section class="section" id="open-source" style="margin-top:0;">
-		<h2>Open source</h2>
+		<div class="section-head">
+			<h2>Open source</h2>
+		</div>
 		<p style="color:var(--muted);margin:0.25rem 0 1.25rem;font-size:0.95rem;">
 			Upstream contributions merged into projects maintained by others.
 		</p>
 
-		<ul class="post-rows">
+		<div class="oss-container">
 			{openSource.map((p) => (
-				<li class="post-row">
-					<div style="display:flex;justify-content:space-between;align-items:baseline;gap:1rem;">
-						<h3>{p.name}</h3>
-					</div>
-					<p style="margin:0.35rem 0 0.6rem;color:var(--ink-secondary);">{p.blurb}</p>
-					<div class="tags">
+				<div class="oss-block">
+					<h3>{p.name}</h3>
+					<p style="margin:0.25rem 0 0.6rem;color:var(--ink-secondary);">{p.blurb}</p>
+					<div class="tag-list" style="margin-bottom:0.75rem;">
 						{p.tags.map((t) => <span class="tag">{t}</span>)}
 					</div>
-					<div style="margin-top:0.75rem;">
+					<div class="pr-list">
 						{prs(p.name.replace(' / ', '/')).map((pr) => (
-							<div class="pr-row">
+							<div class="pr-item">
 								<span class="badge-merged">merged</span>
 								<a href={pr.url} target="_blank" rel="noopener noreferrer">#{pr.number}: {pr.title}</a>
-								<span class="num">{pr.repo}</span>
 							</div>
 						))}
 					</div>
-				</li>
+				</div>
 			))}
-		</ul>
+		</div>
 
 		<div style="margin-top:1.5rem;font-size:0.92rem;">
 			<span style="font-family:var(--font-mono);font-size:0.78rem;text-transform:uppercase;letter-spacing:0.04em;color:var(--muted);display:block;margin-bottom:0.4rem;">
@@ -95,22 +94,25 @@ const prs = (repo: string) => mergedPRs.filter((p) => p.repo === repo);
 	<!-- Category Groups -->
 	{groups.map((g) => (
 		<section class="section" id={g.id} style="scroll-margin-top:5rem;">
-			<h2>{g.title}</h2>
+			<div class="section-head">
+				<h2>{g.title}</h2>
+			</div>
 			{g.desc && <p style="color:var(--muted);margin:0.25rem 0 1.25rem;font-size:0.95rem;">{g.desc}</p>}
 
-			<div class="projects-grid">
+			<div class="showcase-grid">
 				{g.items.map((item) => (
-					<div class="project-item">
-						<div class="project-item-top">
-							<h3>{item.name}</h3>
-							<span class="meta">{item.status ? `${item.status} · ` : ''}{item.year}</span>
+					<article class="showcase-card">
+						<div class="showcase-top">
+							<span class="showcase-domain">{item.status ?? 'Project'}</span>
+							<span class="showcase-year">{item.year}</span>
 						</div>
-						<p>{item.blurb}</p>
-						<div class="tags">
+						<h3>{item.name}</h3>
+						<p class="showcase-desc">{item.blurb}</p>
+						<div class="tag-list">
 							{item.tags.map((t) => <span class="tag">{t}</span>)}
 						</div>
 						{item.links.length > 0 && (
-							<div class="item-links" style="margin-top:auto;padding-top:0.5rem;">
+							<div class="showcase-links">
 								{item.links.map((l) => (
 									<a href={l.href} target={l.href.startsWith('http') ? '_blank' : undefined} rel={l.href.startsWith('http') ? 'noopener noreferrer' : undefined}>
 										{l.label} ↗
@@ -118,7 +120,7 @@ const prs = (repo: string) => mergedPRs.filter((p) => p.repo === repo);
 								))}
 							</div>
 						)}
-					</div>
+					</article>
 				))}
 			</div>
 		</section>
