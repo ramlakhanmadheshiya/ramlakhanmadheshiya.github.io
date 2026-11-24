@@ -42,6 +42,10 @@ const { Content } = await render(post);
 
 			<h1>{post.data.title}</h1>
 
+			<p class="article-subtitle">
+				{post.data.description}
+			</p>
+
 			<div class="article-meta-bar">
 				<time datetime={post.data.pubDate.toISOString()}>
 					{fmtDate(post.data.pubDate)}
@@ -51,10 +55,6 @@ const { Content } = await render(post);
 				<span>·</span>
 				<span>Ramlakhan Madheshiya</span>
 			</div>
-
-			<p class="lede" style="margin-bottom:0;">
-				{post.data.description}
-			</p>
 		</header>
 
 		<div class="prose">

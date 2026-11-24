@@ -9,7 +9,8 @@ const years = [...new Set(posts.map((p) => p.data.pubDate.getUTCFullYear()))].so
 const allTags = [...new Set(posts.flatMap((p) => p.data.tags))];
 ---
 <Base title="Blog" description="Technical notes on numerical solvers, procedural game verification, and offline-first systems by Ramlakhan Madheshiya.">
-	<header class="blog-header">
+	<div class="blog-container">
+		<header class="blog-header">
 		<span class="eyebrow">Writing</span>
 		<h1>Technical Notes & Articles</h1>
 		<p class="lede">
@@ -95,6 +96,7 @@ const allTags = [...new Set(posts.flatMap((p) => p.data.tags))];
 	<p id="empty-state" style="display:none;padding:3rem 0;text-align:center;color:var(--muted);">
 		No articles found under this topic.
 	</p>
+	</div>
 </Base>
 
 <script>
