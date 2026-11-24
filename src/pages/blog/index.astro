@@ -5,48 +5,35 @@ import { getPosts, fmtDate, readingTime } from '../../utils';
 const posts = await getPosts();
 ---
 <Base title="Blog" description="Notes on numerical solvers, procedural game verification, and offline-first systems by Ramlakhan Madheshiya.">
-	<div class="blog-wrap">
-		<header class="blog-head">
-			<span class="eyebrow">Writing</span>
-			<h1>Blog & Notes</h1>
-			<p class="lede">
-				Articles on numerical differential equation solvers, procedural game verification, and offline-first software systems.
-				<a href="/rss.xml" class="rss-link">RSS Feed &rarr;</a>
-			</p>
-		</header>
+	<header style="margin-bottom:3rem;">
+		<span class="eyebrow">Writing</span>
+		<h1>Blog & Technical Notes</h1>
+		<p class="lede">
+			Articles and notes on numerical differential equation solvers, procedural game verification, and offline-first software systems.
+			<a href="/rss.xml" style="margin-left:0.5rem;color:var(--accent-link);text-decoration:none;">RSS Feed &rarr;</a>
+		</p>
+	</header>
 
-		<div class="blog-list">
-			{posts.map((post) => (
-				<article class="blog-item">
-					<div class="blog-item-meta">
-						<time datetime={post.data.pubDate.toISOString()}>
-							{fmtDate(post.data.pubDate)}
-						</time>
-						<span class="meta-sep">·</span>
-						<span>{readingTime(post.body ?? '')} min read</span>
-						{post.data.tags.length > 0 && (
-							<>
-								<span class="meta-sep">·</span>
-								<div class="blog-item-tags">
-									{post.data.tags.map((t) => (
-										<span class="tag-pill">#{t.toLowerCase()}</span>
-									))}
-								</div>
-							</>
-						)}
+	<div class="blog-list">
+		{posts.map((post) => (
+			<article class="blog-row">
+				<div class="blog-row-date">
+					<time datetime={post.data.pubDate.toISOString()}>
+						{fmtDate(post.data.pubDate)}
+					</time>
+					<span class="blog-row-read">{readingTime(post.body ?? '')} min read</span>
+				</div>
+				<div class="blog-row-body">
+					<h2><a href={`/blog/${post.id}/`}>{post.data.title}</a></h2>
+					<p>{post.data.description}</p>
+					<div class="blog-row-meta">
+						<div class="tag-list" style="margin-bottom:0;">
+							{post.data.tags.map((t) => <span class="tag">{t}</span>)}
+						</div>
+						<a href={`/blog/${post.id}/`} class="read-more">Read article &rarr;</a>
 					</div>
-
-					<h2 class="blog-item-title">
-						<a href={`/blog/${post.id}/`}>{post.data.title}</a>
-					</h2>
-
-					<p class="blog-item-desc">{post.data.description}</p>
-
-					<a href={`/blog/${post.id}/`} class="blog-item-link">
-						Read article &rarr;
-					</a>
-				</article>
-			))}
-		</div>
+				</div>
+			</article>
+		))}
 	</div>
 </Base>

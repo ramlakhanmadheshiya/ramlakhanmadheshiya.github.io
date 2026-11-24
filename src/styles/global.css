@@ -732,123 +732,90 @@ p {
 }
 
 /* ==========================================================================
-   Clean Minimal Blog Layout (Inspired by Jitendra Verma)
+   Blog Layout (Full Width Matching Projects & CV — 64rem)
    ========================================================================== */
 
-.blog-wrap {
-	max-width: 50rem;
-	margin: 0 auto;
-	width: 100%;
-}
-
-.blog-head {
-	margin-bottom: 2.5rem;
-	padding-bottom: 1.5rem;
-	border-bottom: 1px solid var(--line);
-}
-
-.blog-head h1 {
-	margin: 0.25rem 0 0.75rem;
-}
-
-.blog-head .rss-link {
-	font-family: var(--font-mono);
-	font-size: 0.85rem;
-	color: var(--accent-link);
-	margin-left: 0.5rem;
-	text-decoration: none;
-}
-
-.blog-head .rss-link:hover {
-	text-decoration: underline;
-}
-
 .blog-list {
+	width: 100%;
 	display: flex;
 	flex-direction: column;
 }
 
-.blog-item {
-	padding: 2.25rem 0;
+.blog-row {
+	display: grid;
+	grid-template-columns: 11rem 1fr;
+	gap: 2rem;
+	padding: 1.75rem 0;
 	border-bottom: 1px solid var(--line);
+	align-items: baseline;
+}
+
+.blog-row:first-child {
+	border-top: 1px solid var(--line);
+}
+
+.blog-row-date {
 	display: flex;
 	flex-direction: column;
-	gap: 0.5rem;
-}
-
-.blog-item:first-child {
-	padding-top: 0;
-}
-
-.blog-item-meta {
-	display: flex;
-	flex-wrap: wrap;
-	align-items: center;
-	gap: 0.5rem;
+	gap: 0.25rem;
 	font-family: var(--font-mono);
-	font-size: 0.8rem;
+	font-size: 0.82rem;
 	color: var(--muted);
 }
 
-.meta-sep {
+.blog-row-read {
+	font-size: 0.78rem;
 	color: var(--faint);
 }
 
-.blog-item-tags {
-	display: inline-flex;
-	flex-wrap: wrap;
-	gap: 0.5rem;
+.blog-row-body h2 {
+	font-size: 1.25rem;
+	margin: 0 0 0.35rem;
+	line-height: 1.35;
 }
 
-.tag-pill {
-	color: var(--muted);
-	font-size: 0.8rem;
-}
-
-.blog-item-title {
-	font-size: 1.35rem;
-	font-weight: 600;
-	margin: 0.2rem 0 0.35rem;
-	line-height: 1.3;
-}
-
-.blog-item-title a {
+.blog-row-body h2 a {
 	color: var(--ink);
 	text-decoration: none;
 	transition: color 0.15s ease;
 }
 
-.blog-item-title a:hover {
+.blog-row-body h2 a:hover {
 	color: var(--accent-link);
 }
 
-.blog-item-desc {
-	font-size: 1rem;
+.blog-row-body p {
+	font-size: 0.98rem;
 	color: var(--ink-secondary);
 	line-height: 1.65;
-	margin: 0 0 0.6rem;
+	margin: 0 0 0.85rem;
 }
 
-.blog-item-link {
+.blog-row-meta {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	justify-content: space-between;
+	gap: 0.75rem 1.5rem;
+}
+
+.blog-row-meta .read-more {
 	font-family: var(--font-mono);
 	font-size: 0.85rem;
 	color: var(--accent-link);
 	text-decoration: none;
+	font-weight: 500;
 	display: inline-flex;
 	align-items: center;
 	gap: 0.25rem;
-	font-weight: 500;
-	width: fit-content;
 }
 
-.blog-item-link:hover {
+.blog-row-meta .read-more:hover {
 	text-decoration: underline;
 }
 
-/* Article Page Enhancements */
-.article-container {
-	max-width: 52rem;
-	margin: 0 auto;
+/* Article Page (Full Width Matching Projects & CV) */
+.article-wrap {
 	width: 100%;
 }
 
@@ -859,7 +826,7 @@ p {
 	font-size: 0.88rem;
 	color: var(--muted);
 	text-decoration: none;
-	margin-bottom: 1.75rem;
+	margin-bottom: 2rem;
 	transition: color 0.15s ease;
 }
 
@@ -871,6 +838,7 @@ p {
 	margin-bottom: 2.75rem;
 	padding-bottom: 2rem;
 	border-bottom: 1px solid var(--line);
+	width: 100%;
 }
 
 .article-header h1 {
@@ -878,7 +846,6 @@ p {
 	line-height: 1.2;
 	margin: 0.75rem 0 0.85rem;
 	letter-spacing: -0.03em;
-	max-width: 100%;
 }
 
 .article-subtitle {
@@ -887,8 +854,6 @@ p {
 	color: var(--ink-secondary);
 	margin: 0.85rem 0 1.35rem;
 	font-weight: 400;
-	max-width: 100%;
-	width: 100%;
 }
 
 .article-meta-bar {
