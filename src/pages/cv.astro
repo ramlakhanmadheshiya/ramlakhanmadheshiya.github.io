@@ -42,7 +42,9 @@ const experience = [
 			Software engineer with a B.Tech in Computer Science and Engineering (2026). Upstream contributor to Julia's SciML differential equation solvers and builder of offline-first tools and games.
 		</p>
 		<div class="actions">
-			<a class="btn primary" href={CV_PDF} download>Download PDF</a>
+			<a class="btn primary" href={CV_PDF} target="_blank" rel="noopener noreferrer">View in Browser ↗</a>
+			<a class="btn" href={CV_PDF} download="ramlakhan-madheshiya-cv.pdf">Download PDF ↓</a>
+			<a class="btn" href="#pdf-preview">Preview Document ↓</a>
 			<a class="btn" href={`mailto:${EMAIL}`}>Email me</a>
 		</div>
 	</header>
@@ -58,8 +60,25 @@ const experience = [
 					Contributions to delay differential equation solvers (DelayDiffEq's MethodOfSteps):
 				</p>
 				<ul>
+					<li><span class="badge-merged">merged</span> PR #4874: Build the fixed-point solver for constrained MethodOfSteps with dependent lags.</li>
 					<li><span class="badge-merged">merged</span> PR #4849: Allow zero constant lags and reject wrong-sign ones in DDE initialization.</li>
 					<li><span class="badge-merged">merged</span> PR #4834: Define default_linear_interpolation with the problem first to preserve solver dispatch.</li>
+					<li><span class="badge-merged">merged</span> PR #4950: Drop the TruncatedStacktraces hint from derivative order error.</li>
+				</ul>
+			</div>
+		</div>
+
+		<div class="cv-item">
+			<span class="when">Nov 2026 – now</span>
+			<div>
+				<h3>SciML / ModelingToolkit.jl</h3>
+				<p>
+					Contributions to symbolic modeling, code generation, and compiler optimizations:
+				</p>
+				<ul>
+					<li><span class="badge-merged">merged</span> PR #5375: Keep @nospecialize on constructor and op in process_SciMLProblem to prevent compiler specialization bloat.</li>
+					<li><span class="badge-merged">merged</span> PR #5376: Pass code-generation options of a problem down to its event code handlers.</li>
+					<li><span class="badge-merged">merged</span> PR #5345: Bind arrays indexed by a symbolic index in generated function wrappers.</li>
 				</ul>
 			</div>
 		</div>
@@ -105,45 +124,87 @@ const experience = [
 		<div class="cv-item">
 			<span class="when">2024</span>
 			<div>
-				<h3>PayTrack · <a href="/paytrack/" target="_blank" rel="noopener noreferrer">Live App ↗</a></h3>
-				<p style="font-size:0.88rem;color:var(--muted);">Godot, WebAssembly, Offline-First PWA</p>
+				<h3>PayTrack</h3>
+				<p style="font-size:0.88rem;color:var(--muted);margin-bottom:0.35rem;">Godot, WebAssembly, Offline-First PWA</p>
 				<p>Offline-first expense tracking and personal finance application engineered with Godot and WebAssembly to run entirely in the browser without server dependencies or cloud data sync.</p>
+				<div class="cv-project-links">
+					<a class="cv-link-pill" href="/paytrack/" target="_blank" rel="noopener noreferrer">
+						<span>Launch Live App</span>
+						<span class="pill-arrow">&rarr;</span>
+					</a>
+				</div>
 			</div>
 		</div>
 
 		<div class="cv-item">
 			<span class="when">2023</span>
 			<div>
-				<h3>Wildlife Acts · <a href="/wildlife/" target="_blank" rel="noopener noreferrer">Live App ↗</a> · <a href="https://github.com/ramlakhanmadheshiya/Wildlife-Project" target="_blank" rel="noopener noreferrer">GitHub ↗</a></h3>
-				<p style="font-size:0.88rem;color:var(--muted);">HTML, CSS, JavaScript</p>
+				<h3>Wildlife Acts</h3>
+				<p style="font-size:0.88rem;color:var(--muted);margin-bottom:0.35rem;">HTML, CSS, JavaScript</p>
 				<p>Interactive educational platform presenting national and international wildlife protection acts, biodiversity awareness, and species conservation policies.</p>
+				<div class="cv-project-links">
+					<a class="cv-link-pill" href="/wildlife/" target="_blank" rel="noopener noreferrer">
+						<span>Explore Platform</span>
+						<span class="pill-arrow">&rarr;</span>
+					</a>
+					<a class="cv-link-pill secondary" href="https://github.com/ramlakhanmadheshiya/Wildlife-Project" target="_blank" rel="noopener noreferrer">
+						<span>GitHub Repository</span>
+						<span class="pill-arrow">&rarr;</span>
+					</a>
+				</div>
 			</div>
 		</div>
 
 		<div class="cv-item">
 			<span class="when">2026</span>
 			<div>
-				<h3>Bill Studio · <a href="/projects/bill-studio/" target="_blank" rel="noopener noreferrer">Live App ↗</a> · <a href="https://github.com/ramlakhanmadheshiya/bill-studio" target="_blank" rel="noopener noreferrer">GitHub ↗</a></h3>
-				<p style="font-size:0.88rem;color:var(--muted);">JavaScript, PWA, IndexedDB, Web Crypto</p>
+				<h3>Bill Studio</h3>
+				<p style="font-size:0.88rem;color:var(--muted);margin-bottom:0.35rem;">JavaScript, PWA, IndexedDB, Web Crypto</p>
 				<p>Free, offline-first billing web application with tax rules for 50+ countries, drag-and-drop bill designer, customer ledgers, payment QR codes, and client-side encrypted backups.</p>
+				<div class="cv-project-links">
+					<a class="cv-link-pill" href="/projects/bill-studio/" target="_blank" rel="noopener noreferrer">
+						<span>Launch Live App</span>
+						<span class="pill-arrow">&rarr;</span>
+					</a>
+					<a class="cv-link-pill secondary" href="https://github.com/ramlakhanmadheshiya/bill-studio" target="_blank" rel="noopener noreferrer">
+						<span>GitHub Repository</span>
+						<span class="pill-arrow">&rarr;</span>
+					</a>
+				</div>
 			</div>
 		</div>
 
 		<div class="cv-item">
 			<span class="when">2026</span>
 			<div>
-				<h3>Brainnova Studio: Single Shot & Puzzle Games · <a href="/BrainnovaStudio/games/" target="_blank" rel="noopener noreferrer">Games Hub ↗</a> · <a href="https://github.com/ramlakhanmadheshiya/single-shot" target="_blank" rel="noopener noreferrer">GitHub ↗</a></h3>
-				<p style="font-size:0.88rem;color:var(--muted);">GDScript, Godot 4, Android, Web</p>
+				<h3>Brainnova Studio: Single Shot & Puzzle Games</h3>
+				<p style="font-size:0.88rem;color:var(--muted);margin-bottom:0.35rem;">GDScript, Godot 4, Android, Web</p>
 				<p>Designed and developed algorithmic puzzle games. Single Shot (360 rooms) in closed testing on Google Play; all levels generated and verified by automated solvers.</p>
+				<div class="cv-project-links">
+					<a class="cv-link-pill" href="/BrainnovaStudio/games/" target="_blank" rel="noopener noreferrer">
+						<span>Games Hub</span>
+						<span class="pill-arrow">&rarr;</span>
+					</a>
+					<a class="cv-link-pill secondary" href="https://github.com/ramlakhanmadheshiya/single-shot" target="_blank" rel="noopener noreferrer">
+						<span>GitHub Repository</span>
+						<span class="pill-arrow">&rarr;</span>
+					</a>
+				</div>
 			</div>
 		</div>
 
 		<div class="cv-item">
 			<span class="when">2024</span>
 			<div>
-				<h3>GPO Compliance Manager · <a href="https://github.com/ramlakhanmadheshiya/Project-Techolics_" target="_blank" rel="noopener noreferrer">GitHub ↗</a></h3>
-				<p style="font-size:0.88rem;color:var(--muted);">C#, .NET, WPF · Smart India Hackathon Finalist</p>
+				<h3>GPO Compliance Manager</h3>
+				<p style="font-size:0.88rem;color:var(--muted);margin-bottom:0.35rem;">C#, .NET, WPF · Smart India Hackathon Finalist</p>
 				<p>Windows security tool generating and enforcing Group Policy Objects aligned with CIS benchmarks for the NTRO challenge.</p>
+				<div class="cv-project-links">
+					<a class="cv-link-pill secondary" href="https://github.com/ramlakhanmadheshiya/Project-Techolics_" target="_blank" rel="noopener noreferrer">
+						<span>GitHub Repository</span>
+						<span class="pill-arrow">&rarr;</span>
+					</a>
+				</div>
 			</div>
 		</div>
 
@@ -219,5 +280,38 @@ const experience = [
 			<dt>Frameworks & tools</dt>
 			<dd>Godot 4, Astro, .NET/WPF, React, Node.js, Express, IndexedDB, Docker, Git, GitHub Actions</dd>
 		</dl>
+	</section>
+
+	<!-- In-Browser PDF Document Preview -->
+	<section class="section cv-pdf-section" id="pdf-preview">
+		<div class="cv-pdf-header">
+			<div>
+				<h2>CV Document Preview</h2>
+				<p style="color:var(--muted);font-size:0.9rem;margin:0.25rem 0 0;">
+					Compiled 2-page document layout. You can also view it in a separate browser tab or download it.
+				</p>
+			</div>
+			<div class="cv-project-links" style="margin:0;">
+				<a class="cv-link-pill" href={CV_PDF} target="_blank" rel="noopener noreferrer">
+					<span>Open Fullscreen in Browser</span>
+					<span class="pill-arrow">&rarr;</span>
+				</a>
+				<a class="cv-link-pill secondary" href={CV_PDF} download="ramlakhan-madheshiya-cv.pdf">
+					<span>Download PDF</span>
+					<span class="pill-arrow">&darr;</span>
+				</a>
+			</div>
+		</div>
+		<div class="cv-pdf-container">
+			<iframe
+				src={`${CV_PDF}#toolbar=1&navpanes=0`}
+				title="Ramlakhan Madheshiya CV PDF"
+				loading="lazy"
+			>
+				<p style="padding:1.5rem;text-align:center;">
+					Your browser does not support inline PDFs. <a href={CV_PDF} target="_blank" rel="noopener noreferrer">Click here to view the CV in your browser</a>.
+				</p>
+			</iframe>
+		</div>
 	</section>
 </Base>

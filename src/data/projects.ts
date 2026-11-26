@@ -25,6 +25,46 @@ const hub = { label: 'Games Hub', href: '/BrainnovaStudio/games/' };
 /** Merged upstream pull requests, newest first. */
 export const pullRequests: PullRequest[] = [
 	{
+		repo: 'SciML/ModelingToolkit.jl',
+		number: 5375,
+		state: 'merged',
+		title: 'Keep @nospecialize on constructor and op in process_SciMLProblem',
+		url: 'https://github.com/SciML/ModelingToolkit.jl/pull/5375',
+		description: 'Prevented compiler specialization bloat and reduced method latency by restructuring keyword argument processing to preserve @nospecialize annotations on problem constructors and operators.'
+	},
+	{
+		repo: 'SciML/OrdinaryDiffEq.jl',
+		number: 4874,
+		state: 'merged',
+		title: 'Build the fixed-point solver for constrained MethodOfSteps',
+		url: 'https://github.com/SciML/OrdinaryDiffEq.jl/pull/4874',
+		description: 'Fixed MethodError in constrained delay differential equation algorithms with dependent or undeclared lags by constructing fallback fixed-point iteration solvers.'
+	},
+	{
+		repo: 'SciML/ModelingToolkit.jl',
+		number: 5376,
+		state: 'merged',
+		title: 'Pass code-generation options of a problem to its event code',
+		url: 'https://github.com/SciML/ModelingToolkit.jl/pull/5376',
+		description: 'Ensured problem-level codegen flags (nanmath, sort_addmul, checkbounds) correctly propagate to generated discrete and continuous event handlers across all problem types.'
+	},
+	{
+		repo: 'SciML/OrdinaryDiffEq.jl',
+		number: 4950,
+		state: 'merged',
+		title: 'Drop the TruncatedStacktraces hint from the derivative order error',
+		url: 'https://github.com/SciML/OrdinaryDiffEq.jl/pull/4950',
+		description: 'Cleaned up solver error reporting by removing obsolete stacktrace truncation hints on modern Julia versions.'
+	},
+	{
+		repo: 'SciML/ModelingToolkit.jl',
+		number: 5345,
+		state: 'merged',
+		title: 'Bind arrays indexed by a symbolic index in generated code',
+		url: 'https://github.com/SciML/ModelingToolkit.jl/pull/5345',
+		description: 'Resolved array variable scope binding in generated wrapper functions when indexed by dynamic symbolic indices, including delay and Pre terms.'
+	},
+	{
 		repo: 'SciML/OrdinaryDiffEq.jl',
 		number: 4849,
 		state: 'merged',
@@ -54,14 +94,30 @@ export const openSource: Project[] = [
 	{
 		name: 'SciML / OrdinaryDiffEq.jl',
 		year: '2026',
-		blurb: 'Production numerical solvers for ODEs, DDEs and DAEs in Julia. Authored merged fixes to DelayDiffEq\'s MethodOfSteps: lag initialization, sign validation, and interpolation method dispatch.',
+		blurb: 'Production numerical solvers for ODEs, DDEs and DAEs in Julia. Authored merged fixes for delay differential equation step size constraints, fixed-point solvers, lag validation, interpolation method dispatch, and error diagnostics.',
 		tags: ['Julia', 'Numerical Solvers', 'SciML', 'DDE'],
 		status: 'Upstream Contributor',
 		featured: true,
 		links: [
 			{ label: 'Repository', href: 'https://github.com/SciML/OrdinaryDiffEq.jl' },
+			{ label: 'PR #4874', href: 'https://github.com/SciML/OrdinaryDiffEq.jl/pull/4874' },
 			{ label: 'PR #4849', href: 'https://github.com/SciML/OrdinaryDiffEq.jl/pull/4849' },
 			{ label: 'PR #4834', href: 'https://github.com/SciML/OrdinaryDiffEq.jl/pull/4834' },
+			{ label: 'PR #4950', href: 'https://github.com/SciML/OrdinaryDiffEq.jl/pull/4950' },
+		],
+	},
+	{
+		name: 'SciML / ModelingToolkit.jl',
+		year: '2026',
+		blurb: 'Equation-oriented symbolic modeling system in Julia. Authored merged contributions optimizing compiler specialization (@nospecialize), event code-generation options propagation, and symbolic array index variable binding.',
+		tags: ['Julia', 'Symbolic Modeling', 'SciML', 'Compilers'],
+		status: 'Upstream Contributor',
+		featured: true,
+		links: [
+			{ label: 'Repository', href: 'https://github.com/SciML/ModelingToolkit.jl' },
+			{ label: 'PR #5375', href: 'https://github.com/SciML/ModelingToolkit.jl/pull/5375' },
+			{ label: 'PR #5376', href: 'https://github.com/SciML/ModelingToolkit.jl/pull/5376' },
+			{ label: 'PR #5345', href: 'https://github.com/SciML/ModelingToolkit.jl/pull/5345' },
 		],
 	},
 	{

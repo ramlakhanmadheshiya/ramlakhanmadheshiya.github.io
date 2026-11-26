@@ -119,9 +119,24 @@ const ext = (href: string) => /^https?:/.test(href);
 				<h3>
 					<a href="https://github.com/SciML/OrdinaryDiffEq.jl" target="_blank" rel="noopener noreferrer">SciML / OrdinaryDiffEq.jl</a>
 				</h3>
-				<p>Production differential equation solvers in Julia (MethodOfSteps): lag handling, zero-lag step bound preservation, and interpolation dispatch order.</p>
+				<p>Production differential equation solvers in Julia (MethodOfSteps): lag handling, zero-lag step bound preservation, fixed-point solver construction, and interpolation dispatch.</p>
 				<div class="pr-list">
 					{mergedPRs.filter((p) => p.repo.includes('OrdinaryDiffEq')).map((pr) => (
+						<div class="pr-item">
+							<span class="badge-merged">merged</span>
+							<a href={pr.url} target="_blank" rel="noopener noreferrer">#{pr.number}: {pr.title}</a>
+						</div>
+					))}
+				</div>
+			</div>
+
+			<div class="oss-block">
+				<h3>
+					<a href="https://github.com/SciML/ModelingToolkit.jl" target="_blank" rel="noopener noreferrer">SciML / ModelingToolkit.jl</a>
+				</h3>
+				<p>Equation-oriented symbolic modeling framework in Julia: compiler specialization preservation, event codegen options propagation, and symbolic array indexing.</p>
+				<div class="pr-list">
+					{mergedPRs.filter((p) => p.repo.includes('ModelingToolkit')).map((pr) => (
 						<div class="pr-item">
 							<span class="badge-merged">merged</span>
 							<a href={pr.url} target="_blank" rel="noopener noreferrer">#{pr.number}: {pr.title}</a>
