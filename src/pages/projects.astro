@@ -1,6 +1,6 @@
 ---
 import Base from '../layouts/Base.astro';
-import { openSource, games, webApps, security, research, pullRequests } from '../data/projects';
+import { openSource, games, webApps, security, research, upcoming, pullRequests } from '../data/projects';
 import type { Project } from '../data/projects';
 
 const mergedPRs = pullRequests.filter((p) => p.state === 'merged');
@@ -11,6 +11,12 @@ const groups: { id: string; title: string; desc: string; items: Project[] }[] = 
 		title: 'Web apps & tools',
 		desc: 'High-speed, offline-first applications and developer utilities built with zero server dependencies.',
 		items: webApps,
+	},
+	{
+		id: 'upcoming',
+		title: 'Upcoming projects',
+		desc: 'In-progress tools and prototypes currently being built and refined.',
+		items: upcoming,
 	},
 	{
 		id: 'security',

@@ -13,9 +13,9 @@ export function gstinChecksum(first14) {
 }
 
 export function validateGSTIN(raw) {
-  const g = String(raw || '').trim().toUpperCase();
+  const g = String(raw || '').replace(/[\s-]+/g, '').toUpperCase();
   if (!g) return { ok: true, empty: true };
-  if (!/^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/.test(g)) return { ok: false, msg: 'GSTIN should look like 22AAAAA0000A1Z5 (15 characters).' };
+  if (!/^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z][0-9A-Z][0-9A-Z]$/.test(g)) return { ok: false, msg: 'GSTIN should look like 22AAAAA0000A1Z5 (15 characters).' };
   if (gstinChecksum(g.slice(0, 14)) !== g[14]) return { ok: false, msg: 'GSTIN check digit does not match — please re-check.' };
   return { ok: true, state: g.slice(0, 2), pan: g.slice(2, 12) };
 }

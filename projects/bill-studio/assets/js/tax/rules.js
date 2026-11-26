@@ -34,7 +34,7 @@ export function businessTaxError(b) {
 // How a tax ID is stored: upper case, no spaces — except the Swiss UID, whose official form is "CHE-123.456.789 MWST".
 export function normTaxId(countryCode, v) {
   const s = String(v || '').toUpperCase().trim();
-  return countryCode === 'CH' ? s.replace(/\s+/g, ' ') : s.replace(/\s/g, '');
+  return countryCode === 'CH' ? s.replace(/\s+/g, ' ') : countryCode === 'IN' ? s.replace(/[\s-]+/g, '') : s.replace(/\s/g, '');
 }
 
 // Canada: default sales-tax preset for each province / territory.

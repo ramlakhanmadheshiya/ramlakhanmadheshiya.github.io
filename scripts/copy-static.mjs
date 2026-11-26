@@ -10,6 +10,7 @@ const STATIC = [
 	'apps',
 	'browsers_theme',
 	'games',
+	'magaladon',
 	'one-clean-shot',
 	'projects',
 	'sift',

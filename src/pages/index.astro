@@ -2,7 +2,7 @@
 import Base from '../layouts/Base.astro';
 import { getPosts, fmtDate } from '../utils';
 import { SOCIAL, EMAIL } from '../consts';
-import { pullRequests } from '../data/projects';
+import { pullRequests, upcoming } from '../data/projects';
 
 const posts = (await getPosts()).slice(0, 3);
 const mergedPRs = pullRequests.filter((pr) => pr.state === 'merged');
@@ -89,6 +89,36 @@ const ext = (href: string) => /^https?:/.test(href);
 				<article class="showcase-card">
 					<div class="showcase-top">
 						<span class="showcase-domain">{project.domain}</span>
+						<span class="showcase-year">{project.year}</span>
+					</div>
+					<h3>{project.name}</h3>
+					<p class="showcase-desc">{project.blurb}</p>
+					<div class="tag-list">
+						{project.tags.map((t) => <span class="tag">{t}</span>)}
+					</div>
+					<div class="showcase-links">
+						{project.links.map((l) => (
+							<a href={l.href} target={ext(l.href) ? '_blank' : undefined} rel={ext(l.href) ? 'noopener noreferrer' : undefined}>
+								{l.label} {ext(l.href) ? '↗' : '→'}
+							</a>
+						))}
+					</div>
+				</article>
+			))}
+		</div>
+	</section>
+
+	<!-- Upcoming Projects -->
+	<section class="section">
+		<div class="section-head">
+			<h2>Upcoming Projects</h2>
+			<a href="/projects/#upcoming">All upcoming &rarr;</a>
+		</div>
+		<div class="showcase-grid">
+			{upcoming.map((project) => (
+				<article class="showcase-card">
+					<div class="showcase-top">
+						<span class="showcase-domain">{project.status ?? 'Upcoming'}</span>
 						<span class="showcase-year">{project.year}</span>
 					</div>
 					<h3>{project.name}</h3>

@@ -1,0 +1,1911 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <meta name="theme-color" content="#0a0a0f" />
+  <title>Megalodon</title>
+  <link rel="manifest" href="/assets/manifest-CdxVdmgb.json" />
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    :root {
+      --bg: #090a0f;
+      --card-bg: #121420;
+      --card-border: #1f2338;
+      --accent: #3b82f6;
+      --accent-glow: rgba(59, 130, 246, 0.4);
+      --accent-danger: #ef4444;
+      --accent-cyan: #06b6d4;
+      --text: #f3f4f6;
+      --text-muted: #9ca3af;
+      --text-bright: #60a5fa;
+      --radius: 14px;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100dvh;
+      display: flex;
+      flex-direction: column;
+      overflow-x: hidden;
+    }
+
+    /* Top Nav */
+    header {
+      background: rgba(18, 20, 32, 0.85);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--card-border);
+      padding: 12px 18px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      position: sticky;
+      top: 0;
+      z-index: 50;
+    }
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .logo-badge {
+      width: 36px;
+      height: 36px;
+      border-radius: 10px;
+      background: linear-gradient(135deg, #1e3a8a, #3b82f6);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 20px;
+      box-shadow: 0 0 15px var(--accent-glow);
+    }
+    .brand h1 {
+      font-size: 18px;
+      font-weight: 700;
+      letter-spacing: -0.3px;
+    }
+    .header-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .btn-icon {
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid var(--card-border);
+      color: var(--text);
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 14px;
+      transition: all 0.2s;
+    }
+    .btn-icon.active {
+      background: rgba(59, 130, 246, 0.2);
+      border-color: var(--accent);
+      color: var(--text-bright);
+    }
+    .header-status {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 12px;
+      color: var(--text-muted);
+      background: rgba(255, 255, 255, 0.05);
+      padding: 4px 10px;
+      border-radius: 20px;
+      border: 1px solid var(--card-border);
+    }
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #10b981;
+      animation: pulse 2s infinite;
+    }
+    .status-dot.offline { background: var(--accent-danger); animation: none; }
+    @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
+
+    /* Main Container */
+    main {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      max-width: 720px;
+      width: 100%;
+      margin: 0 auto;
+      height: calc(100dvh - 120px);
+      position: relative;
+    }
+
+    /* Tab screens */
+    .tab-content {
+      display: none;
+      flex: 1;
+      overflow-y: auto;
+      padding: 16px;
+      flex-direction: column;
+    }
+    .tab-content.active { display: flex; }
+
+    /* Chat Tab */
+    #chat-messages {
+      flex: 1;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+      padding-bottom: 20px;
+    }
+    .msg {
+      max-width: 85%;
+      padding: 12px 16px;
+      border-radius: var(--radius);
+      line-height: 1.5;
+      font-size: 14.5px;
+      word-wrap: break-word;
+      animation: fadeIn 0.2s ease;
+    }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+    .msg.user {
+      align-self: flex-end;
+      background: linear-gradient(135deg, #2563eb, #1d4ed8);
+      color: white;
+      border-bottom-right-radius: 4px;
+    }
+    .msg.assistant {
+      align-self: flex-start;
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      color: var(--text);
+      border-bottom-left-radius: 4px;
+    }
+    .tool-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      font-size: 11px;
+      background: rgba(59, 130, 246, 0.15);
+      color: var(--text-bright);
+      padding: 2px 8px;
+      border-radius: 6px;
+      margin-top: 6px;
+      border: 1px solid rgba(59, 130, 246, 0.3);
+    }
+
+    /* Live Countdown Widget */
+    .countdown-widget {
+      margin-top: 10px;
+      padding: 16px;
+      background: radial-gradient(circle, rgba(14, 165, 233, 0.12) 0%, rgba(18, 20, 32, 0.9) 70%);
+      border: 1px solid rgba(14, 165, 233, 0.4);
+      border-radius: var(--radius);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 0 25px rgba(6, 182, 212, 0.2);
+    }
+    .countdown-widget.active .countdown-num {
+      animation: scalePulse 1s infinite alternate;
+    }
+    @keyframes scalePulse {
+      0% { transform: scale(1); filter: drop-shadow(0 0 5px var(--accent-cyan)); }
+      100% { transform: scale(1.08); filter: drop-shadow(0 0 15px var(--accent-cyan)); }
+    }
+    .countdown-num {
+      font-size: 42px;
+      font-weight: 800;
+      color: var(--accent-cyan);
+      font-variant-numeric: tabular-nums;
+      margin-bottom: 4px;
+      letter-spacing: -1px;
+    }
+    .countdown-label {
+      font-size: 12px;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+    .countdown-widget.done {
+      border-color: #10b981;
+      background: rgba(16, 185, 129, 0.1);
+    }
+    .countdown-widget.done .countdown-num {
+      color: #10b981;
+      font-size: 28px;
+      animation: none;
+    }
+
+    /* Quick action suggestions */
+    .chips-bar {
+      display: flex;
+      gap: 8px;
+      overflow-x: auto;
+      padding: 8px 0;
+      scrollbar-width: none;
+    }
+    .chips-bar::-webkit-scrollbar { display: none; }
+    .chip {
+      white-space: nowrap;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid var(--card-border);
+      color: var(--text-muted);
+      padding: 6px 12px;
+      border-radius: 20px;
+      font-size: 12px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .chip:hover {
+      background: rgba(59, 130, 246, 0.15);
+      color: var(--text-bright);
+      border-color: var(--accent);
+    }
+
+    /* Input area */
+    .input-bar {
+      display: flex;
+      gap: 10px;
+      padding: 12px 0 6px 0;
+      align-items: center;
+    }
+    .input-bar input {
+      flex: 1;
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      color: var(--text);
+      padding: 14px 18px;
+      border-radius: 25px;
+      font-size: 15px;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+    .input-bar input:focus { border-color: var(--accent); }
+    .btn-send {
+      width: 46px;
+      height: 46px;
+      border-radius: 50%;
+      background: var(--accent);
+      color: white;
+      border: none;
+      font-size: 18px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: transform 0.1s, box-shadow 0.2s;
+      box-shadow: 0 0 15px var(--accent-glow);
+    }
+    .btn-send:active { transform: scale(0.95); }
+
+    .btn-mic {
+      width: 46px;
+      height: 46px;
+      border-radius: 50%;
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      color: var(--text);
+      font-size: 20px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.2s;
+    }
+    .btn-mic:hover {
+      border-color: var(--accent);
+      color: var(--text-bright);
+    }
+    .btn-mic.recording {
+      background: rgba(239, 68, 68, 0.2);
+      border-color: var(--accent-danger);
+      color: var(--accent-danger);
+      animation: micPulse 1s infinite alternate;
+    }
+    @keyframes micPulse {
+      0% { transform: scale(1); box-shadow: 0 0 5px rgba(239, 68, 68, 0.5); }
+      100% { transform: scale(1.12); box-shadow: 0 0 22px rgba(239, 68, 68, 0.9); }
+    }
+
+    /* Schedule Tab */
+    .section-title {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--text-muted);
+      margin: 16px 0 10px 0;
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+    }
+    .card-list {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .item-card {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: var(--radius);
+      padding: 14px 16px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      transition: border-color 0.2s;
+    }
+    .item-card:hover { border-color: rgba(59, 130, 246, 0.4); }
+    .item-details h4 {
+      font-size: 15px;
+      font-weight: 600;
+      margin-bottom: 4px;
+    }
+    .item-details p {
+      font-size: 12.5px;
+      color: var(--text-muted);
+    }
+    .btn-del {
+      background: transparent;
+      border: 1px solid #374151;
+      color: #9ca3af;
+      padding: 6px 10px;
+      border-radius: 8px;
+      font-size: 12px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .btn-del:hover {
+      background: rgba(239, 68, 68, 0.15);
+      border-color: var(--accent-danger);
+      color: var(--accent-danger);
+    }
+
+    /* Live alert banner */
+    #live-alert {
+      display: none;
+      background: linear-gradient(135deg, #1e3a8a, #2563eb);
+      color: white;
+      padding: 14px 18px;
+      border-radius: var(--radius);
+      margin-bottom: 12px;
+      box-shadow: 0 0 25px var(--accent-glow);
+      animation: alertPulse 1.5s infinite alternate;
+    }
+    @keyframes alertPulse {
+      from { box-shadow: 0 0 15px var(--accent-glow); }
+      to { box-shadow: 0 0 30px rgba(59, 130, 246, 0.8); }
+    }
+
+    /* Bottom Navigation Bar */
+    nav.bottom-nav {
+      background: rgba(18, 20, 32, 0.95);
+      backdrop-filter: blur(12px);
+      border-top: 1px solid var(--card-border);
+      display: flex;
+      justify-content: space-around;
+      padding: 8px 0;
+      position: sticky;
+      bottom: 0;
+      z-index: 50;
+    }
+    .nav-btn {
+      background: transparent;
+      border: none;
+      color: var(--text-muted);
+      font-size: 12px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 4px;
+      cursor: pointer;
+      padding: 6px 18px;
+      border-radius: 12px;
+      transition: all 0.2s;
+    }
+    .nav-btn.active {
+      color: var(--text-bright);
+      background: rgba(59, 130, 246, 0.12);
+    }
+    .nav-btn svg { width: 20px; height: 20px; fill: currentColor; }
+
+    /* Settings Tab */
+    .settings-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 14px 0;
+      border-bottom: 1px solid var(--card-border);
+      font-size: 14px;
+    }
+    .settings-label { color: var(--text-muted); }
+    .settings-val { font-weight: 500; }
+
+    /* Modal */
+    .modal-backdrop {
+      display: none;
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(0, 0, 0, 0.75);
+      backdrop-filter: blur(4px);
+      z-index: 100;
+      align-items: center;
+      justify-content: center;
+      padding: 16px;
+    }
+    .modal-backdrop.open { display: flex; }
+    .modal-card {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: var(--radius);
+      padding: 20px;
+      max-width: 440px;
+      width: 100%;
+      box-shadow: 0 10px 40px rgba(0,0,0,0.6);
+      animation: modalFadeIn 0.2s ease;
+    }
+    @keyframes modalFadeIn {
+      from { transform: scale(0.95); opacity: 0; }
+      to { transform: scale(1); opacity: 1; }
+    }
+    .modal-card h3 {
+      font-size: 17px;
+      font-weight: 700;
+      margin-bottom: 16px;
+    }
+    .form-group {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      margin-bottom: 14px;
+    }
+    .form-group label {
+      font-size: 12px;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .form-group input, .form-group select {
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid var(--card-border);
+      color: var(--text);
+      padding: 10px 12px;
+      border-radius: 8px;
+      font-size: 14px;
+      outline: none;
+    }
+    .form-group input:focus, .form-group select:focus {
+      border-color: var(--accent);
+    }
+    .modal-actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 10px;
+      margin-top: 20px;
+    }
+    .btn-secondary {
+      background: transparent;
+      border: 1px solid var(--card-border);
+      color: var(--text-muted);
+      padding: 9px 16px;
+      border-radius: 8px;
+      font-size: 13px;
+      cursor: pointer;
+    }
+    .btn-primary {
+      background: var(--accent);
+      border: none;
+      color: white;
+      padding: 9px 18px;
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="brand">
+      <div class="logo-badge">🦈</div>
+      <div>
+        <h1 id="header-name">Megalodon</h1>
+      </div>
+    </div>
+    <div class="header-actions">
+      <button class="btn-icon active" id="btn-voice-toggle" onclick="toggleVoice()" title="Toggle Voice Output">🔊</button>
+      <div class="header-status">
+        <div class="status-dot" id="status-dot"></div>
+        <span id="status-text">Connected</span>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <!-- Live Notification Banner -->
+    <div id="live-alert">
+      <strong>🔔 Reminder:</strong> <span id="alert-text"></span>
+    </div>
+
+    <!-- Tab 1: Chat -->
+    <div id="tab-chat" class="tab-content active">
+      <div id="offline-banner" style="display: none; background: rgba(239, 68, 68, 0.15); border: 1px solid rgba(239, 68, 68, 0.35); padding: 10px 14px; border-radius: 8px; margin-bottom: 12px; font-size: 13px; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap;">
+        <span style="color: #fca5a5; font-weight: 500;">⚠️ Megalodon disconnected.</span>
+        <div style="display: flex; gap: 6px; align-items: center;">
+          <button onclick="openQrScanner()" style="background: var(--accent); color: #000; border: none; border-radius: 6px; padding: 6px 12px; font-size: 12px; font-weight: 600; cursor: pointer;">📷 Scan QR</button>
+          <button onclick="startAutoDiscovery()" style="background: rgba(255,255,255,0.12); color: #fff; border: 1px solid var(--card-border); border-radius: 6px; padding: 6px 10px; font-size: 12px; font-weight: 600; cursor: pointer;">🔍 Auto-Find</button>
+          <button onclick="switchTab('settings')" style="background: transparent; color: var(--text-muted); border: none; padding: 6px 6px; font-size: 12px; cursor: pointer;">⚙️ Manual</button>
+        </div>
+      </div>
+      <div id="chat-messages">
+        <div class="msg assistant" id="welcome-msg">
+          Hello! I'm <strong>Megalodon</strong>, your private personal AI assistant. How can I assist you today, sir?
+        </div>
+      </div>
+
+      <div class="chips-bar">
+        <div class="chip" onclick="sendSuggestion('Hello! Who are you and what can you do?')">👋 Introduce yourself</div>
+        <div class="chip" onclick="sendSuggestion('Start counting from 10')">🔟 Count down from 10</div>
+        <div class="chip" onclick="sendSuggestion('What is my schedule today?')">📅 What's my schedule today?</div>
+        <div class="chip" onclick="sendSuggestion('Set a timer for 30 minutes to buy milk and MacBook Pro')">⏱️ 30m Timer</div>
+        <div class="chip" onclick="sendSuggestion('Remind me in 2 minutes to drink water')">💧 Drink water in 2m</div>
+      </div>
+
+      <div class="input-bar">
+        <input type="text" id="chat-input" placeholder="Ask Megalodon anything..." autofocus />
+        <button class="btn-mic" id="btn-mic" onclick="toggleRecording()" title="Hold or Click to Speak">🎙️</button>
+        <button class="btn-send" id="btn-send" onclick="handleSend()">➤</button>
+      </div>
+    </div>
+
+    <!-- Tab 2: Schedule & Reminders -->
+    <div id="tab-schedule" class="tab-content">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin: 16px 0 10px 0;">
+        <div class="section-title" style="margin: 0;">Active Reminders & Timers</div>
+        <button class="chip" onclick="openAddReminderModal()" style="border-color: var(--accent); color: var(--text-bright); font-weight: 600;">+ New Reminder</button>
+      </div>
+      <div class="card-list" id="reminders-list">
+        <p style="color: var(--text-muted); font-size: 13px;">Loading reminders...</p>
+      </div>
+
+      <div class="section-title" style="margin-top: 24px;">Today's Overview</div>
+      <div class="card-list" id="today-schedule">
+        <p style="color: var(--text-muted); font-size: 13px;">Checking schedule...</p>
+      </div>
+    </div>
+
+    <!-- Tab 3: Settings -->
+    <div id="tab-settings" class="tab-content">
+      <div class="section-title">Identity & Owner</div>
+      <div class="settings-row">
+        <span class="settings-label">Owner Name</span>
+        <span class="settings-val" id="st-owner">Not learned yet (tell Megalodon in chat)</span>
+      </div>
+      <div class="settings-row">
+        <span class="settings-label">Assistant Name</span>
+        <span class="settings-val" id="st-name">Megalodon</span>
+      </div>
+      <div class="settings-row">
+        <span class="settings-label">Device Timezone (Current)</span>
+        <span class="settings-val" id="st-client-tz">Detecting...</span>
+      </div>
+      <div class="settings-row">
+        <span class="settings-label">Default Server Timezone</span>
+        <span class="settings-val" id="st-tz">Asia/Kolkata</span>
+      </div>
+
+      <div class="section-title" style="margin-top: 24px;">Connection & Servers</div>
+      
+      <div style="display: flex; gap: 8px; margin-bottom: 12px;">
+        <button class="btn-del" onclick="openQrScanner()" style="flex: 1; border-color: var(--accent); color: var(--accent); font-weight: 600; padding: 10px; display: flex; align-items: center; justify-content: center; gap: 6px; font-size: 13px;">
+          📷 Scan Laptop QR Code
+        </button>
+        <button class="btn-del" onclick="startAutoDiscovery()" style="flex: 1; border-color: var(--accent-cyan); color: var(--accent-cyan); font-weight: 600; padding: 10px; display: flex; align-items: center; justify-content: center; gap: 6px; font-size: 13px;">
+          🔍 Auto-Discover Laptops
+        </button>
+      </div>
+
+      <!-- Discovered Nodes Container -->
+      <div id="discovery-results" style="display: none; background: #0c121e; border: 1px solid var(--accent); border-radius: 8px; padding: 12px; margin-bottom: 14px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+          <strong style="font-size: 13px; color: var(--accent);">📡 Discovered Megalodon Nodes:</strong>
+          <span id="discovery-spinner" style="font-size: 11px; color: var(--text-muted);">Scanning...</span>
+        </div>
+        <div id="discovered-nodes-list" style="display: flex; flex-direction: column; gap: 6px;"></div>
+      </div>
+
+      <div class="settings-row" style="flex-direction: column; align-items: stretch; gap: 8px;">
+        <span class="settings-label">Active Server Profile</span>
+        <div style="display: flex; gap: 8px;">
+          <select id="server-profile-select" style="flex: 1; background: var(--card-bg); border: 1px solid var(--card-border); color: var(--text); padding: 10px 12px; border-radius: 8px; font-size: 13px; outline: none;" onchange="switchServerProfile()">
+            <option value="/api">Local / Bundled (/api)</option>
+          </select>
+          <button class="btn-del" id="btn-del-profile" style="display: none; padding: 8px 12px; border-color: var(--accent-danger); color: var(--accent-danger);" onclick="deleteActiveProfile()" title="Delete this saved profile">🗑️ Remove</button>
+        </div>
+      </div>
+      <div class="settings-row" style="flex-direction: column; align-items: stretch; gap: 8px;">
+        <span class="settings-label">Add / Edit Server URL (Wi-Fi or Phone Hotspot)</span>
+        <div style="display: flex; gap: 8px;">
+          <input type="text" id="st-server-url" placeholder="http://192.168.43.1:8000/api" style="flex: 1; background: var(--card-bg); border: 1px solid var(--card-border); color: var(--text); padding: 8px 12px; border-radius: 8px; font-size: 13px; outline: none;" />
+          <button class="btn-del" style="border-color: var(--accent); color: var(--text-bright); padding: 8px 14px; font-weight: 600;" onclick="saveServerUrl()">+ Save Profile</button>
+        </div>
+        <div style="display: flex; gap: 6px; flex-wrap: wrap; margin-top: 4px;">
+          <button class="chip" onclick="quickFillServer('http://192.168.43.1:8000/api', 'Hotspot')" style="font-size: 11px;">📱 Hotspot Example</button>
+          <button class="chip" onclick="quickFillServer('http://192.168.1.50:8000/api', 'Wi-Fi')" style="font-size: 11px;">📶 Wi-Fi Example</button>
+          <button class="chip" onclick="quickFillServer('/api', 'Local')" style="font-size: 11px;">💻 Reset to Local (/api)</button>
+        </div>
+        <span style="font-size: 11px; color: var(--text-muted); margin-top: 4px;">Connect to your portable drive over the same Wi-Fi or phone hotspot. Multiple servers can be saved and switched here.</span>
+      </div>
+
+      <!-- Worldwide Remote Access Guide -->
+      <div style="margin-top: 14px; background: rgba(59, 130, 246, 0.08); border: 1px solid rgba(59, 130, 246, 0.25); border-radius: 8px; padding: 12px;">
+        <div style="display: flex; align-items: center; justify-content: space-between; cursor: pointer;" onclick="toggleWorldwideHelp()">
+          <span style="font-size: 13px; font-weight: 600; color: var(--text-bright);">🌍 Use From Anywhere in the World</span>
+          <span id="worldwide-arrow" style="font-size: 12px; color: var(--text-muted);">▼ Show Guide</span>
+        </div>
+        <div id="worldwide-help" style="display: none; margin-top: 10px; font-size: 12px; color: var(--text-muted); line-height: 1.6;">
+          <p><strong style="color: #fff;">1. Tailscale (Recommended & 100% Free):</strong> Install the free Tailscale app on your laptop & phone. Sign in with the same account. Copy your laptop's private <code>100.x.y.z</code> IP, and add <code>http://100.x.y.z:8000/api</code> above. It connects securely over 4G/5G mobile data from anywhere on Earth!</p>
+          <p style="margin-top: 6px;"><strong style="color: #fff;">2. Cloudflare Tunnel:</strong> On your laptop, run <code>cloudflared tunnel --url http://localhost:8000</code>. Paste the HTTPS URL here.</p>
+          <p style="margin-top: 6px;"><strong style="color: #fff;">3. Carry Your USB Drive:</strong> Plug into any PC worldwide, run <code>START</code>, and pair instantly.</p>
+        </div>
+      </div>
+
+      <div class="section-title" style="margin-top: 24px;">Voice & Speech (Indian English / Sweet Female)</div>
+      <div class="settings-row" style="flex-direction: column; align-items: stretch; gap: 8px;">
+        <span class="settings-label">Speaker Voice</span>
+        <select id="voice-select" style="background: var(--card-bg); border: 1px solid var(--card-border); color: var(--text); padding: 10px 12px; border-radius: 8px; font-size: 13px; width: 100%; outline: none;" onchange="saveVoicePreference()">
+          <option value="">Loading system voices...</option>
+        </select>
+      </div>
+      <div class="settings-row">
+        <span class="settings-label">Pitch (Sweetness)</span>
+        <div style="display: flex; align-items: center; gap: 10px;">
+          <input type="range" id="voice-pitch" min="0.8" max="1.5" step="0.05" value="1.15" onchange="saveVoicePreference()" style="width: 120px;" />
+          <span id="pitch-val" style="font-size: 12px; color: var(--text-muted);">1.15x</span>
+        </div>
+      </div>
+      <div class="settings-row">
+        <span class="settings-label">Speech Rate</span>
+        <div style="display: flex; align-items: center; gap: 10px;">
+          <input type="range" id="voice-rate" min="0.8" max="1.3" step="0.05" value="1.0" onchange="saveVoicePreference()" style="width: 120px;" />
+          <span id="rate-val" style="font-size: 12px; color: var(--text-muted);">1.0x</span>
+        </div>
+      </div>
+      <div style="margin-top: 10px;">
+        <button class="btn-del" style="border-color: var(--accent); color: var(--text-bright); padding: 8px 14px; width: 100%; font-size: 13px;" onclick="testVoice()">🔊 Test Voice Output</button>
+      </div>
+
+      <div class="section-title" style="margin-top: 24px;">Brain & System</div>
+      <div class="settings-row">
+        <span class="settings-label">Brain Model</span>
+        <span class="settings-val" id="st-brain">Qwen 2.5 (7B Local)</span>
+      </div>
+      <div class="settings-row">
+        <span class="settings-label">Privacy</span>
+        <span class="settings-val" style="color: #10b981;">100% Local & Private</span>
+      </div>
+
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 24px;">
+        <div class="section-title" style="margin-top: 0;">Long-Term Memory Vault</div>
+        <button onclick="promptAddMemory()" style="background: var(--card-bg); border: 1px solid var(--accent); color: var(--accent); padding: 4px 12px; border-radius: 6px; font-size: 12px; cursor: pointer;">+ Add Fact</button>
+      </div>
+      <div class="card-list" id="memory-list">
+        <p style="color: var(--text-muted); font-size: 13px;">No memories stored yet. Introduce yourself in chat!</p>
+      </div>
+    </div>
+
+    <!-- Modal: QR Code Scanner -->
+    <div id="qr-modal" class="modal-backdrop">
+      <div class="modal-card" style="text-align: center; max-width: 380px;">
+        <h3 style="margin-bottom: 6px;">📷 Scan Laptop QR Code</h3>
+        <p style="font-size: 12px; color: var(--text-muted); margin-bottom: 14px;">
+          Point your camera at the QR code on your laptop screen (<span style="color: var(--accent);">http://localhost:8000/status</span>).
+        </p>
+        <div id="qr-reader" style="width: 100%; border-radius: 10px; overflow: hidden; background: #000; min-height: 250px;"></div>
+        <div id="qr-scan-status" style="font-size: 12px; color: var(--accent); margin-top: 10px; min-height: 18px;">Initializing camera...</div>
+        
+        <div style="margin-top: 14px; display: flex; gap: 8px;">
+          <label class="btn-del" style="flex: 1; border-color: var(--card-border); color: var(--text); padding: 8px 12px; font-size: 12px; cursor: pointer; display: flex; align-items: center; justify-content: center;">
+            📁 Pick Photo
+            <input type="file" id="qr-file-input" accept="image/*" style="display: none;" onchange="handleQrFile(this)">
+          </label>
+          <button onclick="closeQrScanner()" class="btn-del" style="flex: 1; padding: 8px 12px; font-size: 12px; border-color: var(--accent-danger); color: var(--accent-danger);">Cancel</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal: Add New Reminder -->
+    <div id="reminder-modal" class="modal-backdrop">
+      <div class="modal-card">
+        <h3>⏰ New Reminder</h3>
+        <div class="form-group">
+          <label>Reminder Title / Task</label>
+          <input type="text" id="mod-rem-title" placeholder="e.g. Buy milk and MacBook Pro" />
+        </div>
+        <div class="form-group">
+          <label>Due Date & Time</label>
+          <input type="datetime-local" id="mod-rem-due" />
+        </div>
+        <div class="form-group">
+          <label>Recurrence</label>
+          <select id="mod-rem-recur">
+            <option value="">One-time (No recurrence)</option>
+            <option value="daily">Daily</option>
+            <option value="weekly">Weekly</option>
+            <option value="weekdays">Weekdays (Mon-Fri)</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Additional Notes (Optional)</label>
+          <input type="text" id="mod-rem-notes" placeholder="e.g. Check Apple Store Surat" />
+        </div>
+        <div class="modal-actions">
+          <button class="btn-secondary" onclick="closeAddReminderModal()">Cancel</button>
+          <button class="btn-primary" onclick="submitNewReminder()">Save Reminder</button>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <nav class="bottom-nav">
+    <button class="nav-btn active" onclick="switchTab('chat')">
+      <svg viewBox="0 0 24 24"><path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2z"/></svg>
+      Chat
+    </button>
+    <button class="nav-btn" onclick="switchTab('schedule')">
+      <svg viewBox="0 0 24 24"><path d="M19 3h-1V1h-2v2H8V1H6v2H5c-1.11 0-1.99.9-1.99 2L3 19c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H5V8h14v11z"/></svg>
+      Schedule
+    </button>
+    <button class="nav-btn" onclick="switchTab('settings')">
+      <svg viewBox="0 0 24 24"><path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z"/></svg>
+      Settings
+    </button>
+  </nav>
+
+  <script>
+    function initServerUrlFromQuery() {
+      try {
+        const params = new URLSearchParams(window.location.search);
+        const srv = params.get('server');
+        if (srv && (srv.startsWith('http://') || srv.startsWith('https://'))) {
+          const cleanUrl = srv.replace(/\/+$/, '');
+          localStorage.setItem('megalodon_api_base', cleanUrl);
+          let saved = [];
+          try {
+            saved = JSON.parse(localStorage.getItem('megalodon_servers') || '[]');
+          } catch (_) {}
+          if (!saved.some(s => s.url === cleanUrl)) {
+            saved.push({ label: 'Paired Laptop', url: cleanUrl });
+            localStorage.setItem('megalodon_servers', JSON.stringify(saved));
+          }
+        }
+      } catch (_) {}
+    }
+
+    function getApiBase() {
+      const custom = localStorage.getItem('megalodon_api_base');
+      return custom ? custom.replace(/\/+$/, '') : '/api';
+    }
+
+    function loadServerProfiles() {
+      const select = document.getElementById('server-profile-select');
+      const delBtn = document.getElementById('btn-del-profile');
+      if (!select) return;
+      let saved = [];
+      try {
+        saved = JSON.parse(localStorage.getItem('megalodon_servers') || '[]');
+      } catch (_) {}
+      const current = localStorage.getItem('megalodon_api_base') || '/api';
+
+      select.innerHTML = '<option value="/api">Local / Bundled (/api)</option>';
+      saved.forEach(srv => {
+        const opt = document.createElement('option');
+        opt.value = srv.url;
+        opt.textContent = `${srv.label} (${srv.url})`;
+        select.appendChild(opt);
+      });
+
+      if (!Array.from(select.options).some(o => o.value === current)) {
+        const customOpt = document.createElement('option');
+        customOpt.value = current;
+        customOpt.textContent = `Custom (${current})`;
+        select.appendChild(customOpt);
+      }
+      select.value = current;
+
+      if (delBtn) {
+        delBtn.style.display = (current !== '/api') ? 'inline-block' : 'none';
+      }
+    }
+
+    function switchServerProfile() {
+      const select = document.getElementById('server-profile-select');
+      const chosen = select.value;
+      localStorage.setItem('megalodon_api_base', chosen);
+      const urlInput = document.getElementById('st-server-url');
+      if (urlInput) urlInput.value = (chosen === '/api') ? '' : chosen;
+      loadServerProfiles();
+      loadConfig();
+    }
+
+    function deleteActiveProfile() {
+      const current = localStorage.getItem('megalodon_api_base') || '/api';
+      if (current === '/api') return;
+      if (!confirm('Remove this server profile?')) return;
+
+      let saved = [];
+      try {
+        saved = JSON.parse(localStorage.getItem('megalodon_servers') || '[]');
+      } catch (_) {}
+      saved = saved.filter(s => s.url !== current);
+      localStorage.setItem('megalodon_servers', JSON.stringify(saved));
+      localStorage.setItem('megalodon_api_base', '/api');
+
+      const urlInput = document.getElementById('st-server-url');
+      if (urlInput) urlInput.value = '';
+
+      loadServerProfiles();
+      alert('Profile removed. Reverted to Local (/api).');
+      loadConfig();
+    }
+
+    function quickFillServer(url, label) {
+      const input = document.getElementById('st-server-url');
+      if (input) input.value = (url === '/api') ? '' : url;
+      if (url === '/api') {
+        localStorage.setItem('megalodon_api_base', '/api');
+        loadServerProfiles();
+        loadConfig();
+      }
+    }
+
+    function saveServerUrl() {
+      const val = document.getElementById('st-server-url').value.trim();
+      const url = val || '/api';
+
+      if (url === '/api') {
+        localStorage.setItem('megalodon_api_base', '/api');
+      } else {
+        if (!url.startsWith('http://') && !url.startsWith('https://')) {
+          alert('Please enter a full URL starting with http:// or https:// (e.g. http://192.168.43.1:8000/api)');
+          return;
+        }
+        localStorage.setItem('megalodon_api_base', url);
+
+        let saved = [];
+        try {
+          saved = JSON.parse(localStorage.getItem('megalodon_servers') || '[]');
+        } catch (_) {}
+        const existing = saved.find(s => s.url === url);
+        if (!existing) {
+          const label = prompt('Enter a friendly name for this server profile:', 'Friend Laptop Hotspot') || 'Portable Server';
+          saved.push({ label, url });
+          localStorage.setItem('megalodon_servers', JSON.stringify(saved));
+        }
+      }
+
+      loadServerProfiles();
+      alert(`Server profile active: ${url}\nReconnecting...`);
+      loadConfig();
+    }
+
+    function toggleWorldwideHelp() {
+      const panel = document.getElementById('worldwide-help');
+      const arrow = document.getElementById('worldwide-arrow');
+      if (!panel) return;
+      const isOpen = panel.style.display === 'block';
+      panel.style.display = isOpen ? 'none' : 'block';
+      if (arrow) arrow.textContent = isOpen ? '▼ Show Guide' : '▲ Hide Guide';
+    }
+
+    function applyServerUrl(url, label = 'Paired Laptop') {
+      const cleanUrl = url.replace(/\/+$/, '');
+      localStorage.setItem('megalodon_api_base', cleanUrl);
+
+      let saved = [];
+      try {
+        saved = JSON.parse(localStorage.getItem('megalodon_servers') || '[]');
+      } catch (_) {}
+
+      const existing = saved.find(s => s.url === cleanUrl);
+      if (!existing) {
+        saved.push({ label: label, url: cleanUrl });
+      }
+      localStorage.setItem('megalodon_servers', JSON.stringify(saved));
+
+      loadServerProfiles();
+      loadConfig();
+      switchTab('chat');
+    }
+
+    let html5QrCodeScanner = null;
+
+    function loadScriptAsync(src) {
+      return new Promise((resolve, reject) => {
+        if (window.Html5Qrcode) return resolve();
+        const s = document.createElement('script');
+        s.src = src;
+        s.onload = resolve;
+        s.onerror = reject;
+        document.head.appendChild(s);
+      });
+    }
+
+    async function openQrScanner() {
+      const modal = document.getElementById('qr-modal');
+      if (modal) modal.classList.add('open');
+      const statusEl = document.getElementById('qr-scan-status');
+      if (statusEl) statusEl.textContent = 'Initializing camera...';
+
+      try {
+        if (!window.Html5Qrcode) {
+          try {
+            await loadScriptAsync('assets/html5-qrcode.min.js');
+          } catch (_) {
+            await loadScriptAsync('/assets/html5-qrcode.min.js');
+          }
+        }
+
+        if (html5QrCodeScanner) {
+          try { await html5QrCodeScanner.stop(); } catch (_) {}
+          try { html5QrCodeScanner.clear(); } catch (_) {}
+        }
+
+        html5QrCodeScanner = new Html5Qrcode("qr-reader");
+        const config = { fps: 10, qrbox: { width: 220, height: 220 } };
+
+        await html5QrCodeScanner.start(
+          { facingMode: "environment" },
+          config,
+          (decodedText) => {
+            handleScannedQrResult(decodedText);
+          },
+          () => {}
+        );
+        if (statusEl) statusEl.textContent = 'Align QR code within the frame';
+      } catch (err) {
+        if (statusEl) statusEl.textContent = 'Camera unavailable: ' + (err.message || err);
+        console.warn('QR scanner failed:', err);
+      }
+    }
+
+    async function closeQrScanner() {
+      if (html5QrCodeScanner) {
+        try { await html5QrCodeScanner.stop(); } catch (_) {}
+        try { html5QrCodeScanner.clear(); } catch (_) {}
+        html5QrCodeScanner = null;
+      }
+      const modal = document.getElementById('qr-modal');
+      if (modal) modal.classList.remove('open');
+    }
+
+    function handleScannedQrResult(rawText) {
+      if (!rawText) return;
+      try {
+        if (navigator.vibrate) navigator.vibrate([60, 40, 60]);
+      } catch (_) {}
+
+      let targetUrl = rawText.trim();
+      try {
+        const parsed = new URL(targetUrl);
+        const paramServer = parsed.searchParams.get('server');
+        if (paramServer) {
+          targetUrl = paramServer;
+        } else if (!parsed.pathname.endsWith('/api') && !parsed.pathname.startsWith('/api')) {
+          targetUrl = `${parsed.origin}/api`;
+        }
+      } catch (_) {
+        if (!targetUrl.startsWith('http://') && !targetUrl.startsWith('https://')) {
+          targetUrl = `http://${targetUrl}`;
+        }
+        if (!targetUrl.endsWith('/api')) {
+          targetUrl = targetUrl.replace(/\/+$/, '') + '/api';
+        }
+      }
+
+      closeQrScanner();
+      applyServerUrl(targetUrl, 'Scanned Laptop');
+      alert(`✅ Paired successfully with Megalodon node:\n${targetUrl}`);
+    }
+
+    async function handleQrFile(input) {
+      if (!input.files || input.files.length === 0) return;
+      const file = input.files[0];
+      const statusEl = document.getElementById('qr-scan-status');
+      if (statusEl) statusEl.textContent = 'Analyzing image...';
+      try {
+        if (!window.Html5Qrcode) {
+          try {
+            await loadScriptAsync('assets/html5-qrcode.min.js');
+          } catch (_) {
+            await loadScriptAsync('/assets/html5-qrcode.min.js');
+          }
+        }
+        const qr = new Html5Qrcode("qr-reader");
+        const result = await qr.scanFile(file, true);
+        handleScannedQrResult(result);
+      } catch (e) {
+        if (statusEl) statusEl.textContent = 'No QR code found in photo.';
+      }
+    }
+
+    async function startAutoDiscovery(autoConnect = false) {
+      const container = document.getElementById('discovery-results');
+      const listEl = document.getElementById('discovered-nodes-list');
+      const spinnerEl = document.getElementById('discovery-spinner');
+
+      if (container) container.style.display = 'block';
+      if (listEl) listEl.innerHTML = '';
+      if (spinnerEl) spinnerEl.textContent = 'Scanning Wi-Fi & Hotspot subnets...';
+
+      const candidateSubnets = ['192.168.0', '192.168.1', '192.168.43', '172.20.10', '10.0.0'];
+
+      // Prioritize subnet of current host if accessed via browser on phone
+      try {
+        const host = window.location.hostname;
+        if (host && host !== 'localhost' && host !== '127.0.0.1') {
+          const parts = host.split('.');
+          if (parts.length === 4) {
+            const sub = `${parts[0]}.${parts[1]}.${parts[2]}`;
+            if (!candidateSubnets.includes(sub)) candidateSubnets.unshift(sub);
+          }
+        }
+      } catch (_) {}
+
+      let saved = [];
+      try {
+        saved = JSON.parse(localStorage.getItem('megalodon_servers') || '[]');
+      } catch (_) {}
+      saved.forEach(s => {
+        try {
+          const u = new URL(s.url);
+          const parts = u.hostname.split('.');
+          if (parts.length === 4) {
+            const sub = `${parts[0]}.${parts[1]}.${parts[2]}`;
+            if (!candidateSubnets.includes(sub)) candidateSubnets.push(sub);
+          }
+        } catch (_) {}
+      });
+
+      const ipList = [];
+      try {
+        const host = window.location.hostname;
+        if (host && host !== 'localhost' && host !== '127.0.0.1') {
+          ipList.push(host);
+        }
+      } catch (_) {}
+
+      for (const sub of candidateSubnets) {
+        ipList.push(`${sub}.1`);
+        for (let i = 2; i <= 20; i++) ipList.push(`${sub}.${i}`);
+        for (let i = 100; i <= 115; i++) ipList.push(`${sub}.${i}`);
+      }
+
+      let foundNodes = [];
+
+      const probe = async (ip) => {
+        try {
+          const ctrl = new AbortController();
+          const timer = setTimeout(() => ctrl.abort(), 900);
+          const res = await fetch(`http://${ip}:8000/api/pairing-info`, { signal: ctrl.signal });
+          clearTimeout(timer);
+          if (res.ok) {
+            const data = await res.json();
+            if (data.status === 'active' || data.assistant_name) {
+              const nodeInfo = {
+                ip: ip,
+                url: `http://${ip}:8000/api`,
+                name: data.assistant_name || 'Megalodon Node',
+                model: data.brain_model || '7B'
+              };
+              if (!foundNodes.some(n => n.url === nodeInfo.url)) {
+                foundNodes.push(nodeInfo);
+                renderDiscoveredNodes(foundNodes);
+                if (autoConnect) {
+                  applyServerUrl(nodeInfo.url, nodeInfo.name);
+                  const banner = document.getElementById('offline-banner');
+                  if (banner) banner.style.display = 'none';
+                  appendMessage('assistant', `<em>⚡ Auto-connected to <strong>${escapeHtml(nodeInfo.name)}</strong> on <code>${escapeHtml(nodeInfo.ip)}</code></em>`);
+                  return true;
+                }
+              }
+            }
+          }
+        } catch (_) {}
+        return false;
+      };
+
+      for (let i = 0; i < ipList.length; i += 18) {
+        const chunk = ipList.slice(i, i + 18);
+        const results = await Promise.all(chunk.map(ip => probe(ip)));
+        if (autoConnect && results.some(r => r === true)) {
+          return;
+        }
+        if (foundNodes.length > 0 && !autoConnect) break;
+      }
+
+      if (spinnerEl) {
+        spinnerEl.textContent = foundNodes.length > 0 ? `Found ${foundNodes.length} active node(s)` : 'Scan complete. No nodes found.';
+      }
+      if (foundNodes.length === 0 && listEl) {
+        listEl.innerHTML = '<p style="font-size: 12px; color: var(--text-muted); padding: 4px 0;">No active Megalodon servers detected. Ensure START.sh / START.bat is running on the laptop.</p>';
+      }
+    }
+
+    function renderDiscoveredNodes(nodes) {
+      const listEl = document.getElementById('discovered-nodes-list');
+      if (!listEl) return;
+      listEl.innerHTML = nodes.map(n => `
+        <div style="display: flex; justify-content: space-between; align-items: center; background: var(--card-bg); border: 1px solid var(--card-border); border-radius: 6px; padding: 8px 10px;">
+          <div>
+            <div style="font-size: 13px; font-weight: 600; color: #fff;">🖥️ ${escapeHtml(n.name)} <span style="font-size: 11px; color: #10b981;">(Active - ${escapeHtml(n.model)})</span></div>
+            <div style="font-size: 11px; color: var(--text-muted); font-family: monospace;">${escapeHtml(n.url)}</div>
+          </div>
+          <button onclick="applyServerUrl('${escapeHtml(n.url)}', '${escapeHtml(n.name)}')" style="background: var(--accent); color: #000; border: none; border-radius: 4px; padding: 4px 10px; font-size: 12px; font-weight: 600; cursor: pointer;">Connect</button>
+        </div>
+      `).join('');
+    }
+
+    let isFailoverRunning = false;
+    async function attemptServerFailover() {
+      if (isFailoverRunning) return;
+      isFailoverRunning = true;
+      try {
+        let saved = [];
+        try {
+          saved = JSON.parse(localStorage.getItem('megalodon_servers') || '[]');
+        } catch (_) {}
+
+        const current = localStorage.getItem('megalodon_api_base') || '/api';
+        const others = saved.filter(s => s.url !== current && s.url !== '/api');
+
+        let connected = false;
+        for (const s of others) {
+          try {
+            const ctrl = new AbortController();
+            const t = setTimeout(() => ctrl.abort(), 1200);
+            const res = await fetch(`${s.url}/config/public`, { signal: ctrl.signal });
+            clearTimeout(t);
+            if (res.ok) {
+              console.log(`Active server offline. Automatically switched to standby node: ${s.url}`);
+              localStorage.setItem('megalodon_api_base', s.url);
+              loadServerProfiles();
+              loadConfig();
+              appendMessage('assistant', `<em>⚠️ Switched to live node: <strong>${escapeHtml(s.label || s.url)}</strong></em>`);
+              connected = true;
+              break;
+            }
+          } catch (_) {}
+        }
+
+        if (!connected) {
+          await startAutoDiscovery(true);
+        }
+      } finally {
+        isFailoverRunning = false;
+      }
+    }
+
+    let currentAssistantName = 'Megalodon';
+    let ownerName = '';
+    let voiceEnabled = true;
+    let availableVoices = [];
+    let currentVoice = null;
+
+    // MediaRecorder voice state
+    let mediaRecorder = null;
+    let audioChunks = [];
+    let isRecording = false;
+
+    async function toggleRecording() {
+      if (isRecording) {
+        stopRecording();
+      } else {
+        await startRecording();
+      }
+    }
+
+    async function startRecording() {
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        alert('Microphone access is not supported in this browser or environment.');
+        return;
+      }
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        audioChunks = [];
+        mediaRecorder = new MediaRecorder(stream);
+
+        mediaRecorder.ondataavailable = (event) => {
+          if (event.data && event.data.size > 0) {
+            audioChunks.push(event.data);
+          }
+        };
+
+        mediaRecorder.onstop = async () => {
+          stream.getTracks().forEach(track => track.stop());
+          const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+          await processVoiceInput(audioBlob);
+        };
+
+        mediaRecorder.start();
+        isRecording = true;
+        const micBtn = document.getElementById('btn-mic');
+        micBtn.classList.add('recording');
+        micBtn.textContent = '⏹️';
+      } catch (err) {
+        console.error('Microphone error:', err);
+        alert('Could not access microphone: ' + err.message);
+      }
+    }
+
+    function stopRecording() {
+      if (mediaRecorder && isRecording) {
+        mediaRecorder.stop();
+        isRecording = false;
+        const micBtn = document.getElementById('btn-mic');
+        micBtn.classList.remove('recording');
+        micBtn.textContent = '🎙️';
+      }
+    }
+
+    async function processVoiceInput(blob) {
+      const userMsgEl = appendMessage('user', '🎙️ <em>Transcribing speech...</em>');
+      try {
+        const clientTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'Asia/Kolkata';
+        const clientTime = new Date().toISOString();
+
+        const formData = new FormData();
+        formData.append('file', blob, 'voice.webm');
+        formData.append('client_time', clientTime);
+        formData.append('client_timezone', clientTimezone);
+
+        const res = await fetch(`${getApiBase()}/voice/interact`, {
+          method: 'POST',
+          body: formData,
+        });
+        const data = await res.json();
+
+        if (data.status === 'no_speech' || !data.transcript) {
+          userMsgEl.innerHTML = `🎙️ <em>(No speech detected)</em>`;
+          const fallback = data.reply || "I couldn't hear any speech, sir. Could you please repeat that?";
+          appendMessage('assistant', fallback);
+          speak(fallback);
+          return;
+        }
+
+        if (!res.ok) {
+          const errMsg = data.detail || `Server error (${res.status})`;
+          appendMessage('assistant', `⚠️ ${errMsg}`);
+          return;
+        }
+
+        userMsgEl.innerHTML = `🎙️ ${data.transcript}`;
+
+        let toolHtml = '';
+        if (data.tools_executed && data.tools_executed.length > 0) {
+          toolHtml = data.tools_executed.map(t => 
+            `<div class="tool-chip">⚡ Executed: ${t.name}</div>`
+          ).join('');
+        }
+
+        const assistantEl = appendMessage('assistant', (data.reply || 'Done.') + toolHtml);
+
+        if (data.tools_executed) {
+          for (const t of data.tools_executed) {
+            if (t.name === 'start_countdown' && t.result) {
+              const sec = t.result.seconds || 10;
+              runLiveCountdown(sec, t.result.title, assistantEl);
+            }
+            if (t.name === 'remember_fact') {
+              loadConfig();
+              loadSettingsData();
+            }
+            if (t.name === 'create_reminder' || t.name === 'set_timer') {
+              loadScheduleData();
+            }
+          }
+        }
+
+        const isCountdown = data.tools_executed && data.tools_executed.some(t => t.name === 'start_countdown');
+        if (!isCountdown && data.reply) {
+          speak(data.reply);
+        }
+      } catch (err) {
+        console.error('Voice processing error:', err);
+        userMsgEl.innerHTML = `🎙️ <em>Voice processing failed</em>`;
+        appendMessage('assistant', `<span style="color:var(--accent-danger);">Error communicating with Megalodon brain.</span>`);
+      }
+    }
+
+    // Modal dialogs
+    function openAddReminderModal() {
+      const now = new Date();
+      now.setHours(now.getHours() + 1, 0, 0, 0);
+      const localIso = new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+      document.getElementById('mod-rem-due').value = localIso;
+      document.getElementById('mod-rem-title').value = '';
+      document.getElementById('mod-rem-recur').value = '';
+      document.getElementById('mod-rem-notes').value = '';
+      document.getElementById('reminder-modal').classList.add('open');
+    }
+
+    function closeAddReminderModal() {
+      document.getElementById('reminder-modal').classList.remove('open');
+    }
+
+    async function submitNewReminder() {
+      const title = document.getElementById('mod-rem-title').value.trim();
+      const due = document.getElementById('mod-rem-due').value;
+      const recur = document.getElementById('mod-rem-recur').value || null;
+      const notes = document.getElementById('mod-rem-notes').value.trim() || null;
+
+      if (!title) {
+        alert('Please enter a reminder title or task.');
+        return;
+      }
+      if (!due) {
+        alert('Please specify the due date and time.');
+        return;
+      }
+
+      const isoDue = new Date(due).toISOString();
+
+      try {
+        const res = await fetch(`${getApiBase()}/reminders`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            text: title,
+            due_at: isoDue,
+            recurrence: recur,
+            notes: notes,
+          }),
+        });
+        if (!res.ok) throw new Error('Server returned error');
+        closeAddReminderModal();
+        loadScheduleData();
+      } catch (err) {
+        alert('Failed to save reminder: ' + err.message);
+      }
+    }
+
+    function initVoices() {
+      if (!window.speechSynthesis) return;
+      availableVoices = window.speechSynthesis.getVoices();
+      if (!availableVoices.length) return;
+
+      const voiceSelect = document.getElementById('voice-select');
+      const savedVoiceName = localStorage.getItem('megalodon_voice');
+      const savedPitch = localStorage.getItem('megalodon_pitch') || '1.15';
+      const savedRate = localStorage.getItem('megalodon_rate') || '1.0';
+
+      document.getElementById('voice-pitch').value = savedPitch;
+      document.getElementById('pitch-val').textContent = savedPitch + 'x';
+      document.getElementById('voice-rate').value = savedRate;
+      document.getElementById('rate-val').textContent = savedRate + 'x';
+
+      voiceSelect.innerHTML = '';
+
+      // Categorize voices
+      const indianVoices = [];
+      const femaleVoices = [];
+      const otherVoices = [];
+
+      availableVoices.forEach((v) => {
+        const lang = v.lang.toLowerCase();
+        const name = v.name.toLowerCase();
+        if (lang.includes('in') || name.includes('india') || name.includes('veena') || name.includes('rishi')) {
+          indianVoices.push(v);
+        } else if (name.includes('female') || name.includes('samantha') || name.includes('karen') || name.includes('victoria') || name.includes('serena') || name.includes('tessa') || name.includes('moira') || name.includes('zira')) {
+          femaleVoices.push(v);
+        } else {
+          otherVoices.push(v);
+        }
+      });
+
+      function addGroup(label, list) {
+        if (!list.length) return;
+        const group = document.createElement('optgroup');
+        group.label = label;
+        list.forEach(v => {
+          const opt = document.createElement('option');
+          opt.value = v.name;
+          opt.textContent = `${v.name} (${v.lang})`;
+          group.appendChild(opt);
+        });
+        voiceSelect.appendChild(group);
+      }
+
+      addGroup('🇮🇳 Indian English Voices (Recommended)', indianVoices);
+      addGroup('👩 Sweet Female Voices', femaleVoices);
+      addGroup('🌐 All Other Voices', otherVoices);
+
+      // Select voice: 1) Saved in localStorage, 2) Indian English female, 3) Any Indian English, 4) Samantha/Karen, 5) First female
+      let selected = null;
+      if (savedVoiceName) {
+        selected = availableVoices.find(v => v.name === savedVoiceName);
+      }
+      if (!selected && indianVoices.length) {
+        // Prefer female Indian English
+        selected = indianVoices.find(v => v.name.toLowerCase().includes('female') || v.name.toLowerCase().includes('veena') || v.name.toLowerCase().includes('lekha')) || indianVoices[0];
+      }
+      if (!selected && femaleVoices.length) {
+        selected = femaleVoices.find(v => v.name.toLowerCase().includes('samantha') || v.name.toLowerCase().includes('karen') || v.name.toLowerCase().includes('victoria')) || femaleVoices[0];
+      }
+      if (!selected) {
+        selected = availableVoices[0];
+      }
+
+      if (selected) {
+        currentVoice = selected;
+        voiceSelect.value = selected.name;
+      }
+    }
+
+    if (window.speechSynthesis) {
+      window.speechSynthesis.onvoiceschanged = initVoices;
+      initVoices();
+    }
+
+    function saveVoicePreference() {
+      const select = document.getElementById('voice-select');
+      const pitchInput = document.getElementById('voice-pitch');
+      const rateInput = document.getElementById('voice-rate');
+
+      const chosenName = select.value;
+      currentVoice = availableVoices.find(v => v.name === chosenName) || null;
+
+      document.getElementById('pitch-val').textContent = pitchInput.value + 'x';
+      document.getElementById('rate-val').textContent = rateInput.value + 'x';
+
+      localStorage.setItem('megalodon_voice', chosenName);
+      localStorage.setItem('megalodon_pitch', pitchInput.value);
+      localStorage.setItem('megalodon_rate', rateInput.value);
+    }
+
+    function testVoice() {
+      saveVoicePreference();
+      speak("Good evening, sir. This is Megalodon speaking. All systems are operational.");
+    }
+
+    function toggleVoice() {
+      voiceEnabled = !voiceEnabled;
+      const btn = document.getElementById('btn-voice-toggle');
+      btn.textContent = voiceEnabled ? '🔊' : '🔇';
+      btn.classList.toggle('active', voiceEnabled);
+    }
+
+    function speak(text) {
+      if (!voiceEnabled || !window.speechSynthesis) return;
+      window.speechSynthesis.cancel();
+      const clean = text.replace(/[*_#`]/g, '');
+      const utterance = new SpeechSynthesisUtterance(clean);
+      if (currentVoice) utterance.voice = currentVoice;
+      
+      const pitch = parseFloat(document.getElementById('voice-pitch') ? document.getElementById('voice-pitch').value : 1.15);
+      const rate = parseFloat(document.getElementById('voice-rate') ? document.getElementById('voice-rate').value : 1.0);
+      utterance.pitch = pitch;
+      utterance.rate = rate;
+      window.speechSynthesis.speak(utterance);
+    }
+
+    // Audio chime / tick synthesizer
+    function playBeep(freq = 600, duration = 0.08) {
+      try {
+        const ctx = new (window.AudioContext || window.webkitAudioContext)();
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.frequency.setValueAtTime(freq, ctx.currentTime);
+        gain.gain.setValueAtTime(0.15, ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + duration);
+        osc.start();
+        osc.stop(ctx.currentTime + duration);
+      } catch (_) {}
+    }
+
+    // Tab Switcher
+    function switchTab(name) {
+      document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+      document.querySelectorAll('.nav-btn').forEach(el => el.classList.remove('active'));
+
+      document.getElementById(`tab-${name}`).classList.add('active');
+      const idx = name === 'chat' ? 0 : name === 'schedule' ? 1 : 2;
+      document.querySelectorAll('.nav-btn')[idx].classList.add('active');
+
+      if (name === 'schedule') loadScheduleData();
+      if (name === 'settings') loadSettingsData();
+    }
+
+    // Load initial config
+    async function loadConfig() {
+      try {
+        loadServerProfiles();
+        const serverUrlInput = document.getElementById('st-server-url');
+        if (serverUrlInput) {
+          const cur = localStorage.getItem('megalodon_api_base');
+          serverUrlInput.value = (cur && cur !== '/api') ? cur : '';
+        }
+
+        const res = await fetch(`${getApiBase()}/config/public`);
+        if (!res.ok) throw new Error('config failed');
+        const data = await res.json();
+        currentAssistantName = data.assistant_name || 'Megalodon';
+        document.title = currentAssistantName;
+        document.getElementById('header-name').textContent = currentAssistantName;
+        document.getElementById('st-name').textContent = currentAssistantName;
+        document.getElementById('st-tz').textContent = data.timezone_default || 'Asia/Kolkata';
+
+        // Detect local device timezone and clock
+        const localTz = Intl.DateTimeFormat().resolvedOptions().timeZone || 'Asia/Kolkata';
+        const localTimeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        const stClientTz = document.getElementById('st-client-tz');
+        if (stClientTz) {
+          stClientTz.textContent = `${localTz} (Local: ${localTimeStr})`;
+        }
+
+        // Check stored memory for owner identity
+        try {
+          const memRes = await fetch(`${getApiBase()}/memory`);
+          const memData = await memRes.json();
+          const ownerMem = memData.memories && memData.memories.find(m => m.key === 'owner_name');
+          const locMem = memData.memories && memData.memories.find(m => m.key === 'home_city' || m.key === 'location');
+          
+          if (ownerMem && ownerMem.value) {
+            ownerName = ownerMem.value;
+            document.getElementById('st-owner').textContent = ownerName;
+            document.getElementById('welcome-msg').innerHTML = 
+              `Good day, <strong>${ownerName}</strong>. I'm <strong>${currentAssistantName}</strong>, your private personal AI assistant. All systems operational. How may I assist you today, sir?`;
+          } else {
+            ownerName = '';
+            document.getElementById('st-owner').textContent = 'Not learned yet (tell Megalodon in chat)';
+            document.getElementById('welcome-msg').innerHTML = 
+              `Hello! I'm <strong>${currentAssistantName}</strong>, your private personal AI assistant. All systems operational. How may I assist you today, sir?`;
+          }
+
+          const stLoc = document.getElementById('st-loc');
+          if (stLoc) {
+            stLoc.textContent = (locMem && locMem.value) ? locMem.value : 'Not learned yet';
+          }
+        } catch (_) {}
+        
+        const banner = document.getElementById('offline-banner');
+        if (banner) banner.style.display = 'none';
+        document.getElementById('status-dot').classList.remove('offline');
+        document.getElementById('status-text').textContent = 'Online';
+
+        setupSSE();
+      } catch (err) {
+        document.getElementById('status-dot').classList.add('offline');
+        document.getElementById('status-text').textContent = 'Offline';
+        const banner = document.getElementById('offline-banner');
+        if (banner) banner.style.display = 'flex';
+        attemptServerFailover();
+      }
+    }
+
+    // Server-Sent Events (Live Alerts)
+    function setupSSE() {
+      const evtSource = new EventSource(`${getApiBase()}/events/live`);
+      evtSource.onmessage = (e) => {
+        try {
+          const event = JSON.parse(e.data);
+          if (event.type === 'reminder_fired') {
+            triggerAlarm(event.payload.text);
+          }
+        } catch (_) {}
+      };
+      evtSource.onerror = () => {};
+    }
+
+    function triggerAlarm(text) {
+      const banner = document.getElementById('live-alert');
+      document.getElementById('alert-text').textContent = text;
+      banner.style.display = 'block';
+
+      playBeep(880, 0.4);
+      speak(`Sir, reminder: ${text}`);
+
+      setTimeout(() => { banner.style.display = 'none'; }, 8000);
+      loadScheduleData();
+    }
+
+    // Interactive Second-by-Second Live Countdown HUD
+    function runLiveCountdown(seconds, title, targetElement) {
+      let remaining = seconds;
+      const widget = document.createElement('div');
+      widget.className = 'countdown-widget active';
+      widget.innerHTML = `
+        <div class="countdown-num">${remaining}</div>
+        <div class="countdown-label">${title || 'Active Countdown'}</div>
+      `;
+      targetElement.appendChild(widget);
+
+      speak(`Your ${remaining} seconds start now, sir.`);
+
+      const interval = setInterval(() => {
+        remaining--;
+        const numEl = widget.querySelector('.countdown-num');
+
+        if (remaining > 0) {
+          if (numEl) numEl.textContent = remaining;
+          playBeep(750, 0.05);
+          if (remaining <= 5 || remaining === 10) {
+            speak(`${remaining}`);
+          }
+        } else {
+          clearInterval(interval);
+          if (numEl) numEl.textContent = "0";
+          playBeep(920, 0.5);
+          speak("Time's up, sir!");
+          widget.classList.remove('active');
+          widget.classList.add('done');
+          const label = widget.querySelector('.countdown-label');
+          if (label) label.textContent = "COUNTDOWN COMPLETE";
+        }
+      }, 1000);
+    }
+
+    // Chat sending
+    async function handleSend() {
+      const input = document.getElementById('chat-input');
+      const text = input.value.trim();
+      if (!text) return;
+
+      appendMessage('user', text);
+      input.value = '';
+
+      // Typing indicator
+      const typingEl = appendMessage('assistant', 'Processing...');
+
+      try {
+        const clientTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'Asia/Kolkata';
+        const clientTime = new Date().toISOString();
+
+        const res = await fetch(`${getApiBase()}/chat`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            message: text,
+            client_time: clientTime,
+            client_timezone: clientTimezone,
+          }),
+        });
+        const data = await res.json();
+        
+        if (!res.ok) {
+          const errMsg = data.detail || `Server error (${res.status})`;
+          typingEl.innerHTML = `<span style="color:var(--accent-danger);">⚠️ ${errMsg}</span>`;
+          return;
+        }
+
+        let toolHtml = '';
+        if (data.tools_executed && data.tools_executed.length > 0) {
+          toolHtml = data.tools_executed.map(t => 
+            `<div class="tool-chip">⚡ Executed: ${t.name}</div>`
+          ).join('');
+        }
+
+        typingEl.innerHTML = (data.reply || 'Done.') + toolHtml;
+
+        // Check if a countdown action was triggered
+        if (data.tools_executed) {
+          for (const t of data.tools_executed) {
+            if (t.name === 'start_countdown' && t.result) {
+              const sec = t.result.seconds || 10;
+              runLiveCountdown(sec, t.result.title, typingEl);
+            }
+            if (t.name === 'remember_fact') {
+              loadConfig();
+              loadSettingsData();
+            }
+            if (t.name === 'create_reminder' || t.name === 'set_timer') {
+              loadScheduleData();
+            }
+          }
+        }
+
+        // Voice speak the reply (if not countdown, which speaks on tick)
+        const isCountdown = data.tools_executed && data.tools_executed.some(t => t.name === 'start_countdown');
+        if (!isCountdown && data.reply) {
+          speak(data.reply);
+        }
+      } catch (err) {
+        typingEl.innerHTML = `<span style="color:var(--accent-danger);">Error communicating with ${currentAssistantName}. Please check backend connection.</span>`;
+      }
+    }
+
+    function sendSuggestion(txt) {
+      document.getElementById('chat-input').value = txt;
+      handleSend();
+    }
+
+    function appendMessage(role, content) {
+      const list = document.getElementById('chat-messages');
+      const el = document.createElement('div');
+      el.className = `msg ${role}`;
+      el.innerHTML = content;
+      list.appendChild(el);
+      list.scrollTop = list.scrollHeight;
+      return el;
+    }
+
+    // Native Android Alarm & Notification Sync (Capacitor)
+    async function initNativeNotifications() {
+      if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.LocalNotifications) {
+        try {
+          const perm = await window.Capacitor.Plugins.LocalNotifications.checkPermissions();
+          if (perm.display !== 'granted') {
+            await window.Capacitor.Plugins.LocalNotifications.requestPermissions();
+          }
+        } catch (e) {
+          console.warn('Could not request notification permissions:', e);
+        }
+      }
+    }
+
+    async function scheduleNativeAlarm(id, title, dueAtIso) {
+      if (!window.Capacitor?.Plugins?.LocalNotifications) return;
+      try {
+        const dueDate = new Date(dueAtIso);
+        if (dueDate.getTime() <= Date.now()) return;
+
+        await window.Capacitor.Plugins.LocalNotifications.schedule({
+          notifications: [
+            {
+              id: Number(id) || Math.floor(Math.random() * 100000),
+              title: `${currentAssistantName} Reminder`,
+              body: title,
+              schedule: { at: dueDate, allowWhileIdle: true },
+              sound: 'beep.wav',
+              extra: { id: id },
+            },
+          ],
+        });
+        console.log(`Scheduled native alarm #${id} for ${dueDate.toISOString()}`);
+      } catch (err) {
+        console.warn('Failed to schedule native alarm:', err);
+      }
+    }
+
+    async function cancelNativeAlarm(id) {
+      if (!window.Capacitor?.Plugins?.LocalNotifications) return;
+      try {
+        await window.Capacitor.Plugins.LocalNotifications.cancel({
+          notifications: [{ id: Number(id) }],
+        });
+      } catch (_) {}
+    }
+
+    async function syncNativeAlarms(remindersList) {
+      if (!window.Capacitor?.Plugins?.LocalNotifications || !remindersList) return;
+      for (const r of remindersList) {
+        if (r.status === 'pending') {
+          await scheduleNativeAlarm(r.id, r.text, r.due_at);
+        }
+      }
+    }
+
+    // Schedule loader
+    async function loadScheduleData() {
+      try {
+        const remRes = await fetch(`${getApiBase()}/reminders?status=pending`);
+        const remData = await remRes.json();
+        const remList = document.getElementById('reminders-list');
+
+        if (!remData.reminders || remData.reminders.length === 0) {
+          remList.innerHTML = `<p style="color: var(--text-muted); font-size: 13px;">No pending reminders or timers.</p>`;
+        } else {
+          remList.innerHTML = remData.reminders.map(r => `
+            <div class="item-card">
+              <div class="item-details">
+                <h4>${r.text}</h4>
+                <p>⏰ Due: ${new Date(r.due_at).toLocaleString()}</p>
+              </div>
+              <button class="btn-del" onclick="deleteItem(${r.id})">Delete</button>
+            </div>
+          `).join('');
+
+          // Sync pending alarms to native Android AlarmManager
+          syncNativeAlarms(remData.reminders);
+        }
+
+        const schRes = await fetch(`${getApiBase()}/schedule`);
+        const schData = await schRes.json();
+        const schList = document.getElementById('today-schedule');
+
+        if (!schData.schedule || schData.schedule.length === 0) {
+          schList.innerHTML = `<p style="color: var(--text-muted); font-size: 13px;">Nothing scheduled for today.</p>`;
+        } else {
+          schList.innerHTML = schData.schedule.map(s => `
+            <div class="item-card">
+              <div class="item-details">
+                <h4>${s.title}</h4>
+                <p>🕒 ${new Date(s.datetime).toLocaleTimeString()}</p>
+              </div>
+            </div>
+          `).join('');
+        }
+      } catch (_) {}
+    }
+
+    async function loadSettingsData() {
+      try {
+        const res = await fetch(`${getApiBase()}/memory`);
+        const data = await res.json();
+        const memList = document.getElementById('memory-list');
+        if (!data.memories || data.memories.length === 0) {
+          memList.innerHTML = `<p style="color: var(--text-muted); font-size: 13px;">No memories stored yet. Introduce yourself in chat!</p>`;
+        } else {
+          memList.innerHTML = data.memories.map(m => `
+            <div class="item-card" style="display: flex; justify-content: space-between; align-items: center;">
+              <div class="item-details" style="flex: 1;">
+                <h4>${escapeHtml(m.key)}</h4>
+                <p>${escapeHtml(m.value)} <span style="opacity:0.6;">(${escapeHtml(m.category || 'personal')})</span></p>
+              </div>
+              <button class="btn-icon" onclick="deleteMemory('${encodeURIComponent(m.key)}')" title="Forget this memory" style="color: var(--accent-danger); font-size: 16px; padding: 6px 10px; background: transparent; border: none; cursor: pointer;">🗑️</button>
+            </div>
+          `).join('');
+        }
+      } catch (_) {}
+    }
+
+    async function deleteMemory(key) {
+      const decodedKey = decodeURIComponent(key);
+      if (confirm(`Forget this memory: "${decodedKey}"?`)) {
+        try {
+          await fetch(`${getApiBase()}/memory/${encodeURIComponent(decodedKey)}`, { method: 'DELETE' });
+          loadConfig();
+        } catch (e) {
+          alert('Failed to delete memory: ' + e.message);
+        }
+      }
+    }
+
+    async function promptAddMemory() {
+      const key = prompt('Enter memory key (e.g. favorite_food, job_title):');
+      if (!key || !key.trim()) return;
+      const value = prompt(`Enter details for "${key}":`);
+      if (!value || !value.trim()) return;
+      try {
+        await fetch(`${getApiBase()}/memory`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ key: key.trim(), value: value.trim(), category: 'personal' })
+        });
+        loadConfig();
+      } catch (e) {
+        alert('Failed to save memory: ' + e.message);
+      }
+    }
+
+    async function deleteItem(id) {
+      if (confirm('Are you sure you want to delete this reminder?')) {
+        cancelNativeAlarm(id);
+        await fetch(`${getApiBase()}/reminders/${id}?confirmed=true`, { method: 'DELETE' });
+        loadScheduleData();
+      }
+    }
+
+    document.getElementById('chat-input').addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') handleSend();
+    });
+
+    initServerUrlFromQuery();
+    initNativeNotifications();
+    loadConfig();
+
+    // Auto-reconnect heartbeat: if offline, check live servers or auto-discover every 8s
+    setInterval(() => {
+      const dot = document.getElementById('status-dot');
+      if (dot && dot.classList.contains('offline')) {
+        attemptServerFailover();
+      }
+    }, 8000);
+  </script>
+</body>
+</html>

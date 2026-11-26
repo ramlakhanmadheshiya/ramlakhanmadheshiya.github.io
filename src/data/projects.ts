@@ -136,13 +136,14 @@ export const openSource: Project[] = [
 export const webApps: Project[] = [
 	{
 		name: 'PayTrack',
-		year: '2024',
+		year: '2026',
 		blurb: 'Offline-first expense tracking and personal finance application. Engineered with Godot and WebAssembly to run entirely in the browser without server dependencies or cloud data sync.',
 		tags: ['Godot', 'WebAssembly', 'Offline-First', 'PWA'],
 		status: 'Live Web App',
 		featured: true,
 		links: [
 			{ label: 'Launch App', href: '/paytrack/' },
+			gh('PayTrack'),
 		]
 	},
 	{
@@ -277,5 +278,38 @@ export const games: Project[] = [
 		tags: ['Godot 4', 'Puzzle', 'Daily Challenge'],
 		featured: false,
 		links: [gh('corral'), hub]
+	},
+];
+
+export const upcoming: Project[] = [
+	{
+		name: 'Sift',
+		year: '2026',
+		status: 'Upcoming',
+		blurb: 'Anti-algorithm, local-first social media aggregator combining creators from YouTube, Substack, Bluesky, Mastodon, Reddit, and RSS into one calm chronological feed with zero infinite scroll.',
+		tags: ['TypeScript', 'React', 'IndexedDB', 'Local-First'],
+		links: [
+			{ label: 'Preview', href: '/sift/' },
+		],
+	},
+	{
+		name: 'ghpr',
+		year: '2026',
+		status: 'Upcoming',
+		blurb: 'Client-side GitHub PR review priority and health triage dashboard. Ranks pull requests by mergeability, CI health, test coverage, and review state with zero server cost.',
+		tags: ['JavaScript', 'GitHub API', 'Maintainer Tooling'],
+		links: [
+			{ label: 'Preview', href: '/ghpr/' },
+		],
+	},
+	{
+		name: 'Megalodon',
+		year: '2026',
+		status: 'Upcoming',
+		blurb: 'Private, portable, self-hosted personal AI assistant designed to run locally from a USB drive or home server. The web link provides a standalone UI preview without connecting to any hosted API.',
+		tags: ['Python', 'FastAPI', 'Local LLM', 'PWA'],
+		links: [
+			{ label: 'UI Preview', href: '/magaladon/' },
+		],
 	},
 ];
